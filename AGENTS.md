@@ -1,8 +1,8 @@
 # microjump — Project Charter and Agent Guide
 ## A custom C++ game engine, proven through a 3D platformer
 
-**Document version:** 0.2  
-**Status:** Planning — implementation not yet started  
+**Document version:** 0.3
+**Status:** M0 foundation in progress — see Section 15 and `docs/m0-evidence.md`
 **Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
 
 > **Our north star:** Build a high-quality 3D game engine of our own in modern C++, and demonstrate it with a polished, expressive 3D platformer. The engine is the reason for the project; the game is how we prove it works.
@@ -30,19 +30,21 @@ We value careful engineering over shortcuts. A small, excellent engine and one c
 
 ### Commands
 
-> **TBD — M0 makes these real.** The first agent to set up the build replaces this block with the exact, working commands. The intended shape is:
+> Working M0 commands (system tools). For tools extracted without sudo, prefix each command with `tools/local-env.sh`; see `README.md`.
 
 ```sh
 cmake --preset linux-debug            # configure (also: linux-release)
 cmake --build --preset linux-debug    # build
 ctest --preset linux-debug            # run all automated tests
-./build/linux-debug/game/microjump    # run the playground
+./build/linux-debug/game/microjump    # M0 window/device; scene rendering starts in M1
+./build/linux-debug/game/microjump --smoke-test # initialize, process events, exit
 ```
 
 Planned runtime flags (implement in the milestone noted, then document them here):
 
 | Flag | Purpose | Milestone |
 | --- | --- | --- |
+| `--smoke-test` | Open an SDL window, initialize Vulkan, process events, shut down; validation errors fail. | M0 |
 | `--capture-frame N --capture-out PATH.png` | Render N frames, save the frame from the GPU as PNG, exit. | M1 |
 | `--frames N` | Run N frames then exit cleanly (smoke tests). | M1 |
 | `--record PATH` / `--replay PATH` | Record / replay player input deterministically. | M2 |
@@ -58,10 +60,14 @@ Agents run **locally on the project owner's Linux machine** and may use its GPU,
 | GPU | Intel Meteor Lake integrated graphics, Mesa 26 (ANV Vulkan driver) |
 | Display | 3072×1920 @ 60 Hz |
 | Compiler present | g++ 15.2 |
-| Still to install (M0) | `cmake`, `ninja-build`, `clang`, `clang-format`, `clang-tidy`, `glslc` (shaderc), Vulkan validation layers, `vulkan-tools`, `mesa-utils` |
+| Development tools | Setup command below; this checkout uses ignored `.local-tools/` extraction because sudo requires interactive authentication. |
 
 - Install missing development tools as needed and list every one in the setup command below.
-- **Setup command:** *TBD — M0 adds a single copy-pasteable install line here.*
+- **Setup command (Ubuntu 26.04):**
+  ```sh
+  sudo apt-get install -y g++ cmake ninja-build clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers vulkan-tools mesa-utils pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth
+  ```
+  Without sudo: `tools/bootstrap-local.sh`, then prefix development commands with `tools/local-env.sh`.
 - **Screenshots:** GNOME/Wayland blocks generic desktop capture. Use the engine's own `--capture-frame` mode; do not rely on desktop screenshot tools.
 - Close game windows and stray processes you started when you are done.
 - Do not change drivers, power settings, or other system configuration without asking the owner.
@@ -69,7 +75,9 @@ Agents run **locally on the project owner's Linux machine** and may use its GPU,
 ### Workflow
 
 - **One agent works at a time** (at least until M2; see D-013).
-- Work on a **branch**, open a **pull request**, and describe what changed plus the evidence (Section 12). **The owner merges.** Agents do not push to `main`.
+- Work on a **branch**, open a **pull request**, and describe what changed plus the evidence (Section 12).
+- **Standing push and merge authority (D-020):** The owner authorizes this and future agents to publish project source, tests, CI workflows, assets, and documentation to `esotericode/microjump`, push their working branches, and merge pull requests into `main` at their discretion. No separate owner confirmation is needed for these actions. Review the diff, run the relevant checks, and confirm required CI passes before merging. Report remaining milestone gates honestly; merging an increment does not make the milestone complete.
+- This authority covers the GitHub workflow. The dependency, architecture, scope, and system-configuration approval requirements elsewhere in this charter still apply.
 - Keep PRs focused. Avoid unrelated rewrites.
 
 ### Stop and ask the owner before
@@ -373,17 +381,17 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 
 | Field | Current value |
 | --- | --- |
-| Overall status | **PLANNING** |
-| Current milestone | **M0 — Foundation** (not started) |
-| Latest working build | None yet |
+| Overall status | **IMPLEMENTING** |
+| Current milestone | **M0 — Foundation** (in progress) |
+| Latest working build | 2026-10-15: Linux GCC 15 Debug/Release and Clang 21 Debug; Intel MTL startup; see `docs/m0-evidence.md` |
 | Open owner decisions | None |
-| Next useful action | M0: repo skeleton, CMake presets, pinned dependencies, SDL3 window, Vulkan device with validation, Linux + Windows CI |
+| Next useful action | Verify the PR CI, obtain owner Windows startup evidence, then begin M1 first pixels. |
 
 ### Milestone status tracker
 
 | ID | State | Evidence / notes |
 | --- | --- | --- |
-| M0 | Not started | — |
+| M0 | In progress | 2026-10-15: foundation implemented and locally tested; `docs/m0-evidence.md`. Windows CI and owner runtime verification pending. |
 | M1 | Not started | — |
 | M2 | Not started | — |
 | M3 | Not started | — |
@@ -408,10 +416,14 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-010 | No ECS; kinematic capsule collide-and-slide controller; JSON levels placing code-generated primitives; forward renderer first. | Prevents over-engineering; matches the scale of one graybox playground. |
 | 2026-10-15 / D-011 | Shaders in GLSL compiled to SPIR-V at build time with `glslc`. | Simplest Vulkan shader path; switching later would mean rewriting every shader. |
 | 2026-10-15 / D-012 | Code style: namespace `mj`, naming per Section 5.2, clang-format, no exceptions in engine code, validation errors fail tests. | Consistent code across agents and sessions. |
-| 2026-10-15 / D-013 | Process: one agent at a time (until at least M2); branch + PR per task; **owner merges**. | Avoids integration churn; keeps the owner in control of `main`. |
+| 2026-10-15 / D-013 | Process: one agent at a time (until at least M2); branch + PR per task; originally owner merges. **Push/merge authority superseded by D-020.** | Serial work and focused PRs avoid integration churn. |
 | 2026-10-15 / D-014 | Audio out of scope until M4 is complete. | Scope discipline. |
 | 2026-10-15 / D-015 | Clean-room rule for SM64 references (Section 3). | Reduces the risk of derived code from decompiled copyrighted source. |
 | 2026-10-15 / D-016 | Project license: **MIT** (see `LICENSE`). | Simple, widely understood, compatible with every allowed dependency. Copyleft dependencies are excluded; Windows/Linux build zips include third-party license notices. |
+| 2026-10-15 / D-017 | M0 selects one queue family supporting both graphics and presentation; RAII owns SDL/window and Vulkan resources. | Keeps the first device path small; separate graphics/present queue families are currently unsupported and reported clearly. No multi-backend layer. |
+| 2026-10-15 / D-018 | Fetch only SDL3, volk and doctest in M0, pinned by commit and archive hash; other approved libraries wait until needed. | Minimal dependency footprint; license notices ship with runtime packages. |
+| 2026-10-15 / D-019 | Linux startup tests use a Fontconfig-only LSan suppression; ASan/UBSan and other leak checks stay enabled. | System Wayland libdecor/GTK retains font caches after SDL shutdown. Evidence and scope in `docs/m0-evidence.md`; no new linked dependency. |
+| 2026-10-15 / D-020 | Agents have standing authority to push project branches to `esotericode/microjump` and merge PRs into `main` at their discretion, without repeated owner confirmation. | Owner explicitly requested this on 2026-10-15 and authorized publishing/merging the M0 implementation. Replaces owner-only merging in D-013; preserves focused PRs, evidence, required checks, serial agent work, and other approval boundaries. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -420,6 +432,10 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 - **2026-10-15 — Charter v0.1 created.** Scope and provisional targets established. No engine implementation claimed.
 - **2026-10-15 — Charter v0.2.** Locked platforms (Windows + Linux), Vulkan 1.3, C++23, dependency allowlist, world and code conventions, and agent workflow. Removed performance targets and benchmarking in favor of an FPS overlay and display settings. Added verification approach (replay tests, frame capture, playtest handoff, Windows CI builds) and clean-room rule.
 - **2026-10-15 — License.** Project licensed under MIT (D-016).
+
+- **2026-10-15 — M0 foundation started.** Added CMake/Ninja presets, SDL3 window, Vulkan 1.3 device/presentation checks, validation-aware teardown, doctest/CLI/startup tests, GCC/Clang/MSVC CI, packaging and rootless local tool setup. GCC Debug/Release and Clang Debug builds and all four local tests pass on Intel MTL; formatting and static analysis pass. Evidence: `docs/m0-evidence.md`. Windows CI and owner startup evidence remain open; no rendered scene or gameplay is claimed.
+
+- **2026-10-15 — Charter v0.3 / agent GitHub authority.** Owner authorized publishing and merging M0, and requested that this and future agents may push and merge as they see fit. Updated Section 2 and recorded D-020; technical scope and verification requirements remain in force.
 
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
 

@@ -1,0 +1,5 @@
+# Wayland libdecor's system GTK/Pango plugin retains Fontconfig process-global
+# font caches after SDL_Quit. Observed on Ubuntu 26.04, both when GTK init fails
+# (320 bytes) and succeeds (font enumeration caches). No engine/SDL/Vulkan
+# allocations are suppressed. Keep ASan/UBSan and all other leak checks enabled.
+leak:libfontconfig.so.1

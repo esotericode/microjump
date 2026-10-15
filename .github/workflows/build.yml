@@ -1,0 +1,77 @@
+name: Build and verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: Linux / ${{ matrix.preset }}
+    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [linux-debug, linux-clang-debug, linux-release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install platform SDK and development tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers mesa-vulkan-drivers vulkan-tools pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth
+      - name: Check formatting
+        run: find engine game tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 | xargs -0 clang-format --dry-run --Werror
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DMJ_SMOKE_TESTS=ON
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --parallel 4
+      - name: Static analysis
+        if: matrix.preset == 'linux-clang-debug'
+        run: find engine/src game -name '*.cpp' -print0 | xargs -0 -n 1 clang-tidy -p build/linux-clang-debug
+      - name: Unit and Vulkan startup tests (software Vulkan, no benchmark)
+        env:
+          SDL_VIDEO_DRIVER: x11
+          VK_DRIVER_FILES: /usr/share/vulkan/icd.d/lvp_icd.json
+        run: xvfb-run -a ctest --preset ${{ matrix.preset }}
+      - name: Package release runtime
+        if: matrix.preset == 'linux-release'
+        run: cpack --config build/linux-release/CPackConfig.cmake -B build/packages
+      - uses: actions/upload-artifact@v4
+        if: matrix.preset == 'linux-release'
+        with:
+          name: microjump-Linux-Release
+          path: build/packages/*.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows / ${{ matrix.preset }}
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [windows-debug, windows-release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up MSVC and Vulkan SDK
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./tools/setup-windows-ci.ps1
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --parallel 4
+      - name: Unit tests (hardware startup tested by owner)
+        run: ctest --preset ${{ matrix.preset }}
+      - name: Package ready-to-run release
+        if: matrix.preset == 'windows-release'
+        run: cpack --config build/windows-release/CPackConfig.cmake -B build/packages
+      - uses: actions/upload-artifact@v4
+        if: matrix.preset == 'windows-release'
+        with:
+          name: microjump-Windows-Release
+          path: build/packages/*.zip
+          if-no-files-found: error
