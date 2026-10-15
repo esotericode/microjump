@@ -3,12 +3,15 @@
 A custom C++23/Vulkan 1.3 engine, proven through an original 3D movement playground.
 [AGENTS.md](AGENTS.md) is the authoritative charter and roadmap.
 
-M1 renders an original graybox scene with reverse-Z depth, linear directional shading,
-an sRGB output, a free-flight debug camera, GPU PNG capture and an FPS overlay.
-The scene is a renderer fixture; character movement, collision, JSON level loading,
-dynamic shadows and the full playground follow in later milestones.
+M2 adds a playable movement slice. A capsule character runs, skids, jumps with
+variable height, coyote time and buffering, and steers in the air. It moves through a
+graybox test yard (slopes, stairs, steps, platforms, walls) with an engine-owned
+collide-and-slide controller. A third-person camera orbits with obstruction handling.
+Input can be recorded and replayed deterministically, and every movement and camera value
+is tunable live. Dynamic shadows (M3), the full JSON playground with wall jumps (M4) and
+display settings (M5) come later. Details and evidence: [M2 notes](docs/m2-movement.md).
 
-![First 3D scene](docs/captures/m1-scene.png)
+![M2 movement yard, mid-jump](docs/captures/m2-jump.png)
 
 ## Linux
 
@@ -44,24 +47,30 @@ visible to LSan. See [M0 evidence](docs/m0-evidence.md) and [M1 evidence](docs/m
 
 ## Controls and capture
 
-| Input | Action |
-| --- | --- |
-| W / A / S / D | Fly forward / left / back / right |
-| Q / E | Fly down / up |
-| Hold right mouse | Look around; focus loss releases mouse capture |
-| Shift | Move faster |
-| Home | Reset the camera |
-| F1 | Toggle the diagnostics overlay |
-| Escape / close | Exit |
+| Keyboard / mouse | Gamepad | Action |
+| --- | --- | --- |
+| W / A / S / D | Left stick | Move (camera-relative) |
+| Space | A (south) | Jump; hold for height |
+| Ctrl | — | Walk |
+| Mouse | Right stick | Orbit the camera (mouse is captured while focused) |
+| R / Home | Back | Respawn at the last checkpoint |
+| F1 | — | Toggle the diagnostics/movement overlay |
+| F2 | Start | Movement and camera tuning window (frees the mouse) |
+| F3 | — | Free-flight camera (WASD/QE, Shift fast, Home reset) |
+| Escape / close | — | Exit |
 
-The overlay shows FPS/frame time, actual pixel resolution, effective VSync and cap
-state. M1 uses FIFO VSync and no application FPS cap; display-setting controls and
-persistence are M5. Camera movement uses 120 Hz fixed ticks with interpolated position;
-mouse look applies immediately. `CameraTuning` contains speed/sensitivity values.
+The overlay shows FPS/frame time, pixel resolution, effective VSync and cap state, plus
+movement state, speed, position, ground angle and checkpoint. VSync is FIFO with no
+application FPS cap for now; display-setting controls and persistence are M5. The
+simulation runs at a fixed 120 Hz with interpolated rendering, so render rate never
+changes movement.
 
 ```sh
 ./build/linux-debug/game/microjump --frames 60
 ./build/linux-debug/game/microjump --capture-frame 12 --capture-out captures/scene.png
+# Record every simulation tick's input on exit, then replay it (exits when it ends).
+./build/linux-debug/game/microjump --record captures/run.mjr
+./build/linux-debug/game/microjump --replay captures/run.mjr
 # Correctness fixtures: camera movement and two live resizes before capture.
 ./build/linux-debug/game/microjump --camera-test --capture-frame 36 --capture-out captures/camera.png
 ./build/linux-debug/game/microjump --resize-test --capture-frame 16 --capture-out captures/resized.png
@@ -94,9 +103,12 @@ and controls on the owner's PC remain a separate acceptance check linked from th
 
 ## Verification and packaging
 
-CTest covers projection/mesh/CLI correctness, fixed-step and camera invariance, PNG
-validation and, with `MJ_SMOKE_TESTS=ON`, GPU render/camera/resize captures and decoded
-pixel checks. CI uploads those captures and runtime zips. No benchmarks or FPS targets.
+CTest covers math/mesh/CLI correctness, collision queries and the character mover,
+movement behavior (jump apex, acceleration, skid, coyote time, buffering, stairs, slopes,
+respawn, camera obstruction), bit-identical simulation at different render cadences,
+the replay format and a committed real-input replay. With `MJ_SMOKE_TESTS=ON` it adds
+GPU render/camera/resize/replay captures and decoded pixel checks. CI uploads those
+captures and runtime zips. No benchmarks or FPS targets.
 
 ```sh
 find engine game tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 | xargs -0 clang-format --dry-run --Werror
@@ -104,6 +116,6 @@ find engine/src game -name '*.cpp' -print0 | xargs -0 -n 1 clang-tidy -p build/l
 cpack --config build/linux-release/CPackConfig.cmake -B build/packages
 ```
 
-For an additional real SDL input check, install `xdotool` and run
-`tools/input-smoke.sh` inside Xvfb; the exact rootless commands and observations are
-in [docs/m1-evidence.md](docs/m1-evidence.md).
+For a real SDL input check, install `xdotool` and run `tools/input-smoke.sh` inside
+Xvfb. It drives the game with X11 keyboard/mouse events while recording, so the
+recording can be replayed and compared; see [docs/m2-movement.md](docs/m2-movement.md).

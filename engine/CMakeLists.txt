@@ -1,4 +1,8 @@
 add_library(microjump_engine STATIC
+    src/collision/character_mover.cpp
+    src/collision/collision_world.cpp
+    src/collision/geometry.cpp
+    src/core/input_record.cpp
     src/core/launch_options.cpp
     src/core/png.cpp
     src/platform/window.cpp

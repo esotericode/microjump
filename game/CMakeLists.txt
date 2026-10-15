@@ -1,5 +1,10 @@
-add_executable(microjump main.cpp)
-target_link_libraries(microjump PRIVATE mj::engine)
+# Headless gameplay: simulation tests link this without a window or GPU.
+add_library(microjump_gameplay STATIC follow_camera.cpp level.cpp player.cpp simulation.cpp)
+target_include_directories(microjump_gameplay PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(microjump_gameplay PUBLIC mj::engine)
+mj_project_options(microjump_gameplay)
+add_executable(microjump main.cpp debug_ui.cpp)
+target_link_libraries(microjump PRIVATE microjump_gameplay mj_imgui)
 mj_project_options(microjump)
 set(mj_shader_outputs)
 foreach(shader scene.vert scene.frag)

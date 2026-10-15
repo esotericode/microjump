@@ -2,7 +2,7 @@
 ## A custom C++ game engine, proven through a 3D platformer
 
 **Document version:** 0.3
-**Status:** M1 first scene implemented locally; acceptance gates in Section 15 and `docs/m1-evidence.md`
+**Status:** M2 movement slice implemented; awaiting owner playtest. Acceptance gates in Section 15 and `docs/m2-movement.md`
 **Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
 
 > **Our north star:** Build a high-quality 3D game engine of our own in modern C++, and demonstrate it with a polished, expressive 3D platformer. The engine is the reason for the project; the game is how we prove it works.
@@ -36,12 +36,13 @@ We value careful engineering over shortcuts. A small, excellent engine and one c
 cmake --preset linux-debug            # configure (also: linux-release)
 cmake --build --preset linux-debug    # build
 ctest --preset linux-debug            # run all automated tests
-./build/linux-debug/game/microjump    # first 3D scene + debug camera + FPS overlay
+./build/linux-debug/game/microjump    # movement yard: WASD/Space/mouse, F1 overlay, F2 tuning
 ./build/linux-debug/game/microjump --capture-frame 12 --capture-out captures/scene.png
+./build/linux-debug/game/microjump --replay tests/replays/m2-input-smoke.mjr
 # Add -DMJ_SMOKE_TESTS=ON at configure time to include GPU/capture tests in CTest.
 ```
 
-Runtime flags (M0/M1 available; M2 record/replay remains planned):
+Runtime flags (all available):
 
 | Flag | Purpose | Milestone |
 | --- | --- | --- |
@@ -49,7 +50,7 @@ Runtime flags (M0/M1 available; M2 record/replay remains planned):
 | `--capture-frame N --capture-out PATH.png` | Render N frames, save the frame from the GPU as PNG, exit. | M1 |
 | `--frames N` | Render N frames then exit cleanly. | M1 |
 | `--camera-test` / `--resize-test` | Scripted render correctness fixtures (not input replay). | M1 |
-| `--record PATH` / `--replay PATH` | Record / replay player input deterministically. | M2 |
+| `--record PATH` / `--replay PATH` | Record every tick's input on exit / replay it instead of live input, then exit. Format: `docs/m2-movement.md`. | M2 |
 
 ### Local development environment
 
@@ -384,10 +385,10 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | Field | Current value |
 | --- | --- |
 | Overall status | **IMPLEMENTING** |
-| Current milestone | **M1 — First pixels** (in progress; owner authorized proceeding on 2026-10-15) |
-| Latest working build | 2026-10-15: Linux M1 GCC Debug/Release + Clang Debug, native Intel and software Vulkan captures; see `docs/m1-evidence.md`. Windows results/downloads are recorded in the PR. |
-| Open owner decisions | None |
-| Next useful action | Verify M1 CI and merge; owner tests Windows scene/capture and camera controls; then M2 movement slice. |
+| Current milestone | **M2 — Movement slice** (in progress; implemented, awaiting owner playtest) |
+| Latest working build | 2026-10-15: M2 on Linux GCC Debug/Release + Clang Debug, native Intel and software Vulkan; see `docs/m2-movement.md`. Windows CI results/downloads are recorded in the PR. |
+| Open owner decisions | None. Owner input needed: M2 playtest request (PR), Windows hardware checks for M0–M2. |
+| Next useful action | Owner playtests M2 (keyboard/mouse and gamepad) and reports tuning; then M3 lighting slice (shadow maps replace the blob shadow). |
 
 ### Milestone status tracker
 
@@ -395,7 +396,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | --- | --- | --- |
 | M0 | In progress | 2026-10-15: merged PR #3; all five Linux/MSVC CI jobs passed and Windows zip inspected. Owner Windows GPU check remains open. |
 | M1 | In progress | 2026-10-15: 3D scene, debug camera, GPU capture and FPS overlay implemented; local evidence/captures in `docs/m1-evidence.md`. Owner Windows run/controls acceptance remains open. |
-| M2 | Not started | — |
+| M2 | In progress | 2026-10-15: capsule controller, run/skid/variable jump/coyote/buffer/air steering, follow camera with obstruction, record/replay, live tuning; deterministic tests pass on three Linux configs (`docs/m2-movement.md`). Owner playtest and Windows run remain open. |
 | M3 | Not started | — |
 | M4 | Not started | — |
 | M5 | Not started | — |
@@ -430,6 +431,11 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-022 | M1 renders to per-frame RGBA8 sRGB/D32 targets, then blits to an sRGB FIFO swapchain; timeline completion plus per-image presentation semaphores. | Project-owned Vulkan 1.3 draw/capture path; direct memory allocation is sufficient for these few resources, so VMA is deferred. Resize waits idle and rebuilds targets. |
 | 2026-10-15 / D-023 | Use approved Dear ImGui 1.91.9b for diagnostics and pinned stb for PNG output/verification; fixed 120 Hz camera translation with interpolated position and immediate mouse look. | Small M1 slice; no gameplay UI, imported renderer/math, runtime shader compilation or input replay claim. |
 | 2026-10-15 / D-024 | Extend the D-019 LSan suppression to `libdecor-gtk.so` frames (the same system Wayland decoration plugin). | Native Wayland GPU tests failed intermittently (~1 in 3) on a 96-byte `wl_proxy` allocated inside the plugin's `libdecor_frame_commit`; never seen under X11/CI. Only plugin frames match; SDL, Vulkan, ImGui and engine allocations stay checked. |
+| 2026-10-15 / D-025 | Proceed with M2 while owner Windows hardware acceptance for M0/M1 remains open. | Owner asked the agent to review the latest work and begin the next steps. No acceptance gate is waived; M0–M2 stay *In progress* until checked. |
+| 2026-10-15 / D-026 | Collision: one-sided static triangle BVH built from the rendered triangles; capsule sweeps by conservative advancement on exact segment–triangle distance; collide-and-slide with step-up, ground snap and a max walkable slope. Steep faces are vertical walls for horizontal motion (also in the air). Steps land only on walkable faces no higher than `step_height`. | Alternatives: exact Minkowski capsule–triangle sweeps (much more code, same results), discrete overlap resolution (tunnels at speed). Advancement is short, robust and cannot tunnel. One-sided queries need closed CCW primitives, which all generated shapes are. |
+| 2026-10-15 / D-027 | Record/replay stores per-tick `TickInput` (camera-relative stick, camera yaw/pitch, jump held/pressed, respawn) in versioned, run-length-encoded text with shortest round-trip floats. Press edges are latched from events until a tick. | Recording ticks, not frames, makes replay independent of render rate by construction. Tuning is not recorded (replays assume defaults). Bit-identical results are claimed only for the same build. |
+| 2026-10-15 / D-028 | Renderer: per-frame uniform buffer (view-projection, sun, camera, blob shadow) plus 64-byte per-draw push constants (rigid model rows, material); back-face culling; world-space 1 m grid; a blob contact shadow under the player as a depth cue until M3 shadow maps. | Keeps push constants within the guaranteed 128 bytes and gives M3 lights a home. The blob shadow is explicitly temporary, not a substitute for the M3 lighting target. |
+| 2026-10-15 / D-029 | M2 level is a compact code-defined test yard in the `Level` struct (primitives, checkpoints, kill height); JSON loading and the 200 m playground stay in M4. Gamepad input uses the approved SDL3 gamepad API. | Smallest increment that exercises every collision case M2 needs. The `Level` struct is the future JSON schema's in-memory form. The gamepad path is implemented but untested on hardware. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -445,11 +451,19 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 
 - **2026-10-15 — M1 first scene.** Added original primitive geometry, reverse-Z renderer, debug flight camera, fixed tick/interpolation, toggleable FPS overlay, GPU PNG capture and resize handling. Local GCC Debug/Release and Clang Debug suites pass; native Intel and Xvfb/software-Vulkan captures inspected. Real X11 keyboard/mouse/F1 events exercised. Evidence: `docs/m1-evidence.md`; PR records CI and runtime downloads. Dynamic shadows, character movement and playable JSON levels remain later work; Windows hardware acceptance is still open.
 
+- **2026-10-15 — M2 movement slice.**
+  - What works: engine collision world (BVH, raycast, capsule sweep, depenetration) and a collide-and-slide mover with steps, snapping and slope limits; a player with acceleration/turning/skid, variable jump, coyote time, buffering and air steering; a follow camera with obstruction handling; checkpoints and respawn; `--record`/`--replay`; gamepad input; an F2 live tuning window; and a test yard.
+  - Evidence: `docs/m2-movement.md`. 10/10 CTest and 24 doctest cases (4,770 assertions) on GCC Debug, Clang Debug and GCC Release. Simulation is bit-identical at 30/60/144/240 Hz and irregular cadences. A real X11-input recording (software Vulkan, ~117 FPS) replays to the same final state natively at 60 FPS. Zero validation errors.
+  - Open issues: owner playtest of feel (keyboard/mouse and gamepad); gamepad untested; Windows hardware run; wall jump/long jump and JSON playground are M4.
+  - Next step: owner playtest, then M3.
+
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
 
 ### Known risks and unanswered questions
 
-- **Character feel:** Requires iterative playtesting on keyboard/mouse and gamepad by the owner; not solvable from code inspection alone.
+- **Character feel:** Requires iterative playtesting on keyboard/mouse and gamepad by the owner; not solvable from code inspection alone. M2 defaults are first guesses.
+- **Gamepad:** Implemented via SDL3 but never exercised with a physical controller on the agent machine.
+- **Replay portability:** Replays are bit-identical within one build; across compilers/OSes the last float bits may differ, so committed-replay tests use small tolerances.
 - **Windows drift:** Only Linux is available locally. Keep the Windows CI build green on every PR so portability bugs surface immediately.
 - **Vulkan complexity:** Vulkan is verbose; keep the renderer minimal and rely on validation layers to catch mistakes early.
 - **Integration quality:** Interface churn and unreviewed merges erase productivity gains; keep tests meaningful and PRs focused.
