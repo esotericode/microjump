@@ -3,3 +3,7 @@
 # (320 bytes) and succeeds (font enumeration caches). No engine/SDL/Vulkan
 # allocations are suppressed. Keep ASan/UBSan and all other leak checks enabled.
 leak:libfontconfig.so.1
+# The same system plugin intermittently leaks one 96-byte wl_proxy that it creates
+# in libdecor_frame_commit (about 1 in 3 native Wayland runs; never under X11/CI).
+# Matches only frames inside the plugin; SDL's own Wayland code is not suppressed.
+leak:libdecor-gtk.so
