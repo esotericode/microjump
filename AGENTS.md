@@ -77,7 +77,6 @@ Agents run **locally on the project owner's Linux machine** and may use its GPU,
 - Adding, removing, or replacing **any dependency** (Section 4.3).
 - Changing any **locked decision** in Section 4 or the world conventions in Section 5.
 - Changing scope, language, platforms, or the goals in Sections 1–3 and 6–11.
-- Adding a project license (still an open owner decision — D-016).
 
 Everything else: decide, then record it in the decision log (Section 15) when it is significant.
 
@@ -130,7 +129,7 @@ Prefer the smallest reasonable footprint. Anything not listed here needs owner a
 | Any engine, renderer, physics, or ECS library | — | — | **Denied** |
 | glTF / mesh importers (e.g. cgltf) | — | — | Not yet — ask first |
 
-Until a project license is chosen (D-016), only accept permissively licensed dependencies (MIT, BSD, zlib, Apache-2.0, Boost, public domain).
+The project is **MIT-licensed** (D-016). Only accept permissively licensed dependencies (MIT, BSD, zlib, Apache-2.0, Boost, public domain) — no GPL, LGPL, or other copyleft. Distributed builds include the license notices of bundled third-party libraries.
 
 ### 4.4 Shaders (D-011)
 
@@ -377,7 +376,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | Overall status | **PLANNING** |
 | Current milestone | **M0 — Foundation** (not started) |
 | Latest working build | None yet |
-| Open owner decisions | Project license (D-016) |
+| Open owner decisions | None |
 | Next useful action | M0: repo skeleton, CMake presets, pinned dependencies, SDL3 window, Vulkan device with validation, Linux + Windows CI |
 
 ### Milestone status tracker
@@ -412,7 +411,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-013 | Process: one agent at a time (until at least M2); branch + PR per task; **owner merges**. | Avoids integration churn; keeps the owner in control of `main`. |
 | 2026-10-15 / D-014 | Audio out of scope until M4 is complete. | Scope discipline. |
 | 2026-10-15 / D-015 | Clean-room rule for SM64 references (Section 3). | Reduces the risk of derived code from decompiled copyrighted source. |
-| 2026-10-15 / D-016 | **Open (owner):** project license. | The public repo has no license yet (all rights reserved). Agents must not add one; only permissive dependencies until decided. |
+| 2026-10-15 / D-016 | Project license: **MIT** (see `LICENSE`). | Simple, widely understood, compatible with every allowed dependency. Copyleft dependencies are excluded; Windows/Linux build zips include third-party license notices. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -420,6 +419,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 
 - **2026-10-15 — Charter v0.1 created.** Scope and provisional targets established. No engine implementation claimed.
 - **2026-10-15 — Charter v0.2.** Locked platforms (Windows + Linux), Vulkan 1.3, C++23, dependency allowlist, world and code conventions, and agent workflow. Removed performance targets and benchmarking in favor of an FPS overlay and display settings. Added verification approach (replay tests, frame capture, playtest handoff, Windows CI builds) and clean-room rule.
+- **2026-10-15 — License.** Project licensed under MIT (D-016).
 
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
 
