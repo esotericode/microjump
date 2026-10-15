@@ -429,6 +429,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-021 | Proceed with M1 while owner Windows hardware acceptance for M0 remains open. | Owner explicitly requested M1 implementation, local testing, push and merge when checks pass. No Windows acceptance gate is silently waived. |
 | 2026-10-15 / D-022 | M1 renders to per-frame RGBA8 sRGB/D32 targets, then blits to an sRGB FIFO swapchain; timeline completion plus per-image presentation semaphores. | Project-owned Vulkan 1.3 draw/capture path; direct memory allocation is sufficient for these few resources, so VMA is deferred. Resize waits idle and rebuilds targets. |
 | 2026-10-15 / D-023 | Use approved Dear ImGui 1.91.9b for diagnostics and pinned stb for PNG output/verification; fixed 120 Hz camera translation with interpolated position and immediate mouse look. | Small M1 slice; no gameplay UI, imported renderer/math, runtime shader compilation or input replay claim. |
+| 2026-10-15 / D-024 | Extend the D-019 LSan suppression to `libdecor-gtk.so` frames (the same system Wayland decoration plugin). | Native Wayland GPU tests failed intermittently (~1 in 3) on a 96-byte `wl_proxy` allocated inside the plugin's `libdecor_frame_commit`; never seen under X11/CI. Only plugin frames match; SDL, Vulkan, ImGui and engine allocations stay checked. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
