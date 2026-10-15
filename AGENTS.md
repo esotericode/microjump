@@ -65,7 +65,7 @@ Agents run **locally on the project owner's Linux machine** and may use its GPU,
 - Install missing development tools as needed and list every one in the setup command below.
 - **Setup command (Ubuntu 26.04):**
   ```sh
-  sudo apt-get install -y g++ cmake ninja-build clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers vulkan-tools mesa-utils pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev
+  sudo apt-get install -y g++ cmake ninja-build clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers vulkan-tools mesa-utils pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth
   ```
   Without sudo: `tools/bootstrap-local.sh`, then prefix development commands with `tools/local-env.sh`.
 - **Screenshots:** GNOME/Wayland blocks generic desktop capture. Use the engine's own `--capture-frame` mode; do not rely on desktop screenshot tools.

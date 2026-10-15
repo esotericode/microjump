@@ -13,6 +13,7 @@ export CMAKE_PREFIX_PATH="$task_sdk/usr${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}
 export PKG_CONFIG_SYSROOT_DIR="$task_sdk"
 export PKG_CONFIG_LIBDIR="$task_sdk/usr/lib/x86_64-linux-gnu/pkgconfig:$task_sdk/usr/share/pkgconfig"
 export VK_LAYER_PATH="$task_sdk/usr/share/vulkan/explicit_layer.d"
+export XKB_BINDIR="$task_sdk/usr/bin"
 export LSAN_OPTIONS="suppressions=$task_root/tests/lsan.supp${LSAN_OPTIONS:+:$LSAN_OPTIONS}"
 export UBSAN_OPTIONS="halt_on_error=1:print_stacktrace=1${UBSAN_OPTIONS:+:$UBSAN_OPTIONS}"
 exec "$@"

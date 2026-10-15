@@ -9,6 +9,11 @@ set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
 set(SDL_AUDIO OFF CACHE BOOL "" FORCE) # Audio is outside the prototype until M4.
+if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Keep Xlib's process-global locale/resource caches visible to LeakSanitizer.
+    # SDL's dlclose path otherwise unmaps their roots before the leak check.
+    set(SDL_X11_SHARED OFF CACHE BOOL "" FORCE)
+endif()
 FetchContent_Declare(SDL3
     URL https://codeload.github.com/libsdl-org/SDL/tar.gz/fa2c02bb6e21974a89ea9824bc53c9932abe5f9c
     URL_HASH SHA256=d246967187a4f37cc850608dbaf5cff9d1df4d731259903d25539755cdfcc657)

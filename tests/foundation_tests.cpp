@@ -1,4 +1,6 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+// Use real standard declarations instead of doctest's legacy std forward declarations.
+#define DOCTEST_CONFIG_USE_STD_HEADERS
 #ifdef __clang__
 // doctest 2.4.12 includes the retired <ciso646> header when detecting libc++.
 // Scope this compatibility suppression to the upstream header, not project code.

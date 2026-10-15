@@ -11,7 +11,7 @@ std::expected<std::unique_ptr<Window>, Error> Window::create() {
     }
     window->m_sdl_initialized = true;
     window->m_window =
-        SDL_CreateWindow("microjump — M0 foundation", 1280, 720,
+        SDL_CreateWindow("microjump", 1280, 720,
                          SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (window->m_window == nullptr) {
         return std::unexpected(Error{"SDL_CreateWindow: " + std::string(SDL_GetError())});

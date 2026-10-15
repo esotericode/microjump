@@ -86,6 +86,16 @@ exit code 0. `readelf -d` confirms only `$ORIGIN` in the installed runtime searc
 - doctest 2.4.12 includes `<ciso646>` under Clang. GCC 15's standard headers warn
   that it was retired in C++20. The Clang suppression is confined to the doctest
   include; project warnings remain errors. No upstream sources are modified.
+- The first Linux CI debug runs exposed 50,041 bytes of Xlib locale/resource caches
+  after SDL unloaded the library. Reproduced under local Xvfb/software Vulkan.
+  Sanitized builds now link SDL's X11 backend directly (`SDL_X11_SHARED=OFF`), so
+  Xlib remains mapped and its global cache roots remain visible to LSan. This
+  removed those reports without adding a suppression. The remaining 25-byte title
+  conversion leak disappeared with the plain `microjump` window title. The full
+  GCC Debug suite then passed under both Xvfb/llvmpipe and native Wayland/Intel MTL.
+- MSVC's newer compiler diagnosed doctest's legacy forward declarations of standard
+  library templates. Tests now enable doctest's `DOCTEST_CONFIG_USE_STD_HEADERS`
+  option, using the actual standard headers instead of suppressing that warning.
 - Only combined graphics/present queue families are supported in M0. Devices without
   one get a clear error. Selection does not claim support for split queue ownership.
 - This zip uses the host's system C/C++ runtime; it is not a portable Linux distribution
