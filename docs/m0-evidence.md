@@ -93,9 +93,8 @@ exit code 0. `readelf -d` confirms only `$ORIGIN` in the installed runtime searc
 ## Remaining gates / next increment
 
 - Confirm all PR CI jobs, including MSVC Debug/Release, pass; record the artifact link.
-- Publishing the branch/PR is awaiting explicit owner authorization: automatic
-  approval review rejected uploading the staged source and CI files to the public
-  repository. No remote objects, branches or PRs were created by this implementation.
+- The owner authorized publishing and merging this branch on 2026-10-15 and
+  requested standing agent push/merge authority. Charter v0.3 / D-020 records it.
 - Owner: extract the Windows Release zip and run `microjump.exe --smoke-test`, then
   normal startup, resize and close. Confirm successful Vulkan startup on that PC.
 - M1: swapchain + dynamic rendering, project math/transforms, original 3D geometry,

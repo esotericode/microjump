@@ -1,7 +1,7 @@
 # microjump — Project Charter and Agent Guide
 ## A custom C++ game engine, proven through a 3D platformer
 
-**Document version:** 0.2  
+**Document version:** 0.3
 **Status:** M0 foundation in progress — see Section 15 and `docs/m0-evidence.md`
 **Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
 
@@ -75,7 +75,9 @@ Agents run **locally on the project owner's Linux machine** and may use its GPU,
 ### Workflow
 
 - **One agent works at a time** (at least until M2; see D-013).
-- Work on a **branch**, open a **pull request**, and describe what changed plus the evidence (Section 12). **The owner merges.** Agents do not push to `main`.
+- Work on a **branch**, open a **pull request**, and describe what changed plus the evidence (Section 12).
+- **Standing push and merge authority (D-020):** The owner authorizes this and future agents to publish project source, tests, CI workflows, assets, and documentation to `esotericode/microjump`, push their working branches, and merge pull requests into `main` at their discretion. No separate owner confirmation is needed for these actions. Review the diff, run the relevant checks, and confirm required CI passes before merging. Report remaining milestone gates honestly; merging an increment does not make the milestone complete.
+- This authority covers the GitHub workflow. The dependency, architecture, scope, and system-configuration approval requirements elsewhere in this charter still apply.
 - Keep PRs focused. Avoid unrelated rewrites.
 
 ### Stop and ask the owner before
@@ -414,7 +416,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-010 | No ECS; kinematic capsule collide-and-slide controller; JSON levels placing code-generated primitives; forward renderer first. | Prevents over-engineering; matches the scale of one graybox playground. |
 | 2026-10-15 / D-011 | Shaders in GLSL compiled to SPIR-V at build time with `glslc`. | Simplest Vulkan shader path; switching later would mean rewriting every shader. |
 | 2026-10-15 / D-012 | Code style: namespace `mj`, naming per Section 5.2, clang-format, no exceptions in engine code, validation errors fail tests. | Consistent code across agents and sessions. |
-| 2026-10-15 / D-013 | Process: one agent at a time (until at least M2); branch + PR per task; **owner merges**. | Avoids integration churn; keeps the owner in control of `main`. |
+| 2026-10-15 / D-013 | Process: one agent at a time (until at least M2); branch + PR per task; originally owner merges. **Push/merge authority superseded by D-020.** | Serial work and focused PRs avoid integration churn. |
 | 2026-10-15 / D-014 | Audio out of scope until M4 is complete. | Scope discipline. |
 | 2026-10-15 / D-015 | Clean-room rule for SM64 references (Section 3). | Reduces the risk of derived code from decompiled copyrighted source. |
 | 2026-10-15 / D-016 | Project license: **MIT** (see `LICENSE`). | Simple, widely understood, compatible with every allowed dependency. Copyleft dependencies are excluded; Windows/Linux build zips include third-party license notices. |
@@ -422,6 +424,8 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-017 | M0 selects one queue family supporting both graphics and presentation; RAII owns SDL/window and Vulkan resources. | Keeps the first device path small; separate graphics/present queue families are currently unsupported and reported clearly. No multi-backend layer. |
 | 2026-10-15 / D-018 | Fetch only SDL3, volk and doctest in M0, pinned by commit and archive hash; other approved libraries wait until needed. | Minimal dependency footprint; license notices ship with runtime packages. |
 | 2026-10-15 / D-019 | Linux startup tests use a Fontconfig-only LSan suppression; ASan/UBSan and other leak checks stay enabled. | System Wayland libdecor/GTK retains font caches after SDL shutdown. Evidence and scope in `docs/m0-evidence.md`; no new linked dependency. |
+
+| 2026-10-15 / D-020 | Agents have standing authority to push project branches to `esotericode/microjump` and merge PRs into `main` at their discretion, without repeated owner confirmation. | Owner explicitly requested this on 2026-10-15 and authorized publishing/merging the M0 implementation. Replaces owner-only merging in D-013; preserves focused PRs, evidence, required checks, serial agent work, and other approval boundaries. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -432,6 +436,8 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 - **2026-10-15 — License.** Project licensed under MIT (D-016).
 
 - **2026-10-15 — M0 foundation started.** Added CMake/Ninja presets, SDL3 window, Vulkan 1.3 device/presentation checks, validation-aware teardown, doctest/CLI/startup tests, GCC/Clang/MSVC CI, packaging and rootless local tool setup. GCC Debug/Release and Clang Debug builds and all four local tests pass on Intel MTL; formatting and static analysis pass. Evidence: `docs/m0-evidence.md`. Windows CI and owner startup evidence remain open; no rendered scene or gameplay is claimed.
+
+- **2026-10-15 — Charter v0.3 / agent GitHub authority.** Owner authorized publishing and merging M0, and requested that this and future agents may push and merge as they see fit. Updated Section 2 and recorded D-020; technical scope and verification requirements remain in force.
 
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
 
