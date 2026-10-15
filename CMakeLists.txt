@@ -1,0 +1,39 @@
+cmake_minimum_required(VERSION 3.28)
+project(microjump VERSION 0.1.0 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF) # The charter deliberately uses headers, not C++ modules.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+option(MJ_WARNINGS_AS_ERRORS "Treat project warnings as errors" ON)
+option(MJ_SANITIZERS "Enable ASan and UBSan on Linux" OFF)
+option(MJ_BUILD_TESTS "Build automated tests" ON)
+option(MJ_SMOKE_TESTS "Register tests requiring a display and Vulkan 1.3 device" OFF)
+
+include(cmake/Dependencies.cmake)
+include(cmake/ProjectOptions.cmake)
+
+add_subdirectory(engine)
+add_subdirectory(game)
+if(MJ_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# Dependencies install through our explicit runtime/notice rules only.
+install(FILES LICENSE README.md DESTINATION . COMPONENT Runtime)
+install(FILES third_party/README.md DESTINATION licenses COMPONENT Runtime)
+install(FILES "${sdl3_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME SDL3.txt COMPONENT Runtime)
+install(FILES "${volk_SOURCE_DIR}/LICENSE.md" DESTINATION licenses RENAME volk.txt COMPONENT Runtime)
+if(MJ_BUILD_TESTS)
+    install(FILES "${doctest_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses
+            RENAME doctest.txt COMPONENT Runtime)
+endif()
+set(CPACK_GENERATOR ZIP)
+set(CPACK_PACKAGE_FILE_NAME "microjump-${CMAKE_SYSTEM_NAME}-${CMAKE_BUILD_TYPE}")
+set(CPACK_COMPONENTS_ALL Runtime)
+set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
+set(CPACK_INSTALL_CMAKE_PROJECTS "${PROJECT_BINARY_DIR};microjump;Runtime;/")
+include(CPack)

@@ -1,0 +1,5 @@
+/build/
+/.local-tools/
+/CMakeUserPresets.json
+/.cache/
+/captures/
