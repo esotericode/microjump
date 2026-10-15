@@ -1,0 +1,443 @@
+# microjump — Project Charter and Agent Guide
+## A custom C++ game engine, proven through a 3D platformer
+
+**Document version:** 0.2  
+**Status:** Planning — implementation not yet started  
+**Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
+
+> **Our north star:** Build a high-quality 3D game engine of our own in modern C++, and demonstrate it with a polished, expressive 3D platformer. The engine is the reason for the project; the game is how we prove it works.
+
+---
+
+## 1. Why this project exists
+
+This is an experiment in AI-led software engineering. We want to learn how effectively LLM programming agents can **design, implement, test, and improve** a real low-level system over time. Success is not merely getting a character on screen. Success means building a coherent, original, understandable engine whose behavior can be demonstrated and verified.
+
+We value careful engineering over shortcuts. A small, excellent engine and one compelling playground are better than a large, fragile game. We will deliberately invest in the engine, even when an off-the-shelf tool could produce a game faster.
+
+### Project priorities, in order
+
+1. **Custom engine ownership and technical learning.** Our architecture and core systems must be ours.
+2. **Correctness, stability, and maintainability.** Reliable behavior and code quality come before feature count.
+3. **Responsive movement and camera feel.** The prototype should be genuinely enjoyable to control.
+4. **Expressive real-time lighting.** Simple geometry should still look attractive and physically convincing enough to communicate shape and space.
+5. **Useful display settings and an FPS readout.** The player can see the frame rate and change resolution, FPS cap, and VSync. (See Section 11.)
+6. **Scope discipline.** Finish each meaningful slice before expanding the project.
+
+---
+
+## 2. Agent quick reference
+
+### Commands
+
+> **TBD — M0 makes these real.** The first agent to set up the build replaces this block with the exact, working commands. The intended shape is:
+
+```sh
+cmake --preset linux-debug            # configure (also: linux-release)
+cmake --build --preset linux-debug    # build
+ctest --preset linux-debug            # run all automated tests
+./build/linux-debug/game/microjump    # run the playground
+```
+
+Planned runtime flags (implement in the milestone noted, then document them here):
+
+| Flag | Purpose | Milestone |
+| --- | --- | --- |
+| `--capture-frame N --capture-out PATH.png` | Render N frames, save the frame from the GPU as PNG, exit. | M1 |
+| `--frames N` | Run N frames then exit cleanly (smoke tests). | M1 |
+| `--record PATH` / `--replay PATH` | Record / replay player input deterministically. | M2 |
+
+### Local development environment
+
+Agents run **locally on the project owner's Linux machine** and may use its GPU, build, run the game, run tests, and capture screenshots as needed.
+
+| Item | Value |
+| --- | --- |
+| OS | Ubuntu 26.04 LTS, GNOME on **Wayland** |
+| CPU / RAM | Intel Core Ultra 5 135U / 14 GiB |
+| GPU | Intel Meteor Lake integrated graphics, Mesa 26 (ANV Vulkan driver) |
+| Display | 3072×1920 @ 60 Hz |
+| Compiler present | g++ 15.2 |
+| Still to install (M0) | `cmake`, `ninja-build`, `clang`, `clang-format`, `clang-tidy`, `glslc` (shaderc), Vulkan validation layers, `vulkan-tools`, `mesa-utils` |
+
+- Install missing development tools as needed and list every one in the setup command below.
+- **Setup command:** *TBD — M0 adds a single copy-pasteable install line here.*
+- **Screenshots:** GNOME/Wayland blocks generic desktop capture. Use the engine's own `--capture-frame` mode; do not rely on desktop screenshot tools.
+- Close game windows and stray processes you started when you are done.
+- Do not change drivers, power settings, or other system configuration without asking the owner.
+
+### Workflow
+
+- **One agent works at a time** (at least until M2; see D-013).
+- Work on a **branch**, open a **pull request**, and describe what changed plus the evidence (Section 12). **The owner merges.** Agents do not push to `main`.
+- Keep PRs focused. Avoid unrelated rewrites.
+
+### Stop and ask the owner before
+
+- Adding, removing, or replacing **any dependency** (Section 4.3).
+- Changing any **locked decision** in Section 4 or the world conventions in Section 5.
+- Changing scope, language, platforms, or the goals in Sections 1–3 and 6–11.
+- Adding a project license (still an open owner decision — D-016).
+
+Everything else: decide, then record it in the decision log (Section 15) when it is significant.
+
+---
+
+## 3. Non-negotiable boundaries
+
+- **Language:** All engine and gameplay runtime code is **C++23** (D-005).
+- **Original implementation:** Build the renderer, scene representation, collision and character movement, camera, resource management, runtime loop, settings, and diagnostics ourselves. Do not integrate Unreal, Unity, Godot, an existing game engine, an off-the-shelf renderer, or a third-party physics/ECS framework.
+- **Allowed infrastructure:** Only the dependencies approved in Section 4.3. Each must be documented with its purpose and license.
+- **Necessary language exceptions:** Shaders are GLSL (D-011); assets and configuration may use data formats. These are not permission to implement engine or game logic in another language.
+- **Clean-room movement work:** Super Mario 64 is a *design* reference only. Agents writing movement or camera code must **not** load decompiled SM64 source into their context. Use descriptions of behavior (design write-ups, analyses, videos, notes in this repo) instead. If decompiled code needs studying, do it as a separate research task that produces a plain-language behavior note in `docs/`, with no code excerpts. No Nintendo assets, character likenesses, animations, or copied source code.
+- **Honest reporting:** Never claim a feature works without evidence. Describe compromises and known issues truthfully.
+
+---
+
+## 4. Locked technical decisions
+
+Changing anything in this section requires owner approval and a new decision-log entry.
+
+### 4.1 Platforms and graphics API (D-003)
+
+- **Target platforms:** **Windows and Linux** (x86-64). macOS is out of scope.
+- **Graphics API:** **Vulkan only.** There is no OpenGL/D3D fallback and no multi-backend abstraction.
+- **Minimum:** **Vulkan 1.3** with dynamic rendering, synchronization2, and timeline semaphores. Anything newer (Vulkan 1.4 features, mesh shaders, ray tracing) is optional, detected at runtime, and never required.
+- **Windows verification:** The owner tests on their own Windows PC. Agents are responsible for producing working Windows builds (Section 12.5).
+
+### 4.2 Build system and toolchain (D-007)
+
+- **CMake** with **CMakePresets.json**, generated with **Ninja**.
+- **Compilers:** GCC and Clang on Linux; **MSVC** on Windows. Code must build **warning-free** on all of them (warnings as errors in CI).
+- **Dependencies are pinned** to exact versions and fetched with **CMake FetchContent** (or vendored in `third_party/` when that is simpler). Never depend on whatever happens to be installed on the system, except the Vulkan loader/SDK and GPU drivers.
+- Debug builds enable **AddressSanitizer and UndefinedBehaviorSanitizer** on Linux where practical.
+
+### 4.3 Dependency policy (D-006)
+
+Prefer the smallest reasonable footprint. Anything not listed here needs owner approval first.
+
+| Library | Purpose | License | Status |
+| --- | --- | --- | --- |
+| **SDL3** | Window, input, gamepads, (later) audio | zlib | Allowed |
+| **volk** | Vulkan function loading | MIT | Allowed |
+| **Vulkan Memory Allocator (VMA)** | GPU memory allocation | MIT | Allowed |
+| **Dear ImGui** | Debug overlay and settings menus **only** — not gameplay UI | MIT | Allowed |
+| **doctest** | Unit/integration test framework | MIT | Allowed |
+| **nlohmann/json** | Level and settings files | MIT | Allowed |
+| **stb_image / stb_image_write** | Texture decoding (when needed); PNG output for frame capture | MIT / public domain | Allowed |
+| **shaderc / glslc** | Build-time GLSL → SPIR-V compilation (tool, not linked into the game) | Apache-2.0 | Allowed |
+| GLM or any other math library | — | — | **Denied** — we write our own math (D-006) |
+| Any engine, renderer, physics, or ECS library | — | — | **Denied** |
+| glTF / mesh importers (e.g. cgltf) | — | — | Not yet — ask first |
+
+Until a project license is chosen (D-016), only accept permissively licensed dependencies (MIT, BSD, zlib, Apache-2.0, Boost, public domain).
+
+### 4.4 Shaders (D-011)
+
+- **GLSL**, compiled to **SPIR-V at build time** by `glslc`. Compiled shaders ship next to the executable.
+- No runtime shader compilation in shipping builds. (Hot reload during development is fine if it goes through the same compiler.)
+
+### 4.5 Architecture guardrails (D-010)
+
+- **No ECS.** Use plain structs and arrays. A playground with a few hundred objects does not need an entity-component system, and building one is a detour.
+- **Character collision:** a **kinematic capsule** using **collide-and-slide** against static triangle-mesh world geometry, with a configurable maximum walkable slope and step height. No rigid-body simulation.
+- **Levels:** a **hand-written, versioned JSON level file** placing primitives generated in code (boxes, ramps, cylinders, stairs) and light fixtures. No editor and no mesh import for now.
+- **Audio:** out of scope until the playground (M4) is complete (D-014).
+- **Rendering:** a simple **forward renderer** first (Section 8).
+
+---
+
+## 5. Conventions
+
+### 5.1 World conventions (D-008)
+
+| Convention | Value |
+| --- | --- |
+| Units | **Meters**, seconds, radians (degrees only in UI and config) |
+| Up axis | **+Y** |
+| Handedness | **Right-handed**; forward is **−Z** in view space |
+| Depth | **Reverse-Z** (clear to 0, compare GREATER), 32-bit float depth |
+| Simulation | **Fixed 120 Hz** tick with render interpolation (D-009) |
+
+SM64 ran gameplay at 30 Hz with its own units. Any movement values inspired by it must be converted to meters and our 120 Hz tick, not copied.
+
+### 5.2 C++ code style (D-012)
+
+- **C++23.** No C++20 modules (tooling is still uneven); use headers with `#pragma once`.
+- **Namespace:** `mj` for engine code; `mj::game` for gameplay code.
+- **Naming:** `PascalCase` types and enums; `snake_case` functions and variables; `m_` prefix for private members; `k_` prefix for constants.
+- **Formatting:** `.clang-format` (LLVM base, 4-space indent, 100 columns) is the authority; run it before committing. `.clang-tidy` added in M0.
+- **Errors:** engine code does not throw. Recoverable errors return `std::expected<T, Error>`; unrecoverable errors log and abort with a clear message. Leave compiler exception/RTTI settings at defaults so dependencies keep working.
+- **Vulkan validation layers are always enabled in debug builds.** Any validation error is a bug and fails the test run.
+- Text is UTF-8; file paths go through `std::filesystem`. Compiler- or OS-specific code lives only in the platform layer.
+
+### 5.3 Repository layout
+
+```
+engine/      static library: platform, core, math, render, collision, scene, settings
+game/        the playground executable; uses the engine only via its public headers
+shaders/     GLSL sources
+assets/      levels (JSON) and any original assets
+tests/       unit tests, simulation tests, input replays, render smoke tests
+tools/       helper scripts and utilities
+docs/        design notes, research notes, decision details when they outgrow the log
+third_party/ vendored dependencies (if any)
+```
+
+---
+
+## 6. The first playable experience
+
+Build a **third-person 3D movement playground** using simple, original geometric assets: a readable player placeholder, platforms, ramps, walls, steps, pillars, and a handful of light fixtures. It is a test level, not a full content-heavy game. The goal is a place that invites experimentation with speed, turning, jumps, wall jumps, landing, and camera movement.
+
+### Required player verbs
+
+- Walk, run, accelerate, turn, brake, and change direction with satisfying momentum.
+- Jump with responsive takeoff and controllable jump height; maintain meaningful but not unlimited air steering.
+- Wall jump from clearly designated surfaces with predictable angles and recovery.
+- Perform at least one expressive momentum-based move (such as a long jump), once the core jump works.
+- Land cleanly on platforms; handle slopes, edges, steps, and collisions without snagging or jitter.
+- Reset to a nearby checkpoint after falling; restart tests without long downtime.
+
+### What “inspired by Super Mario 64, but improved” means
+
+Use **Super Mario 64** as a movement-design reference: directional acceleration, momentum, commitment while turning, expressive jumping, and rewarding mastery. Do **not** target identical physics values, animation timing, or a one-to-one clone. We are free to improve input response, airborne control, camera behavior, collision stability, and accessibility using contemporary techniques. (Respect the clean-room rule in Section 3.)
+
+Candidate quality-of-life improvements include **jump buffering**, a short **coyote-time** window, optional gamepad dead-zone tuning, adjustable sensitivity, and clearer feedback for jump and wall-jump windows. Tune these with playtests; do not make movement frictionless or remove its skill ceiling.
+
+All movement tuning values live in data or a single tuning struct, adjustable at runtime from the debug UI, so the owner can tweak feel while playing.
+
+---
+
+## 7. A camera that feels good
+
+The camera is a first-class gameplay system, not an afterthought.
+
+- Smooth third-person follow and orbit with mouse and gamepad input.
+- Stable target framing while standing, moving, jumping, and falling.
+- Sensible yaw/pitch limits, smoothing, configurable sensitivity, and optional inverted Y.
+- Camera obstruction handling that prevents walls from hiding the player or causing harsh snaps.
+- Minimal input latency; smoothing must not make the character feel disconnected.
+- Camera behavior must not change with render resolution, FPS cap, or VSync.
+
+---
+
+## 8. Real-time lighting that earns its place
+
+Lighting must affect the environment, support depth perception, and look good on simple geometry. A permanently baked scene with decorative light colors is not sufficient.
+
+### First lighting target
+
+- A **real-time directional light** (sun/key light) that casts dynamic shadows from platforms, walls, and the player.
+- Several **movable point and/or spot lights** with visible, sensible attenuation and material response.
+- Shadow maps with practical filtering and bias controls; avoid obvious jagged edges, acne, and detached shadows.
+- Correct linear-light calculations, sRGB output, ambient fill, and tone mapping/exposure.
+- Materials with readable roughness/specular response, so light position and surface properties visibly matter.
+- A day/night or moving-light demonstration that proves shadows and lighting update live.
+
+Use a **simple forward-rendering pipeline first**. Do not build deferred rendering, global illumination, ray tracing, or a complex material graph merely to appear sophisticated. Improve quality incrementally; make heavier features (e.g. shadow quality) adjustable in settings. Ambient occlusion, cascaded shadows, and more advanced effects are **stretch goals**, not prerequisites for the initial playable build.
+
+---
+
+## 9. The prototype playground
+
+Create one substantial, contiguous **graybox test environment**, approximately **200–250 meters across** as an initial design target (adjust after movement playtesting). Build it from engine-generated primitive meshes placed by the JSON level file.
+
+Include these connected testing zones:
+
+1. **Central plaza:** an open starting area for acceleration, tight turns, braking, and camera orbiting.
+2. **Sprint lane:** long, mostly flat ground with distance markers to evaluate top speed and motion feel.
+3. **Platform field:** roughly **30–50 platforms** of varied heights, spacing, and widths, including forgiving routes and optional precision routes.
+4. **Wall-jump section:** several paired walls, corners, and vertical routes that teach and test wall jumping.
+5. **Slope and step course:** ramps, stairs, edges, narrow paths, and ledges to expose collision problems.
+6. **Lighting showcase:** a shaded structure and a few colored/movable lights that create meaningful contrast with outdoor directional light.
+7. **Safe reset points:** checkpoints or automatic respawns, with an easy route back to every testing zone.
+
+These are **planning targets, not rigid asset quotas**. Make the level enjoyable to traverse. Avoid filling empty space with arbitrary objects.
+
+---
+
+## 10. Engine scope: build the essentials, not everything
+
+**Required engine systems for the first prototype**
+
+- Platform layer (SDL3): application and window lifecycle; mouse/keyboard and gamepad input.
+- Main loop, monotonic timing, fixed 120 Hz simulation, render interpolation.
+- Core math and transforms (our own); camera; scene objects; mesh submission and resource handles.
+- Original Vulkan rendering pipeline, lighting, dynamic shadows, and simple material handling.
+- Static world collision and a robust capsule character controller; basic spatial queries (raycasts, sweeps).
+- Level loading from the versioned JSON format.
+- Debug overlays, runtime settings, logging, frame capture, input record/replay, and tests.
+
+**Not required initially**
+
+A general-purpose editor, multiplayer, networking, audio, sophisticated skeletal animation, full rigid-body simulation, procedural open worlds, complex AI, cinematic tools, ray tracing, a second graphics backend, or an asset import pipeline. Add these only after a deliberate project decision.
+
+---
+
+## 11. Display settings and FPS overlay
+
+The game runs at whatever frame rate it runs at. **We do not set FPS targets, and agents do not do performance testing or benchmarking** (D-004). The owner checks performance themselves. What *is* required is that the player can see the frame rate and control display settings.
+
+### Runtime settings (required)
+
+- **VSync:** On / Off, with the effective setting shown.
+- **FPS cap:** Uncapped, plus selectable caps (e.g. 30, 60, 120, 144, 240).
+- **Resolution:** Selectable resolutions; windowed, borderless, and fullscreen modes as the platform allows.
+- **Shadow quality:** A simple preset (e.g. Low / Medium / High) with a sensible default.
+- **Persistence:** Settings are saved to the user's config directory, survive restart, and fall back safely to defaults if invalid.
+
+### Overlay (required)
+
+- A toggleable on-screen readout of **FPS and frame time**, plus the current resolution and VSync/cap state.
+- Debug views (separately toggleable) for **collision shapes** and the **current movement state**.
+
+### The one correctness rule
+
+Changing the FPS cap, VSync, or resolution **must not** change jump height, speed, collisions, or camera behavior. This is a gameplay correctness requirement, not a performance one, and it is covered by automated simulation tests (Section 12.2).
+
+---
+
+## 12. Verification and evidence
+
+Agents verify their own work on the local machine before opening a PR.
+
+### 12.1 Unit tests
+Math, collision queries, level parsing, settings load/save, and other pure logic. Run via `ctest`.
+
+### 12.2 Deterministic simulation tests
+The simulation must be deterministic for a given input sequence. Tests feed recorded input (`--replay`) or scripted input and assert outcomes (positions, apex heights, landing states) within tolerances. The same input must produce the same result regardless of render rate, FPS cap, or VSync.
+
+### 12.3 Render smoke tests and screenshots
+- Launch, render a fixed number of frames, capture with `--capture-frame`, exit cleanly, with **zero Vulkan validation errors**.
+- For visual changes (rendering, lighting, level layout), agents capture screenshots and **inspect them**, and attach before/after captures to the PR.
+
+### 12.4 Playtest handoff
+Movement and camera *feel* cannot be verified by code inspection. When a change needs human judgment, the agent adds a request to the PR in this format, then continues with other work rather than declaring the feel “done”:
+
+```
+PLAYTEST REQUEST
+Build/branch: <branch or commit>
+How to run:   <exact command>
+Try:          <specific actions, e.g. "long jump from the sprint lane at full speed">
+Look for:     <what to judge, e.g. "does landing feel abrupt?">
+Tunables:     <parameter names and where to change them in the debug UI>
+```
+
+### 12.5 Windows builds
+- A **GitHub Actions** workflow (added in M0) builds the project with MSVC on a Windows runner on every PR and every push to `main`.
+- It uploads a **ready-to-run zip**: the executable, compiled shaders, assets, and required DLLs (e.g. `SDL3.dll`). No installer. The Vulkan runtime comes with the GPU driver.
+- When something is ready for Windows testing, the agent confirms the Windows build passes and posts the download link in the PR.
+- Optional: a local MinGW-w64 cross-compile as a fast portability check.
+
+---
+
+## 13. Development roadmap and milestone gates
+
+| Milestone | Deliverable | Exit evidence |
+| --- | --- | --- |
+| **M0 — Foundation** | Repo layout, CMake presets, pinned dependencies, formatting/tidy config, Linux + Windows CI builds, an SDL3 window opens, Vulkan instance/device created with validation layers. | Clean builds on both OSes, the commands in Section 2 filled in, tests run in CI. |
+| **M1 — First pixels** | Vulkan renderer draws a 3D scene; controllable debug camera; stable main loop; frame capture; FPS overlay. | Captured screenshots, smoke test passing with zero validation errors, resize works, Windows zip runs on the owner's PC. |
+| **M2 — Movement slice** | Capsule character controller with run, jump, air steering, collision, and responsive camera; input record/replay. | Deterministic simulation tests passing; playtest request answered by the owner. |
+| **M3 — Lighting slice** | Dynamic sun shadows, local lights, material response, shadow quality setting. | Moving-light demo and before/after captures. |
+| **M4 — Full playground** | Traversable large graybox, platforms, wall jumps, slopes, checkpoints. | All zones playable; collision/regression checklist passes. |
+| **M5 — Settings and polish** | Complete display settings, persistence, tuning, stability fixes. | Settings verified on Linux and Windows; no known critical crashes or regressions. |
+
+Every milestone ends with a **runnable build on both platforms**, recorded observations, and a truthful statement of what does not yet work. Milestones may be split or reordered by a documented decision; they must not be silently marked complete.
+
+---
+
+## 14. Rules for AI programming agents
+
+1. **Read this charter before planning work.** Keep its purpose and constraints intact.
+2. **Design the smallest testable increment.** Prefer thin vertical slices over long stretches of infrastructure.
+3. **Own your implementation.** Do not import an existing engine subsystem to bypass the experiment.
+4. **Don't over-engineer.** No ECS, no multi-backend abstractions, no frameworks “for later.” Build what the current milestone needs.
+5. **Explain significant choices.** Record architecture decisions, tradeoffs, and rejected alternatives in the decision log.
+6. **Prove completion.** Build, test, run the game, inspect captures, and put exact commands and results in the PR.
+7. **Protect integration quality.** Avoid unrelated rewrites; coordinate changes to public interfaces and core architecture.
+8. **Treat feel as testable iteration.** Expose movement and camera tuning parameters; request playtesting rather than asserting a mechanic is “perfect.”
+9. **Do not hide failures.** If something is broken or missing, document it, its suspected cause, and the next experiment.
+10. **Do not rewrite the charter to declare victory.** Changes to scope, language, platforms, locked decisions, or quality goals require explicit owner approval.
+
+### Definition of done for any feature
+
+A feature is **Done** only when it is implemented in project-owned code, builds warning-free on Linux and Windows (CI), has appropriate automated tests or a documented manual test procedure, has been exercised in the running game, produces no Vulkan validation errors, introduces no known critical regression, and includes a short evidence note in the PR. “Compiles” alone is not Done.
+
+---
+
+## 15. Living project record — agents update this section
+
+**Update policy:** Sections 1–14 are the project's guiding intent; change them only with owner approval. Agents update this section in their PRs after completing work or discovering a material issue. Never invent results.
+
+### Current snapshot
+
+| Field | Current value |
+| --- | --- |
+| Overall status | **PLANNING** |
+| Current milestone | **M0 — Foundation** (not started) |
+| Latest working build | None yet |
+| Open owner decisions | Project license (D-016) |
+| Next useful action | M0: repo skeleton, CMake presets, pinned dependencies, SDL3 window, Vulkan device with validation, Linux + Windows CI |
+
+### Milestone status tracker
+
+| ID | State | Evidence / notes |
+| --- | --- | --- |
+| M0 | Not started | — |
+| M1 | Not started | — |
+| M2 | Not started | — |
+| M3 | Not started | — |
+| M4 | Not started | — |
+| M5 | Not started | — |
+
+**Allowed states:** Not started · In progress · Blocked · Done · Reopened. State changes require a date and evidence reference (PR, commit, test log, or capture).
+
+### Decision log (append entries)
+
+| Date / ID | Decision | Reason and consequences |
+| --- | --- | --- |
+| 2026-10-15 / D-001 | Custom engine in modern C++. (Language standard updated by D-005.) | Strong LLM familiarity and mature tooling, while keeping the custom-engine experiment. |
+| 2026-10-15 / D-002 | One original 3D platformer playground is the initial proving ground. | Focuses evaluation on engine quality, movement, and lighting. |
+| 2026-10-15 / D-003 | Targets **Windows + Linux**; **Vulkan 1.3** only. | One modern API covers both OSes; no fallback backend; macOS out of scope. Owner tests Windows; agents produce Windows builds. |
+| 2026-10-15 / D-004 | **No FPS targets, benchmarks, or agent performance testing.** Required: FPS overlay plus resolution / FPS cap / VSync settings. | Owner evaluates performance personally; agent effort goes to features and correctness. Replaces the v0.1 performance targets and benchmark protocol. |
+| 2026-10-15 / D-005 | **C++23** baseline (was C++20). | GCC 15 and current MSVC support the needed features; `std::expected` defines error handling. No C++20 modules. |
+| 2026-10-15 / D-006 | Dependency allowlist (Section 4.3): SDL3, volk, VMA, Dear ImGui (debug/settings only), doctest, nlohmann/json, stb, shaderc. Own math library. | Plumbing comes from small libraries; core engine systems stay ours. New dependencies need owner approval. |
+| 2026-10-15 / D-007 | CMake + presets + Ninja; GCC/Clang/MSVC; pinned dependencies via FetchContent or vendoring. | Identical dependency versions on both OSes; reproducible builds. |
+| 2026-10-15 / D-008 | World conventions: meters, +Y up, right-handed, reverse-Z. | Prevents inconsistent axes and units across agents. |
+| 2026-10-15 / D-009 | Fixed 120 Hz simulation tick with render interpolation. | All movement tuning depends on the tick; fixing it early avoids retuning. |
+| 2026-10-15 / D-010 | No ECS; kinematic capsule collide-and-slide controller; JSON levels placing code-generated primitives; forward renderer first. | Prevents over-engineering; matches the scale of one graybox playground. |
+| 2026-10-15 / D-011 | Shaders in GLSL compiled to SPIR-V at build time with `glslc`. | Simplest Vulkan shader path; switching later would mean rewriting every shader. |
+| 2026-10-15 / D-012 | Code style: namespace `mj`, naming per Section 5.2, clang-format, no exceptions in engine code, validation errors fail tests. | Consistent code across agents and sessions. |
+| 2026-10-15 / D-013 | Process: one agent at a time (until at least M2); branch + PR per task; **owner merges**. | Avoids integration churn; keeps the owner in control of `main`. |
+| 2026-10-15 / D-014 | Audio out of scope until M4 is complete. | Scope discipline. |
+| 2026-10-15 / D-015 | Clean-room rule for SM64 references (Section 3). | Reduces the risk of derived code from decompiled copyrighted source. |
+| 2026-10-15 / D-016 | **Open (owner):** project license. | The public repo has no license yet (all rights reserved). Agents must not add one; only permissive dependencies until decided. |
+
+**New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
+
+### Progress log (append entries)
+
+- **2026-10-15 — Charter v0.1 created.** Scope and provisional targets established. No engine implementation claimed.
+- **2026-10-15 — Charter v0.2.** Locked platforms (Windows + Linux), Vulkan 1.3, C++23, dependency allowlist, world and code conventions, and agent workflow. Removed performance targets and benchmarking in favor of an FPS overlay and display settings. Added verification approach (replay tests, frame capture, playtest handoff, Windows CI builds) and clean-room rule.
+
+**New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
+
+### Known risks and unanswered questions
+
+- **Character feel:** Requires iterative playtesting on keyboard/mouse and gamepad by the owner; not solvable from code inspection alone.
+- **Windows drift:** Only Linux is available locally. Keep the Windows CI build green on every PR so portability bugs surface immediately.
+- **Vulkan complexity:** Vulkan is verbose; keep the renderer minimal and rely on validation layers to catch mistakes early.
+- **Integration quality:** Interface churn and unreviewed merges erase productivity gains; keep tests meaningful and PRs focused.
+
+---
+
+## 16. Research references (inspiration, not source imports)
+
+- Super Mario 64 decompilation project (historical context): https://github.com/n64decomp/sm64
+
+This is reconstructed copyrighted code. **Follow the clean-room rule in Section 3:** do not load it into an agent's context while writing project code; capture any insights as plain-language behavior notes in `docs/`. Prefer secondary sources that describe movement behavior.
+
+---
+
+**Final test of alignment:** Whenever an agent proposes a feature or shortcut, ask: *Does this help us build and understand a better original C++ engine, or produce a more enjoyable, correct movement playground?* If not, it probably does not belong in the first prototype.
