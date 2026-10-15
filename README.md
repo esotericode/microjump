@@ -1,88 +1,109 @@
 # microjump
 
 A custom C++23/Vulkan 1.3 engine, proven through an original 3D movement playground.
-Read [AGENTS.md](AGENTS.md) for the authoritative charter, conventions and roadmap.
+[AGENTS.md](AGENTS.md) is the authoritative charter and roadmap.
 
-M0 is under implementation. The executable opens a resizable SDL3 window, creates a
-Vulkan instance, presentation surface and compatible device, and shuts down cleanly.
-Debug builds require Khronos validation layers and fail on validation errors, including
-errors during teardown. **There is no rendered scene or gameplay yet.**
+M1 renders an original graybox scene with reverse-Z depth, linear directional shading,
+an sRGB output, a free-flight debug camera, GPU PNG capture and an FPS overlay.
+The scene is a renderer fixture; character movement, collision, JSON level loading,
+dynamic shadows and the full playground follow in later milestones.
 
-## Linux setup
+![First 3D scene](docs/captures/m1-scene.png)
 
-Ubuntu 26.04; GCC 15 or Clang 21, CMake 3.28+, Ninja, and a Vulkan 1.3 driver:
+## Linux
+
+Ubuntu 26.04; GCC 15 or Clang 21, CMake 3.28+, Ninja and a Vulkan 1.3 driver:
 
 ```sh
-sudo apt-get install -y g++ cmake ninja-build clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers vulkan-tools mesa-utils pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth
-cmake --preset linux-debug
+sudo apt-get install -y g++ cmake ninja-build clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers vulkan-tools mesa-utils pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth xdotool
+cmake --preset linux-debug -DMJ_SMOKE_TESTS=ON
 cmake --build --preset linux-debug --parallel 4
 ctest --preset linux-debug
 ./build/linux-debug/game/microjump
 ```
 
-Use `linux-release` or `linux-clang-debug` in all three commands for the other builds.
-Dependencies download on first configure; sources and hashes are pinned. Runtime
-dependencies and their licenses are listed in [third_party/README.md](third_party/README.md).
+Use `linux-release` or `linux-clang-debug` for the other configurations. CMake fetches
+only [approved, pinned dependencies](third_party/README.md) and builds shaders with
+`glslc`. Debug enables ASan, UBSan and mandatory Vulkan synchronization validation.
 
-Without sudo, `tools/bootstrap-local.sh` downloads and extracts Ubuntu 26.04 development
-packages into ignored `.local-tools/`. It does not modify system packages or drivers.
-Prefix the commands above with `tools/local-env.sh`, for example:
+Without sudo, `tools/bootstrap-local.sh` extracts Ubuntu development packages into
+ignored `.local-tools/`; prefix commands with `tools/local-env.sh`:
 
 ```sh
 tools/bootstrap-local.sh
 tools/local-env.sh cmake --preset linux-debug -DMJ_SMOKE_TESTS=ON
 tools/local-env.sh cmake --build --preset linux-debug --parallel 4
 tools/local-env.sh ctest --preset linux-debug
-tools/local-env.sh ./build/linux-debug/game/microjump --smoke-test
+tools/local-env.sh ./build/linux-debug/game/microjump
 ```
 
-The wrapper is required for locally extracted validation layers and shared tool libraries.
-It also applies `tests/lsan.supp`, which suppresses only Fontconfig allocations retained
-by the system Wayland GTK decoration plugin. CTest applies the same suppression to
-the GPU startup test. ASan, UBSan and other leak checks remain active. For a system
-toolchain manual debug run, use `LSAN_OPTIONS=suppressions=$PWD/tests/lsan.supp` if
-this external cache report occurs. Clang tests locally suppress doctest 2.4.12's
-retired `<ciso646>` header warning only around that upstream include.
+The wrapper provides local tool/library paths and a documented Fontconfig-only LSan
+suppression for the system Wayland GTK decoration plugin. All other leak checks stay
+active. Sanitized builds link SDL's X11 backend directly so Xlib cache roots remain
+visible to LSan. See [M0 evidence](docs/m0-evidence.md) and [M1 evidence](docs/m1-evidence.md).
 
-## Windows setup
+## Controls and capture
 
-Install Visual Studio's C++ x64 desktop tools, CMake 3.28+, Ninja, and the
-[Vulkan SDK](https://vulkan.lunarg.com/sdk/home). In an x64 Native Tools command prompt:
+| Input | Action |
+| --- | --- |
+| W / A / S / D | Fly forward / left / back / right |
+| Q / E | Fly down / up |
+| Hold right mouse | Look around; focus loss releases mouse capture |
+| Shift | Move faster |
+| Home | Reset the camera |
+| F1 | Toggle the diagnostics overlay |
+| Escape / close | Exit |
+
+The overlay shows FPS/frame time, actual pixel resolution, effective VSync and cap
+state. M1 uses FIFO VSync and no application FPS cap; display-setting controls and
+persistence are M5. Camera movement uses 120 Hz fixed ticks with interpolated position;
+mouse look applies immediately. `CameraTuning` contains speed/sensitivity values.
+
+```sh
+./build/linux-debug/game/microjump --frames 60
+./build/linux-debug/game/microjump --capture-frame 12 --capture-out captures/scene.png
+# Correctness fixtures: camera movement and two live resizes before capture.
+./build/linux-debug/game/microjump --camera-test --capture-frame 36 --capture-out captures/camera.png
+./build/linux-debug/game/microjump --resize-test --capture-frame 16 --capture-out captures/resized.png
+```
+
+Frame numbers are one-based rendered frames. `--capture-frame` saves that frame and
+exits; use it with `--capture-out`. PNGs come from the GPU color target after scene
+and overlay drawing, before the same image is blitted to the presentation surface.
+They use actual pixels, so a high-DPI display can produce a larger PNG than the
+logical window size. `--smoke-test` renders 12 frames and exits. Unknown/invalid
+arguments fail explicitly. Asset/shader paths resolve relative to the executable.
+
+## Windows
+
+Install Visual Studio's C++ x64 tools, CMake 3.28+, Ninja and the
+[Vulkan SDK](https://vulkan.lunarg.com/sdk/home). In an x64 Native Tools prompt:
 
 ```bat
 cmake --preset windows-debug
 cmake --build --preset windows-debug --parallel 4
 ctest --preset windows-debug
-build\windows-debug\game\microjump.exe --smoke-test
+build\windows-debug\game\microjump.exe --capture-frame 12 --capture-out frame.png
 ```
 
-Use `windows-release` for a release build. CI builds both MSVC configurations and
-uploads `microjump-Windows-Release`, containing a runtime zip with `microjump.exe`,
-`SDL3.dll`, the redistributable MSVC runtime DLLs and license notices. Extract the zip,
-then run `microjump.exe`; a Vulkan 1.3
-GPU driver is required. Release builds do not require the SDK/validation layers.
-Shaders and assets will join the package when implemented in later milestones.
+CI builds MSVC Debug/Release and uploads a Windows Release zip: executable, compiled
+`shaders/`, SDL3, redistributable MSVC runtime DLLs and license notices. Extract the
+entire zip and run `microjump.exe`. A Vulkan 1.3 GPU driver is required; Release does
+not need an installed SDK. Hosted Windows CI has no suitable GPU, so hardware rendering
+and controls on the owner's PC remain a separate acceptance check linked from the PR.
 
-## Checks and packaging
+## Verification and packaging
+
+CTest covers projection/mesh/CLI correctness, fixed-step and camera invariance, PNG
+validation and, with `MJ_SMOKE_TESTS=ON`, GPU render/camera/resize captures and decoded
+pixel checks. CI uploads those captures and runtime zips. No benchmarks or FPS targets.
 
 ```sh
-# Add the real display/GPU startup test to CTest (also runs under CI's software Vulkan).
-cmake --preset linux-debug -DMJ_SMOKE_TESTS=ON
-ctest --preset linux-debug
-# Manual equivalent: opens a window, processes a short event sequence, exits.
-./build/linux-debug/game/microjump --smoke-test
-# Check project formatting and analyze the implementation.
 find engine game tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 | xargs -0 clang-format --dry-run --Werror
 find engine/src game -name '*.cpp' -print0 | xargs -0 -n 1 clang-tidy -p build/linux-clang-debug
-# Package an already-built release.
 cpack --config build/linux-release/CPackConfig.cmake -B build/packages
 ```
 
-Normal startup stays open until Escape or the window close button. `--help` works
-without opening a display. Unknown arguments fail explicitly. Frame rendering,
-`--frames`, frame capture, the FPS overlay and resize of GPU render targets belong to M1.
-
-CI verifies GCC, Clang and MSVC builds, unit tests, formatting, static analysis, Linux
-Vulkan startup and release packaging. Windows GPU startup requires the owner's PC;
-unit tests on a hosted Windows runner do not prove that startup works on hardware.
-See [docs/m0-evidence.md](docs/m0-evidence.md) for observations and remaining gates.
+For an additional real SDL input check, install `xdotool` and run
+`tools/input-smoke.sh` inside Xvfb; the exact rootless commands and observations are
+in [docs/m1-evidence.md](docs/m1-evidence.md).

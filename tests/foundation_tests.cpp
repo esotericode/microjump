@@ -1,16 +1,5 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-// Use real standard declarations instead of doctest's legacy std forward declarations.
-#define DOCTEST_CONFIG_USE_STD_HEADERS
-#ifdef __clang__
-// doctest 2.4.12 includes the retired <ciso646> header when detecting libc++.
-// Scope this compatibility suppression to the upstream header, not project code.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-W#warnings"
-#endif
-#include <doctest/doctest.h>
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
+#include "test_framework.hpp"
 
 #include <mj/core/launch_options.hpp>
 #include <mj/render/device_requirements.hpp>
@@ -25,10 +14,10 @@ TEST_CASE("command line rejects unsupported features instead of silently ignorin
     const std::array smoke{std::string_view{"--smoke-test"}};
     REQUIRE(mj::parse_launch_options(smoke).has_value());
     CHECK(mj::parse_launch_options(smoke)->smoke_test);
-    const std::array unknown{std::string_view{"--capture-frame"}};
+    const std::array unknown{std::string_view{"--not-an-option"}};
     const auto result = mj::parse_launch_options(unknown);
     REQUIRE_FALSE(result.has_value());
-    CHECK(result.error().message.find("--capture-frame") != std::string::npos);
+    CHECK(result.error().message.find("--not-an-option") != std::string::npos);
 }
 
 TEST_CASE("device selection enforces every mandatory Vulkan capability") {

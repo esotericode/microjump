@@ -1,6 +1,18 @@
 add_executable(microjump main.cpp)
 target_link_libraries(microjump PRIVATE mj::engine)
 mj_project_options(microjump)
+set(mj_shader_outputs)
+foreach(shader scene.vert scene.frag)
+    set(output "${CMAKE_CURRENT_BINARY_DIR}/shaders/${shader}.spv")
+    add_custom_command(OUTPUT "${output}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/shaders"
+        COMMAND "${MJ_GLSLC}" --target-env=vulkan1.3 "${PROJECT_SOURCE_DIR}/shaders/${shader}" -o "${output}"
+        DEPENDS "${PROJECT_SOURCE_DIR}/shaders/${shader}" VERBATIM)
+    list(APPEND mj_shader_outputs "${output}")
+endforeach()
+add_custom_target(microjump_shaders ALL DEPENDS ${mj_shader_outputs})
+add_dependencies(microjump microjump_shaders)
+install(FILES ${mj_shader_outputs} DESTINATION shaders COMPONENT Runtime)
 if(WIN32)
     add_custom_command(TARGET microjump POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

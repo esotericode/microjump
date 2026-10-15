@@ -2,7 +2,7 @@
 ## A custom C++ game engine, proven through a 3D platformer
 
 **Document version:** 0.3
-**Status:** M0 foundation in progress — see Section 15 and `docs/m0-evidence.md`
+**Status:** M1 first scene implemented locally; acceptance gates in Section 15 and `docs/m1-evidence.md`
 **Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
 
 > **Our north star:** Build a high-quality 3D game engine of our own in modern C++, and demonstrate it with a polished, expressive 3D platformer. The engine is the reason for the project; the game is how we prove it works.
@@ -30,23 +30,25 @@ We value careful engineering over shortcuts. A small, excellent engine and one c
 
 ### Commands
 
-> Working M0 commands (system tools). For tools extracted without sudo, prefix each command with `tools/local-env.sh`; see `README.md`.
+> Working development commands (system tools). For tools extracted without sudo, prefix each command with `tools/local-env.sh`; see `README.md`.
 
 ```sh
 cmake --preset linux-debug            # configure (also: linux-release)
 cmake --build --preset linux-debug    # build
 ctest --preset linux-debug            # run all automated tests
-./build/linux-debug/game/microjump    # M0 window/device; scene rendering starts in M1
-./build/linux-debug/game/microjump --smoke-test # initialize, process events, exit
+./build/linux-debug/game/microjump    # first 3D scene + debug camera + FPS overlay
+./build/linux-debug/game/microjump --capture-frame 12 --capture-out captures/scene.png
+# Add -DMJ_SMOKE_TESTS=ON at configure time to include GPU/capture tests in CTest.
 ```
 
-Planned runtime flags (implement in the milestone noted, then document them here):
+Runtime flags (M0/M1 available; M2 record/replay remains planned):
 
 | Flag | Purpose | Milestone |
 | --- | --- | --- |
-| `--smoke-test` | Open an SDL window, initialize Vulkan, process events, shut down; validation errors fail. | M0 |
+| `--smoke-test` | Render 12 frames and exit; validation errors fail. | M0/M1 |
 | `--capture-frame N --capture-out PATH.png` | Render N frames, save the frame from the GPU as PNG, exit. | M1 |
-| `--frames N` | Run N frames then exit cleanly (smoke tests). | M1 |
+| `--frames N` | Render N frames then exit cleanly. | M1 |
+| `--camera-test` / `--resize-test` | Scripted render correctness fixtures (not input replay). | M1 |
 | `--record PATH` / `--replay PATH` | Record / replay player input deterministically. | M2 |
 
 ### Local development environment
@@ -65,7 +67,7 @@ Agents run **locally on the project owner's Linux machine** and may use its GPU,
 - Install missing development tools as needed and list every one in the setup command below.
 - **Setup command (Ubuntu 26.04):**
   ```sh
-  sudo apt-get install -y g++ cmake ninja-build clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers vulkan-tools mesa-utils pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth
+  sudo apt-get install -y g++ cmake ninja-build clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers vulkan-tools mesa-utils pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth xdotool
   ```
   Without sudo: `tools/bootstrap-local.sh`, then prefix development commands with `tools/local-env.sh`.
 - **Screenshots:** GNOME/Wayland blocks generic desktop capture. Use the engine's own `--capture-frame` mode; do not rely on desktop screenshot tools.
@@ -382,17 +384,17 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | Field | Current value |
 | --- | --- |
 | Overall status | **IMPLEMENTING** |
-| Current milestone | **M0 — Foundation** (in progress) |
-| Latest working build | 2026-10-15: Linux GCC 15 Debug/Release and Clang 21 Debug; Intel MTL startup; see `docs/m0-evidence.md` |
+| Current milestone | **M1 — First pixels** (in progress; owner authorized proceeding on 2026-10-15) |
+| Latest working build | 2026-10-15: Linux M1 GCC Debug/Release + Clang Debug, native Intel and software Vulkan captures; see `docs/m1-evidence.md`. Windows results/downloads are recorded in the PR. |
 | Open owner decisions | None |
-| Next useful action | Verify the PR CI, obtain owner Windows startup evidence, then begin M1 first pixels. |
+| Next useful action | Verify M1 CI and merge; owner tests Windows scene/capture and camera controls; then M2 movement slice. |
 
 ### Milestone status tracker
 
 | ID | State | Evidence / notes |
 | --- | --- | --- |
-| M0 | In progress | 2026-10-15: foundation implemented and locally tested; `docs/m0-evidence.md`. Windows CI and owner runtime verification pending. |
-| M1 | Not started | — |
+| M0 | In progress | 2026-10-15: merged PR #3; all five Linux/MSVC CI jobs passed and Windows zip inspected. Owner Windows GPU check remains open. |
+| M1 | In progress | 2026-10-15: 3D scene, debug camera, GPU capture and FPS overlay implemented; local evidence/captures in `docs/m1-evidence.md`. Owner Windows run/controls acceptance remains open. |
 | M2 | Not started | — |
 | M3 | Not started | — |
 | M4 | Not started | — |
@@ -425,6 +427,10 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-019 | Linux startup tests use a Fontconfig-only LSan suppression; ASan/UBSan and other leak checks stay enabled. | System Wayland libdecor/GTK retains font caches after SDL shutdown. Evidence and scope in `docs/m0-evidence.md`; no new linked dependency. |
 | 2026-10-15 / D-020 | Agents have standing authority to push project branches to `esotericode/microjump` and merge PRs into `main` at their discretion, without repeated owner confirmation. | Owner explicitly requested this on 2026-10-15 and authorized publishing/merging the M0 implementation. Replaces owner-only merging in D-013; preserves focused PRs, evidence, required checks, serial agent work, and other approval boundaries. |
 
+| 2026-10-15 / D-021 | Proceed with M1 while owner Windows hardware acceptance for M0 remains open. | Owner explicitly requested M1 implementation, local testing, push and merge when checks pass. No Windows acceptance gate is silently waived. |
+| 2026-10-15 / D-022 | M1 renders to per-frame RGBA8 sRGB/D32 targets, then blits to an sRGB FIFO swapchain; timeline completion plus per-image presentation semaphores. | Project-owned Vulkan 1.3 draw/capture path; direct memory allocation is sufficient for these few resources, so VMA is deferred. Resize waits idle and rebuilds targets. |
+| 2026-10-15 / D-023 | Use approved Dear ImGui 1.91.9b for diagnostics and pinned stb for PNG output/verification; fixed 120 Hz camera translation with interpolated position and immediate mouse look. | Small M1 slice; no gameplay UI, imported renderer/math, runtime shader compilation or input replay claim. |
+
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
 ### Progress log (append entries)
@@ -436,6 +442,8 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 - **2026-10-15 — M0 foundation started.** Added CMake/Ninja presets, SDL3 window, Vulkan 1.3 device/presentation checks, validation-aware teardown, doctest/CLI/startup tests, GCC/Clang/MSVC CI, packaging and rootless local tool setup. GCC Debug/Release and Clang Debug builds and all four local tests pass on Intel MTL; formatting and static analysis pass. Evidence: `docs/m0-evidence.md`. Windows CI and owner startup evidence remain open; no rendered scene or gameplay is claimed.
 
 - **2026-10-15 — Charter v0.3 / agent GitHub authority.** Owner authorized publishing and merging M0, and requested that this and future agents may push and merge as they see fit. Updated Section 2 and recorded D-020; technical scope and verification requirements remain in force.
+
+- **2026-10-15 — M1 first scene.** Added original primitive geometry, reverse-Z renderer, debug flight camera, fixed tick/interpolation, toggleable FPS overlay, GPU PNG capture and resize handling. Local GCC Debug/Release and Clang Debug suites pass; native Intel and Xvfb/software-Vulkan captures inspected. Real X11 keyboard/mouse/F1 events exercised. Evidence: `docs/m1-evidence.md`; PR records CI and runtime downloads. Dynamic shadows, character movement and playable JSON levels remain later work; Windows hardware acceptance is still open.
 
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
 
