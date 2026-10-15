@@ -2,7 +2,7 @@
 
 2026-10-15, branch `codex/m1-first-scene`, based on merged M0 `b474de8` / PR #3.
 The owner explicitly authorized M1, local tests, push and merge after checks pass.
-Windows CI results and downloadable builds are recorded in the implementation PR.
+Windows CI results and downloadable builds are recorded in [PR #4](https://github.com/esotericode/microjump/pull/4).
 M1 stays **in progress** until the owner verifies the Windows build on their GPU.
 
 ## What works
