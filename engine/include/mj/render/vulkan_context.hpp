@@ -18,6 +18,15 @@ struct ValidationLog {
     std::atomic<std::uint32_t> error_count = 0;
 };
 
+struct VulkanDevice {
+    VkInstance instance;
+    VkPhysicalDevice physical;
+    VkDevice device;
+    VkSurfaceKHR surface;
+    VkQueue queue;
+    std::uint32_t queue_family;
+};
+
 class VulkanContext {
   public:
     [[nodiscard]] static std::expected<std::unique_ptr<VulkanContext>, Error>
@@ -25,6 +34,10 @@ class VulkanContext {
     ~VulkanContext();
     VulkanContext(const VulkanContext &) = delete;
     VulkanContext &operator=(const VulkanContext &) = delete;
+    [[nodiscard]] VulkanDevice device() const {
+        return {m_instance, m_physical_device, m_device,
+                m_surface,  m_graphics_queue,  m_queue_family};
+    }
 
   private:
     VulkanContext() = default;

@@ -40,6 +40,13 @@ jobs:
       - name: Package release runtime
         if: matrix.preset == 'linux-release'
         run: cpack --config build/linux-release/CPackConfig.cmake -B build/packages
+      - name: Save render captures
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-captures-${{ matrix.preset }}
+          path: build/${{ matrix.preset }}/tests/captures/*.png
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         if: matrix.preset == 'linux-release'
         with:

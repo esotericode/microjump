@@ -1,10 +1,17 @@
-add_executable(microjump_tests foundation_tests.cpp)
+add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE mj::engine doctest::doctest)
 mj_project_options(microjump_tests)
+add_executable(microjump_capture_check capture_check.cpp)
+target_link_libraries(microjump_capture_check PRIVATE mj::engine)
+target_include_directories(microjump_capture_check SYSTEM PRIVATE ${stb_SOURCE_DIR})
+mj_project_options(microjump_capture_check)
 if(WIN32)
     add_custom_command(TARGET microjump_tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:SDL3::SDL3-shared> $<TARGET_FILE_DIR:microjump_tests>)
+    add_custom_command(TARGET microjump_capture_check POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:SDL3::SDL3-shared> $<TARGET_FILE_DIR:microjump_capture_check>)
 endif()
 add_test(NAME foundation COMMAND microjump_tests)
 add_test(NAME cli_help COMMAND microjump --help)
@@ -15,8 +22,15 @@ set_tests_properties(foundation cli_help cli_rejects_unknown_argument PROPERTIES
 if(MJ_SMOKE_TESTS)
     add_test(NAME vulkan_startup COMMAND microjump --smoke-test)
     set_tests_properties(vulkan_startup PROPERTIES TIMEOUT 30 LABELS "display;vulkan")
+    set(captures "${CMAKE_CURRENT_BINARY_DIR}/captures")
+    add_test(NAME render_capture COMMAND microjump --capture-frame 12 --capture-out "${captures}/scene.png")
+    add_test(NAME render_camera COMMAND microjump --camera-test --capture-frame 36 --capture-out "${captures}/camera.png")
+    add_test(NAME render_resize COMMAND microjump --resize-test --capture-frame 16 --capture-out "${captures}/resized.png")
+    add_test(NAME capture_pixels COMMAND microjump_capture_check "${captures}/scene.png" "${captures}/camera.png" "${captures}/resized.png")
+    set_tests_properties(render_capture render_camera render_resize capture_pixels PROPERTIES TIMEOUT 45 LABELS "display;vulkan")
+    set_tests_properties(capture_pixels PROPERTIES DEPENDS "render_capture;render_camera;render_resize")
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set_tests_properties(vulkan_startup PROPERTIES ENVIRONMENT
+        set_tests_properties(vulkan_startup render_capture render_camera render_resize capture_pixels PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()
 endif()

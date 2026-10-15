@@ -23,10 +23,13 @@ if(MJ_BUILD_TESTS)
 endif()
 
 # Dependencies install through our explicit runtime/notice rules only.
-install(FILES LICENSE README.md DESTINATION . COMPONENT Runtime)
+install(FILES LICENSE DESTINATION . COMPONENT Runtime)
+install(FILES game/README-runtime.md DESTINATION . RENAME README.md COMPONENT Runtime)
 install(FILES third_party/README.md DESTINATION licenses COMPONENT Runtime)
 install(FILES "${sdl3_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME SDL3.txt COMPONENT Runtime)
 install(FILES "${volk_SOURCE_DIR}/LICENSE.md" DESTINATION licenses RENAME volk.txt COMPONENT Runtime)
+install(FILES "${imgui_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME imgui.txt COMPONENT Runtime)
+install(FILES "${stb_SOURCE_DIR}/LICENSE" DESTINATION licenses RENAME stb.txt COMPONENT Runtime)
 if(MJ_BUILD_TESTS)
     install(FILES "${doctest_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses
             RENAME doctest.txt COMPONENT Runtime)

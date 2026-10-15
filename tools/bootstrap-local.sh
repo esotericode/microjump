@@ -12,7 +12,7 @@ apt-get download cmake cmake-data ninja-build clang-21 clang-format-21 clang-tid
     libxss-dev libxtst-dev libdecor-0-dev x11proto-dev xorg-sgml-doctools libxau-dev \
     libxdmcp-dev libxcb1-dev libxkbcommon-x11-dev libffi-dev libegl-dev libgl-dev \
     libglx-dev libgles-dev libopengl-dev libjsoncpp26 librhash1 libxss1 \
-    xvfb xauth libxfont2 x11-xkb-utils xserver-common
+    xvfb xauth libxfont2 x11-xkb-utils xserver-common xdotool libxdo3
 for package in ./*.deb; do
     dpkg-deb -x "$package" ../root
 done

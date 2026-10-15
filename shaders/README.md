@@ -1,4 +1,7 @@
 # Shaders
 
-M1 adds GLSL sources, compiled to SPIR-V at build time with `glslc` and packaged next
-to the executable. M0 creates a Vulkan device but does not compile or draw shaders.
+`scene.vert` / `scene.frag` implement the first original forward draw: world-space
+vertices/normals, linear directional shading and sRGB output. CMake compiles them
+with `glslc --target-env=vulkan1.3` into `shaders/*.spv` beside the executable.
+The runtime finds them relative to the executable, including in the installed zip;
+it never invokes a shader compiler. Shadows and richer materials belong to M3.

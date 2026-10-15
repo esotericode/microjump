@@ -100,6 +100,7 @@ std::expected<void, Error> VulkanContext::initialize(const Window &window) {
     }
     layers.push_back(k_validation_layer);
     extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+    extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
 #endif
 
     VkApplicationInfo application{};
@@ -110,6 +111,15 @@ std::expected<void, Error> VulkanContext::initialize(const Window &window) {
     application.engineVersion = application.applicationVersion;
     application.apiVersion = VK_API_VERSION_1_3;
     auto debug = debug_info(m_validation);
+#ifdef MJ_VULKAN_VALIDATION
+    const VkValidationFeatureEnableEXT synchronization =
+        VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+    VkValidationFeaturesEXT validation_features{};
+    validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    validation_features.pNext = &debug;
+    validation_features.enabledValidationFeatureCount = 1;
+    validation_features.pEnabledValidationFeatures = &synchronization;
+#endif
     VkInstanceCreateInfo instance_info{};
     instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     instance_info.pApplicationInfo = &application;
@@ -119,7 +129,9 @@ std::expected<void, Error> VulkanContext::initialize(const Window &window) {
     instance_info.ppEnabledLayerNames = layers.data();
     if (!layers.empty()) {
         // Also catch validation messages during instance creation/destruction.
-        instance_info.pNext = &debug;
+#ifdef MJ_VULKAN_VALIDATION
+        instance_info.pNext = &validation_features;
+#endif
     }
     if (const auto result = vkCreateInstance(&instance_info, nullptr, &m_instance);
         result != VK_SUCCESS) {

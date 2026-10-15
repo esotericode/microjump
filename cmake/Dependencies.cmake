@@ -21,6 +21,24 @@ FetchContent_Declare(volk
     URL https://codeload.github.com/zeux/volk/tar.gz/d979819fd03de3a7606d6e23d6ff4968942599da
     URL_HASH SHA256=ff6facfca90161325a1f817c08c7edb6f892bd3bf4745449b735d7e13585ec4c)
 FetchContent_MakeAvailable(SDL3 volk)
+FetchContent_Declare(imgui
+    URL https://codeload.github.com/ocornut/imgui/tar.gz/f5befd2d29e66809cd1110a152e375a7f1981f06
+    URL_HASH SHA256=85f4ce357df05bcc331b587f01976f47fb55f19fadf477a7907289686bc3f4c8)
+FetchContent_Declare(stb
+    URL https://codeload.github.com/nothings/stb/tar.gz/2c980bb59875b0d32144a71867fbdebb2f77cd20
+    URL_HASH SHA256=9a955b1b49a4410088a2e0ee2a9c057c3c907d0c1d75454144cb980aca0ba515)
+FetchContent_MakeAvailable(imgui stb)
+add_library(mj_imgui STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp)
+target_include_directories(mj_imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends)
+target_compile_definitions(mj_imgui PRIVATE IMGUI_IMPL_VULKAN_USE_VOLK)
+target_link_libraries(mj_imgui PUBLIC SDL3::SDL3 volk::volk)
+add_library(mj_stb_write STATIC ${PROJECT_SOURCE_DIR}/third_party/stb_write.cpp)
+target_include_directories(mj_stb_write SYSTEM PUBLIC ${stb_SOURCE_DIR})
+find_program(MJ_GLSLC NAMES glslc HINTS "$ENV{VULKAN_SDK}/Bin" REQUIRED)
 if(MJ_BUILD_TESTS)
     set(DOCTEST_WITH_TESTS OFF CACHE BOOL "" FORCE)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)
