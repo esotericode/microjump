@@ -17,11 +17,14 @@ $version = '1.4.341.0'
 $sdk = Join-Path $env:RUNNER_TEMP "VulkanSDK\$version"
 $installer = Join-Path $env:RUNNER_TEMP 'vulkan-sdk.exe'
 $url = "https://sdk.lunarg.com/sdk/download/$version/windows/vulkansdk-windows-X64-$version.exe"
-Invoke-WebRequest -Uri $url -OutFile $installer
+Write-Host "Downloading Vulkan SDK $version"
+Invoke-WebRequest -Uri $url -OutFile $installer -TimeoutSec 180
+Write-Host "Installing Vulkan SDK $version"
 $process = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList @(
     '--root', $sdk, '--accept-licenses', '--default-answer', '--confirm-command', 'install'
 )
 if ($process.ExitCode -ne 0) { throw "Vulkan SDK install failed: $($process.ExitCode)" }
 if (-not (Test-Path "$sdk\Include\vulkan\vulkan.h")) { throw 'Vulkan SDK headers not found' }
+Write-Host "Vulkan SDK ready at $sdk"
 "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 "$sdk\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8

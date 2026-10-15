@@ -57,6 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up MSVC and Vulkan SDK
+        timeout-minutes: 10
         shell: pwsh
         run: ./tools/setup-windows-ci.ps1
       - name: Configure
