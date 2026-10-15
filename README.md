@@ -58,7 +58,8 @@ build\windows-debug\game\microjump.exe --smoke-test
 
 Use `windows-release` for a release build. CI builds both MSVC configurations and
 uploads `microjump-Windows-Release`, containing a runtime zip with `microjump.exe`,
-`SDL3.dll` and license notices. Extract the zip, then run `microjump.exe`; a Vulkan 1.3
+`SDL3.dll`, the redistributable MSVC runtime DLLs and license notices. Extract the zip,
+then run `microjump.exe`; a Vulkan 1.3
 GPU driver is required. Release builds do not require the SDK/validation layers.
 Shaders and assets will join the package when implemented in later milestones.
 

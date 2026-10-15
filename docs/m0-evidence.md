@@ -16,7 +16,8 @@ No renderer, gameplay, frame capture, FPS readout or performance results are cla
 - Debug validation is mandatory, including instance creation and resource destruction.
   Validation errors make the executable fail. Partial initialization uses RAII cleanup.
 - CI builds/tests on Linux and Windows, checks formatting/tidy, and packages Release
-  zips with SDL shared library and third-party notices. Windows runtime is an owner check.
+  zips with SDL shared library and third-party notices. Windows Release also includes
+  the toolchain's redistributable runtime DLLs. Windows GPU startup is an owner check.
 
 ## Local verification
 

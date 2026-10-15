@@ -31,6 +31,12 @@ if(MJ_BUILD_TESTS)
     install(FILES "${doctest_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses
             RENAME doctest.txt COMPONENT Runtime)
 endif()
+if(MSVC AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    # The owner's PC should not need a separate MSVC redistributable installation.
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT Runtime)
+    include(InstallRequiredSystemLibraries)
+endif()
 set(CPACK_GENERATOR ZIP)
 set(CPACK_PACKAGE_FILE_NAME "microjump-${CMAKE_SYSTEM_NAME}-${CMAKE_BUILD_TYPE}")
 set(CPACK_COMPONENTS_ALL Runtime)
