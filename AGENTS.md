@@ -420,11 +420,9 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-014 | Audio out of scope until M4 is complete. | Scope discipline. |
 | 2026-10-15 / D-015 | Clean-room rule for SM64 references (Section 3). | Reduces the risk of derived code from decompiled copyrighted source. |
 | 2026-10-15 / D-016 | Project license: **MIT** (see `LICENSE`). | Simple, widely understood, compatible with every allowed dependency. Copyleft dependencies are excluded; Windows/Linux build zips include third-party license notices. |
-
 | 2026-10-15 / D-017 | M0 selects one queue family supporting both graphics and presentation; RAII owns SDL/window and Vulkan resources. | Keeps the first device path small; separate graphics/present queue families are currently unsupported and reported clearly. No multi-backend layer. |
 | 2026-10-15 / D-018 | Fetch only SDL3, volk and doctest in M0, pinned by commit and archive hash; other approved libraries wait until needed. | Minimal dependency footprint; license notices ship with runtime packages. |
 | 2026-10-15 / D-019 | Linux startup tests use a Fontconfig-only LSan suppression; ASan/UBSan and other leak checks stay enabled. | System Wayland libdecor/GTK retains font caches after SDL shutdown. Evidence and scope in `docs/m0-evidence.md`; no new linked dependency. |
-
 | 2026-10-15 / D-020 | Agents have standing authority to push project branches to `esotericode/microjump` and merge PRs into `main` at their discretion, without repeated owner confirmation. | Owner explicitly requested this on 2026-10-15 and authorized publishing/merging the M0 implementation. Replaces owner-only merging in D-013; preserves focused PRs, evidence, required checks, serial agent work, and other approval boundaries. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
