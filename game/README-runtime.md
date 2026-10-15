@@ -1,13 +1,23 @@
-# microjump — first scene
+# microjump — movement slice
 
 Extract the complete zip, including the `shaders/` and `licenses/` folders.
 Run `microjump.exe` on Windows or `./microjump` on Linux. A Vulkan 1.3 GPU driver
 is required. Release builds do not need the Vulkan SDK or development tools.
 
-- W/A/S/D: fly forward/left/back/right. Q/E: down/up. Shift: faster.
-- Hold the right mouse button to look. Home resets the camera.
-- F1 toggles FPS/frame time, pixel resolution and VSync/cap readouts.
+- W/A/S/D or the left stick: move. Space or A: jump (hold for a higher jump).
+  Ctrl: walk. Mouse or the right stick: orbit the camera.
+- R, Home or Back: respawn at the last checkpoint pad you stood on.
+- F1: diagnostics overlay (FPS/frame time, resolution, VSync/cap, movement state).
+- F2 or Start: live movement and camera tuning window (frees the mouse cursor).
+- F3: free-flight camera (WASD/QE, Shift faster).
 - Escape or the close button exits.
+
+Record and replay your input (the replay exits when it ends and prints the final state):
+
+```text
+microjump.exe --record run.mjr
+microjump.exe --replay run.mjr
+```
 
 To capture the 12th rendered GPU frame and exit:
 
@@ -20,6 +30,6 @@ On Linux use `./microjump` instead. `--frames 60` renders 60 frames and exits;
 actual pixel resolution, including display scaling. Keep `shaders/` beside
 the executable; running from another working directory is supported.
 
-This is a small renderer/camera scene. Character movement, collisions, dynamic
-shadows and the full playground will follow. VSync is currently FIFO On, with
-no application FPS cap; display-setting controls come in a later milestone.
+This is a compact movement test yard. Dynamic shadows, wall jumps, the full
+playground and display-setting controls will follow. VSync is currently FIFO On,
+with no application FPS cap.

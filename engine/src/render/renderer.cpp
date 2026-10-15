@@ -30,6 +30,20 @@ constexpr VkFormat k_color_format = VK_FORMAT_R8G8B8A8_SRGB;
 constexpr VkFormat k_depth_format = VK_FORMAT_D32_SFLOAT;
 constexpr std::size_t k_frame_count = 2;
 
+// std140 mirror of shaders' Frame block.
+struct FrameUniforms {
+    Mat4 view_projection;
+    std::array<float, 4> sun_direction;
+    std::array<float, 4> blob_shadow; // xyz caster feet, w radius.
+    std::array<float, 4> camera_position;
+};
+// Mirror of shaders' Draw push constants: rigid model rows plus material parameters.
+struct DrawConstants {
+    std::array<std::array<float, 4>, 3> model_rows;
+    std::array<float, 4> material; // x grid strength, y receives blob shadow.
+};
+static_assert(sizeof(DrawConstants) == 64);
+
 struct ImageTransition {
     VkImageLayout old_layout;
     VkImageLayout new_layout;
@@ -93,12 +107,20 @@ struct Renderer::Impl {
         Image color;
         Image depth;
         Buffer readback;
+        Buffer uniforms;
+        VkDescriptorSet descriptors = VK_NULL_HANDLE;
+    };
+    struct MeshRange {
+        std::uint32_t first = 0;
+        std::uint32_t count = 0;
     };
     VulkanDevice vk{};
     const Window *window = nullptr;
     std::array<Frame, k_frame_count> frames;
     Buffer vertices;
-    std::uint32_t vertex_count = 0;
+    std::vector<MeshRange> meshes;
+    VkDescriptorSetLayout descriptor_layout = VK_NULL_HANDLE;
+    VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
     VkCommandPool command_pool = VK_NULL_HANDLE;
     VkSemaphore timeline = VK_NULL_HANDLE;
     std::uint64_t submission = 0;
@@ -118,15 +140,15 @@ struct Renderer::Impl {
     double smoothed_seconds = 1.0 / 60;
 
     ~Impl();
-    std::expected<void, Error> initialize(const SceneMesh &mesh);
+    std::expected<void, Error> initialize(std::span<const SceneMesh> scene_meshes);
+    std::expected<void, Error> create_descriptors();
     std::expected<void, Error> create_pipeline();
     std::expected<void, Error> create_swapchain(PixelSize size);
     std::expected<void, Error> initialize_overlay();
     std::expected<void, Error> wait(std::uint64_t value) const;
     void destroy_swapchain();
-    void overlay(double elapsed);
-    std::expected<bool, Error> draw(const CameraPose &camera, double elapsed, bool show_overlay,
-                                    const std::filesystem::path *capture);
+    void overlay(const FrameView &view);
+    std::expected<bool, Error> draw(const FrameView &view);
 };
 
 std::expected<void, Error> Renderer::Impl::wait(std::uint64_t value) const {
@@ -141,10 +163,17 @@ std::expected<void, Error> Renderer::Impl::wait(std::uint64_t value) const {
     return {};
 }
 
-std::expected<void, Error> Renderer::Impl::initialize(const SceneMesh &mesh) {
-    if (mesh.vertices.empty() || mesh.vertices.size() > std::numeric_limits<std::uint32_t>::max()) {
-        return std::unexpected(Error{"Scene mesh is empty or too large"});
+std::expected<void, Error> Renderer::Impl::initialize(std::span<const SceneMesh> scene_meshes) {
+    std::size_t total = 0;
+    for (const auto &mesh : scene_meshes) {
+        if (mesh.vertices.empty())
+            return std::unexpected(Error{"Scene mesh is empty"});
+        meshes.push_back(
+            {static_cast<std::uint32_t>(total), static_cast<std::uint32_t>(mesh.vertices.size())});
+        total += mesh.vertices.size();
     }
+    if (total == 0 || total > std::numeric_limits<std::uint32_t>::max())
+        return std::unexpected(Error{"Scene meshes are empty or too large"});
     VkFormatProperties color_properties{}, depth_properties{};
     vkGetPhysicalDeviceFormatProperties(vk.physical, k_color_format, &color_properties);
     vkGetPhysicalDeviceFormatProperties(vk.physical, k_depth_format, &depth_properties);
@@ -177,16 +206,21 @@ std::expected<void, Error> Renderer::Impl::initialize(const SceneMesh &mesh) {
         allocation.commandBufferCount = 1;
         MJ_VK_TRY(vkAllocateCommandBuffers(vk.device, &allocation, &frame.command));
     }
-    const auto bytes = mesh.vertices.size() * sizeof(Vertex);
-    auto buffer = Buffer::create(vk.device, vk.physical,
-                                 {.size = bytes, .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT});
+    auto buffer = Buffer::create(
+        vk.device, vk.physical,
+        {.size = total * sizeof(Vertex), .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT});
     if (!buffer)
         return std::unexpected(buffer.error());
     vertices = std::move(*buffer);
-    std::memcpy(vertices.mapped, mesh.vertices.data(), bytes);
+    for (std::size_t i = 0; i < scene_meshes.size(); ++i) {
+        std::memcpy(static_cast<Vertex *>(vertices.mapped) + meshes[i].first,
+                    scene_meshes[i].vertices.data(),
+                    scene_meshes[i].vertices.size() * sizeof(Vertex));
+    }
     if (auto result = vertices.cache(false); !result)
         return result;
-    vertex_count = static_cast<std::uint32_t>(mesh.vertices.size());
+    if (auto result = create_descriptors(); !result)
+        return result;
     if (auto result = create_pipeline(); !result)
         return result;
     const auto size = window->pixel_size();
@@ -195,6 +229,49 @@ std::expected<void, Error> Renderer::Impl::initialize(const SceneMesh &mesh) {
     if (auto result = create_swapchain(size); !result)
         return result;
     return initialize_overlay();
+}
+
+std::expected<void, Error> Renderer::Impl::create_descriptors() {
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    VkDescriptorSetLayoutCreateInfo layout_info{};
+    layout_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layout_info.bindingCount = 1;
+    layout_info.pBindings = &binding;
+    MJ_VK_TRY(vkCreateDescriptorSetLayout(vk.device, &layout_info, nullptr, &descriptor_layout));
+    VkDescriptorPoolSize pool_size{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, k_frame_count};
+    VkDescriptorPoolCreateInfo pool_info{};
+    pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pool_info.maxSets = k_frame_count;
+    pool_info.poolSizeCount = 1;
+    pool_info.pPoolSizes = &pool_size;
+    MJ_VK_TRY(vkCreateDescriptorPool(vk.device, &pool_info, nullptr, &descriptor_pool));
+    for (auto &frame : frames) {
+        auto uniforms = Buffer::create(
+            vk.device, vk.physical,
+            {.size = sizeof(FrameUniforms), .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT});
+        if (!uniforms)
+            return std::unexpected(uniforms.error());
+        frame.uniforms = std::move(*uniforms);
+        VkDescriptorSetAllocateInfo allocation{};
+        allocation.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocation.descriptorPool = descriptor_pool;
+        allocation.descriptorSetCount = 1;
+        allocation.pSetLayouts = &descriptor_layout;
+        MJ_VK_TRY(vkAllocateDescriptorSets(vk.device, &allocation, &frame.descriptors));
+        VkDescriptorBufferInfo buffer_info{frame.uniforms.handle, 0, sizeof(FrameUniforms)};
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = frame.descriptors;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        write.pBufferInfo = &buffer_info;
+        vkUpdateDescriptorSets(vk.device, 1, &write, 0, nullptr);
+    }
+    return {};
 }
 
 std::expected<void, Error> Renderer::Impl::create_pipeline() {
@@ -215,9 +292,12 @@ std::expected<void, Error> Renderer::Impl::create_pipeline() {
     stages[0].module = *vertex;
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = *fragment;
-    VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4)};
+    VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                             sizeof(DrawConstants)};
     VkPipelineLayoutCreateInfo layout_info{};
     layout_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    layout_info.setLayoutCount = 1;
+    layout_info.pSetLayouts = &descriptor_layout;
     layout_info.pushConstantRangeCount = 1;
     layout_info.pPushConstantRanges = &push;
     const auto layout_result =
@@ -248,7 +328,7 @@ std::expected<void, Error> Renderer::Impl::create_pipeline() {
     VkPipelineRasterizationStateCreateInfo raster{};
     raster.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     raster.polygonMode = VK_POLYGON_MODE_FILL;
-    raster.cullMode = VK_CULL_MODE_NONE;
+    raster.cullMode = VK_CULL_MODE_BACK_BIT; // Generated primitives are closed and CCW.
     raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     raster.lineWidth = 1;
     VkPipelineMultisampleStateCreateInfo multisample{};
@@ -459,29 +539,28 @@ std::expected<void, Error> Renderer::Impl::initialize_overlay() {
     return {};
 }
 
-void Renderer::Impl::overlay(double elapsed) {
-    if (std::isfinite(elapsed) && elapsed > 0)
-        smoothed_seconds += (elapsed - smoothed_seconds) * 0.08;
+void Renderer::Impl::overlay(const FrameView &view) {
     ImGui::SetNextWindowPos(ImVec2(18, 18), ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.94F);
     constexpr auto flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration |
                            ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings;
     ImGui::Begin("Diagnostics", nullptr, flags);
-    ImGui::TextColored(ImVec4(0.3F, 0.85F, 0.77F, 1), "MICROJUMP  /  FIRST SCENE");
+    ImGui::TextColored(ImVec4(0.3F, 0.85F, 0.77F, 1), "MICROJUMP");
     ImGui::Spacing();
     ImGui::Text("%.1f FPS   |   %.2f ms", 1.0 / smoothed_seconds, smoothed_seconds * 1000);
     ImGui::Text("%u x %u   VSync: On (FIFO)", extent.width, extent.height);
     ImGui::TextUnformatted("FPS cap: Uncapped   |   Tick: 120 Hz");
-    ImGui::Separator();
-    ImGui::TextUnformatted("WASD move  |  Q/E down/up  |  Shift fast");
-    ImGui::TextUnformatted("Hold RMB to look  |  Home reset");
-    ImGui::TextUnformatted("F1 overlay  |  Esc close");
+    if (view.overlay_lines != nullptr && *view.overlay_lines) {
+        ImGui::Separator();
+        (*view.overlay_lines)();
+    }
     ImGui::End();
 }
 
-std::expected<bool, Error> Renderer::Impl::draw(const CameraPose &camera, double elapsed,
-                                                bool show_overlay,
-                                                const std::filesystem::path *capture) {
+std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
+    const auto *capture = view.capture;
+    if (std::isfinite(view.elapsed) && view.elapsed > 0)
+        smoothed_seconds += (view.elapsed - smoothed_seconds) * 0.08;
     const auto size = window->pixel_size();
     if (size.width == 0 || size.height == 0)
         return false;
@@ -524,9 +603,27 @@ std::expected<bool, Error> Renderer::Impl::draw(const CameraPose &camera, double
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
-    if (show_overlay)
-        overlay(elapsed);
+    if (view.overlay)
+        overlay(view);
+    if (view.debug_windows != nullptr && *view.debug_windows)
+        (*view.debug_windows)();
     ImGui::Render();
+
+    const auto &camera = view.camera;
+    FrameUniforms uniforms{};
+    uniforms.view_projection = perspective_reverse_z({.vertical_fov = 1.04719755F,
+                                                      .aspect = static_cast<float>(extent.width) /
+                                                                static_cast<float>(extent.height),
+                                                      .near_plane = 0.1F}) *
+                               view_matrix(camera.position, camera.yaw, camera.pitch);
+    const Vec3 sun = normalized(Vec3{-0.4F, 0.85F, 0.3F});
+    uniforms.sun_direction = {sun.x, sun.y, sun.z, 0};
+    uniforms.blob_shadow = {view.blob.caster.x, view.blob.caster.y, view.blob.caster.z,
+                            view.blob.radius};
+    uniforms.camera_position = {camera.position.x, camera.position.y, camera.position.z, 1};
+    std::memcpy(frame.uniforms.mapped, &uniforms, sizeof(uniforms));
+    if (auto flushed = frame.uniforms.cache(false); !flushed)
+        return std::unexpected(flushed.error());
 
     const auto command = frame.command;
     MJ_VK_TRY(vkResetCommandBuffer(command, 0));
@@ -578,16 +675,25 @@ std::expected<bool, Error> Renderer::Impl::draw(const CameraPose &camera, double
     vkCmdSetViewport(command, 0, 1, &viewport);
     vkCmdSetScissor(command, 0, 1, &scissor);
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vkCmdBindDescriptorSets(command, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1,
+                            &frame.descriptors, 0, nullptr);
     const VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(command, 0, 1, &vertices.handle, &offset);
-    const Mat4 view_projection = perspective_reverse_z({.vertical_fov = 1.04719755F,
-                                                        .aspect = static_cast<float>(extent.width) /
-                                                                  static_cast<float>(extent.height),
-                                                        .near_plane = 0.1F}) *
-                                 view_matrix(camera.position, camera.yaw, camera.pitch);
-    vkCmdPushConstants(command, pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(Mat4),
-                       view_projection.values.data());
-    vkCmdDraw(command, vertex_count, 1, 0, 0);
+    for (const auto &instance : view.instances) {
+        if (instance.mesh.index >= meshes.size())
+            continue;
+        DrawConstants constants{};
+        for (std::size_t row = 0; row < 3; ++row) {
+            for (std::size_t column = 0; column < 4; ++column)
+                constants.model_rows[row][column] = instance.model.at(row, column);
+        }
+        constants.material = {instance.grid, instance.receives_blob ? 1.0F : 0.0F, 0, 0};
+        vkCmdPushConstants(command, pipeline_layout,
+                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(constants), &constants);
+        const auto &range = meshes[instance.mesh.index];
+        vkCmdDraw(command, range.count, 1, range.first, 0);
+    }
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command);
     vkCmdEndRendering(command);
     image_barrier(command, frame.color.handle, VK_IMAGE_ASPECT_COLOR_BIT,
@@ -728,6 +834,12 @@ Renderer::Impl::~Impl() {
         vkDestroyPipeline(vk.device, pipeline, nullptr);
     if (pipeline_layout != VK_NULL_HANDLE)
         vkDestroyPipelineLayout(vk.device, pipeline_layout, nullptr);
+    for (auto &frame : frames)
+        frame.uniforms = {};
+    if (descriptor_pool != VK_NULL_HANDLE)
+        vkDestroyDescriptorPool(vk.device, descriptor_pool, nullptr);
+    if (descriptor_layout != VK_NULL_HANDLE)
+        vkDestroyDescriptorSetLayout(vk.device, descriptor_layout, nullptr);
     if (command_pool != VK_NULL_HANDLE)
         vkDestroyCommandPool(vk.device, command_pool, nullptr);
 }
@@ -736,12 +848,13 @@ Renderer::Renderer() = default;
 Renderer::~Renderer() = default;
 
 std::expected<std::unique_ptr<Renderer>, Error>
-Renderer::create(const Window &window, const VulkanContext &context, const SceneMesh &mesh) {
+Renderer::create(const Window &window, const VulkanContext &context,
+                 std::span<const SceneMesh> meshes) {
     auto renderer = std::unique_ptr<Renderer>(new Renderer);
     renderer->m_impl = std::make_unique<Impl>();
     renderer->m_impl->vk = context.device();
     renderer->m_impl->window = &window;
-    if (auto result = renderer->m_impl->initialize(mesh); !result)
+    if (auto result = renderer->m_impl->initialize(meshes); !result)
         return std::unexpected(result.error());
     return renderer;
 }
@@ -749,9 +862,11 @@ Renderer::create(const Window &window, const VulkanContext &context, const Scene
 void Renderer::process_event(const SDL_Event &event) {
     ImGui_ImplSDL3_ProcessEvent(&event);
 }
-std::expected<bool, Error> Renderer::draw(const CameraPose &camera, double elapsed,
-                                          bool show_overlay, const std::filesystem::path *capture) {
-    return m_impl->draw(camera, elapsed, show_overlay, capture);
+bool Renderer::ui_wants_mouse() const {
+    return m_impl->imgui_context && ImGui::GetIO().WantCaptureMouse;
+}
+std::expected<bool, Error> Renderer::draw(const FrameView &view) {
+    return m_impl->draw(view);
 }
 
 } // namespace mj

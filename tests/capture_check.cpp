@@ -61,8 +61,8 @@ bool scene_pixels(const Pixels &image, double aspect) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 4) {
-        std::cerr << "Expected baseline, camera and resized captures\n";
+    if (argc != 5) {
+        std::cerr << "Expected baseline, camera, resized and replay captures\n";
         return 1;
     }
     const auto baseline = load(argv[1]);
@@ -71,7 +71,8 @@ int main(int argc, char *argv[]) {
     if (!scene_pixels(baseline, 16.0 / 9) || !scene_pixels(camera, 16.0 / 9) ||
         !scene_pixels(resized, 8.0 / 5) || baseline.width != camera.width ||
         baseline.height != camera.height ||
-        (baseline.width == resized.width && baseline.height == resized.height)) {
+        (baseline.width == resized.width && baseline.height == resized.height) ||
+        !scene_pixels(load(argv[4]), 16.0 / 9)) {
         std::cerr << "Invalid/empty scene capture or incorrect resize dimensions\n";
         return 1;
     }
@@ -104,5 +105,5 @@ int main(int argc, char *argv[]) {
     if (decoded.width != 2 || decoded.height != 2 ||
         decoded.rgba != std::vector<unsigned char>(pattern.begin(), pattern.end()))
         return 1;
-    std::cout << "GPU PNGs: scene pixels, camera change, resize and RGBA orientation verified\n";
+    std::cout << "GPU PNGs: scene, replay, camera change, resize and RGBA orientation verified\n";
 }

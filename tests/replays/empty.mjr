@@ -1,0 +1,3 @@
+microjump-replay 1
+tick-rate 120
+# A valid recording from a session that closed before its first simulation tick.

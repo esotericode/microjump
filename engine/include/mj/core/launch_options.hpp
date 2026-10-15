@@ -19,6 +19,8 @@ struct LaunchOptions {
     std::optional<std::uint32_t> frames;
     std::optional<std::uint32_t> capture_frame;
     std::filesystem::path capture_out;
+    std::filesystem::path record;
+    std::filesystem::path replay;
 };
 
 [[nodiscard]] std::expected<LaunchOptions, Error>

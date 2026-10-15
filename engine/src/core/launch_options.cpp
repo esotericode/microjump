@@ -32,17 +32,20 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             if (destination)
                 return std::unexpected(Error{"Duplicate frame count option"});
             destination = count;
-        } else if (argument == "--capture-out") {
+        } else if (argument == "--capture-out" || argument == "--record" ||
+                   argument == "--replay") {
+            auto &destination = argument == "--capture-out" ? options.capture_out
+                                : argument == "--record"    ? options.record
+                                                            : options.replay;
             ++index;
-            if (index == arguments.size() || arguments[index].empty() ||
-                !options.capture_out.empty()) {
-                return std::unexpected(Error{"--capture-out needs one nonempty path"});
+            if (index == arguments.size() || arguments[index].empty() || !destination.empty()) {
+                return std::unexpected(Error{std::string(argument) + " needs one nonempty path"});
             }
             std::u8string encoded;
             for (const char c : arguments[index]) {
                 encoded.push_back(static_cast<char8_t>(static_cast<unsigned char>(c)));
             }
-            options.capture_out = std::filesystem::path(encoded);
+            destination = std::filesystem::path(encoded);
         } else {
             return std::unexpected(Error{"Unknown argument: " + std::string(argument)});
         }
@@ -50,6 +53,11 @@ parse_launch_options(std::span<const std::string_view> arguments) {
     if (options.capture_frame.has_value() != !options.capture_out.empty()) {
         return std::unexpected(Error{"Use --capture-frame N and --capture-out PATH.png together"});
     }
+    if (!options.record.empty() && !options.replay.empty())
+        return std::unexpected(Error{"--record and --replay cannot be combined"});
+    if ((options.camera_test || options.resize_test) &&
+        (!options.record.empty() || !options.replay.empty()))
+        return std::unexpected(Error{"Scripted render tests do not use recorded input"});
     if (options.frames && options.capture_frame && *options.frames < *options.capture_frame) {
         return std::unexpected(Error{"--frames must not end the run before the capture frame"});
     }

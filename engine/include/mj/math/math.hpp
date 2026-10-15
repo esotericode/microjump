@@ -1,10 +1,14 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 
 namespace mj {
+
+inline constexpr float k_pi = 3.14159265358979F;
+inline constexpr float k_tau = 6.28318530717959F;
 
 struct Vec3 {
     float x = 0;
@@ -18,8 +22,22 @@ inline Vec3 operator+(Vec3 a, Vec3 b) {
 inline Vec3 operator-(Vec3 a, Vec3 b) {
     return {a.x - b.x, a.y - b.y, a.z - b.z};
 }
+inline Vec3 operator-(Vec3 v) {
+    return {-v.x, -v.y, -v.z};
+}
 inline Vec3 operator*(Vec3 a, float s) {
     return {a.x * s, a.y * s, a.z * s};
+}
+inline Vec3 operator*(float s, Vec3 a) {
+    return a * s;
+}
+inline Vec3 &operator+=(Vec3 &a, Vec3 b) {
+    a = a + b;
+    return a;
+}
+inline Vec3 &operator-=(Vec3 &a, Vec3 b) {
+    a = a - b;
+    return a;
 }
 inline float dot(Vec3 a, Vec3 b) {
     return a.x * b.x + a.y * b.y + a.z * b.z;
@@ -27,12 +45,61 @@ inline float dot(Vec3 a, Vec3 b) {
 inline Vec3 cross(Vec3 a, Vec3 b) {
     return {a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x};
 }
+inline float length_squared(Vec3 v) {
+    return dot(v, v);
+}
+inline float length(Vec3 v) {
+    return std::sqrt(dot(v, v));
+}
 inline Vec3 normalized(Vec3 v) {
     const float length = std::sqrt(dot(v, v));
     return length > 0 ? v * (1.0F / length) : Vec3{};
 }
 inline Vec3 lerp(Vec3 a, Vec3 b, float t) {
     return a + (b - a) * t;
+}
+inline Vec3 component_min(Vec3 a, Vec3 b) {
+    return {std::min(a.x, b.x), std::min(a.y, b.y), std::min(a.z, b.z)};
+}
+inline Vec3 component_max(Vec3 a, Vec3 b) {
+    return {std::max(a.x, b.x), std::max(a.y, b.y), std::max(a.z, b.z)};
+}
+inline Vec3 horizontal(Vec3 v) {
+    return {v.x, 0, v.z};
+}
+
+// Yaw 0 faces -Z; positive yaw turns toward +X. Matches the camera convention.
+inline Vec3 yaw_forward(float yaw) {
+    return {std::sin(yaw), 0, -std::cos(yaw)};
+}
+inline Vec3 yaw_right(float yaw) {
+    return {std::cos(yaw), 0, std::sin(yaw)};
+}
+inline float yaw_of(Vec3 direction) {
+    return std::atan2(direction.x, -direction.z);
+}
+// Shortest signed difference to - from, in [-pi, pi].
+inline float angle_difference(float from, float to) {
+    return std::remainder(to - from, k_tau);
+}
+inline float lerp_angle(float from, float to, float t) {
+    return from + angle_difference(from, to) * t;
+}
+// Moves value toward target by at most step.
+inline float approach(float value, float target, float step) {
+    return value < target ? std::min(value + step, target) : std::max(value - step, target);
+}
+
+struct Aabb {
+    Vec3 min;
+    Vec3 max;
+};
+inline Aabb merged(const Aabb &a, const Aabb &b) {
+    return {component_min(a.min, b.min), component_max(a.max, b.max)};
+}
+inline bool overlaps(const Aabb &a, const Aabb &b) {
+    return a.min.x <= b.max.x && a.max.x >= b.min.x && a.min.y <= b.max.y && a.max.y >= b.min.y &&
+           a.min.z <= b.max.z && a.max.z >= b.min.z;
 }
 
 // Column-major, column vectors. GLSL consumes this array without transposition.
@@ -68,6 +135,25 @@ inline std::array<float, 4> transform(const Mat4 &matrix, std::array<float, 4> v
     return result;
 }
 
+// Rotation about +Y that maps local forward (-Z) to yaw_forward(yaw), then translation.
+inline Mat4 yaw_translation(float yaw, Vec3 position) {
+    Mat4 result;
+    const Vec3 right = yaw_right(yaw);
+    const Vec3 back = -yaw_forward(yaw);
+    for (std::size_t row = 0; row < 3; ++row) {
+        const std::array right_values{right.x, right.y, right.z};
+        const std::array back_values{back.x, back.y, back.z};
+        result.at(row, 0) = right_values[row];
+        result.at(row, 2) = back_values[row];
+    }
+    result.at(1, 1) = 1;
+    result.at(0, 3) = position.x;
+    result.at(1, 3) = position.y;
+    result.at(2, 3) = position.z;
+    result.at(3, 3) = 1;
+    return result;
+}
+
 // RH view space (-Z forward), Vulkan Y/depth, infinite far plane, near -> 1, far -> 0.
 struct Perspective {
     float vertical_fov;
@@ -84,9 +170,12 @@ inline Mat4 perspective_reverse_z(Perspective perspective) {
     return result;
 }
 
+inline Vec3 view_forward(float yaw, float pitch) {
+    return {std::sin(yaw) * std::cos(pitch), std::sin(pitch), -std::cos(yaw) * std::cos(pitch)};
+}
+
 inline Mat4 view_matrix(Vec3 position, float yaw, float pitch) {
-    const Vec3 forward{std::sin(yaw) * std::cos(pitch), std::sin(pitch),
-                       -std::cos(yaw) * std::cos(pitch)};
+    const Vec3 forward = view_forward(yaw, pitch);
     const Vec3 right{std::cos(yaw), 0, std::sin(yaw)};
     const Vec3 up = cross(right, forward);
     Mat4 result;
