@@ -98,6 +98,8 @@ struct Slider {
     // on (the capsule first touches a step at its front edge), which must be no higher than
     // `step_top` so the rounded bottom cannot ratchet up the edge of a taller block.
     bool snap_down(Vec3 &base, float distance, std::optional<float> step_top = std::nullopt) {
+        // Disabling ledge snap still needs a contact probe across the collision skin.
+        distance = std::max(distance, settings.skin * 2);
         const auto hit = sweep(base, {0, -distance, 0});
         if (!hit)
             return false;

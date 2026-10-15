@@ -152,6 +152,18 @@ TEST_CASE("character mover walks, slides, steps and respects the slope limit") {
         CHECK(result.base.y >= 0.0049F);
         CHECK(result.base.y <= 0.0101F);
     }
+    SUBCASE("disabling ground snap still detects the floor directly beneath the feet") {
+        const auto world = world_of({k_floor});
+        auto no_snap = settings;
+        no_snap.ground_snap = 0;
+        auto capsule = body;
+        for (int tick = 0; tick < 20; ++tick) {
+            const auto result = mj::move_character(world, no_snap, {capsule, {0.075F, 0, 0}, true});
+            REQUIRE(result.grounded);
+            CHECK(result.base.y == doctest::Approx(body.base.y).epsilon(0.01));
+            capsule.base = result.base;
+        }
+    }
     SUBCASE("head-on wall stops; diagonal approach slides along it") {
         const auto world = world_of({k_floor, {{0, 2, -3}, {20, 4, 1}, {1, 1, 1}}});
         const auto head_on = walk(world, body, {0, 0, -0.075F}, 100);

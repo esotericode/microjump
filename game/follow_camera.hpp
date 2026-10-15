@@ -22,7 +22,7 @@ struct FollowCameraTuning {
     float air_half_life = 0.6F;       // Vertical lag while airborne keeps jumps steady...
     float air_window = 1.8F;          // ...until the player drifts this far from the focus.
     float probe_radius = 0.25F;
-    float min_distance = 0.9F;
+    float min_distance = 0.9F;      // Preferred boom minimum; obstruction may pull in closer.
     float recover_half_life = 0.3F; // Easing back out after an obstruction clears.
 };
 

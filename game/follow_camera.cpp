@@ -32,12 +32,13 @@ void FollowCamera::set_orientation(Orientation orientation) {
 }
 
 float FollowCamera::free_distance(Vec3 focus, const CollisionWorld &world) const {
-    const Vec3 back = -view_forward(m_yaw, m_pitch) * tuning.distance;
+    const float desired = std::max(tuning.distance, tuning.min_distance);
+    const Vec3 back = -view_forward(m_yaw, m_pitch) * desired;
     const Capsule probe{focus - Vec3{0, tuning.probe_radius, 0}, tuning.probe_radius,
                         tuning.probe_radius * 2};
     const auto hit = world.sweep({probe, back, 0.02F});
-    const float free = hit ? tuning.distance * hit->fraction : tuning.distance;
-    return std::max(free, std::min(tuning.min_distance, tuning.distance));
+    // The preferred minimum boom length must never push the probe through a nearby wall.
+    return hit ? desired * hit->fraction : desired;
 }
 
 void FollowCamera::tick(const PlayerState &player, const CollisionWorld &world, float dt) {

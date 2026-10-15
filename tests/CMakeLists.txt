@@ -19,8 +19,9 @@ endif()
 add_test(NAME foundation COMMAND microjump_tests)
 add_test(NAME cli_help COMMAND microjump --help)
 add_test(NAME cli_rejects_unknown_argument COMMAND microjump --not-an-option)
-set_tests_properties(cli_rejects_unknown_argument PROPERTIES WILL_FAIL TRUE)
-set_tests_properties(foundation cli_help cli_rejects_unknown_argument PROPERTIES
+add_test(NAME cli_rejects_replay_overflow COMMAND microjump --replay "${CMAKE_CURRENT_SOURCE_DIR}/replays/overflow.mjr")
+set_tests_properties(cli_rejects_unknown_argument cli_rejects_replay_overflow PROPERTIES WILL_FAIL TRUE)
+set_tests_properties(foundation cli_help cli_rejects_unknown_argument cli_rejects_replay_overflow PROPERTIES
     ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
 if(MJ_SMOKE_TESTS)
     add_test(NAME vulkan_startup COMMAND microjump --smoke-test)
@@ -32,15 +33,23 @@ if(MJ_SMOKE_TESTS)
     # Recorded real input through the full game: replay path, player rendering, zero validation errors.
     add_test(NAME render_replay COMMAND microjump --replay "${CMAKE_CURRENT_SOURCE_DIR}/replays/m2-input-smoke.mjr"
         --capture-frame 160 --capture-out "${captures}/replay.png")
-    add_test(NAME replay_completes COMMAND microjump --replay "${CMAKE_CURRENT_SOURCE_DIR}/replays/m2-input-smoke.mjr")
-    set_tests_properties(replay_completes PROPERTIES PASS_REGULAR_EXPRESSION "Replay finished: tick 439,.*grounded.*validation errors: 0")
+    add_test(NAME replay_completes COMMAND ${CMAKE_COMMAND}
+        "-DGAME=$<TARGET_FILE:microjump>"
+        "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/m2-input-smoke.mjr"
+        "-DEXPECTED=Replay finished: tick 439,.*grounded"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
+    add_test(NAME replay_empty COMMAND ${CMAKE_COMMAND}
+        "-DGAME=$<TARGET_FILE:microjump>"
+        "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/empty.mjr"
+        "-DEXPECTED=Replay finished: tick 0,"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
     add_test(NAME capture_pixels COMMAND microjump_capture_check "${captures}/scene.png" "${captures}/camera.png"
         "${captures}/resized.png" "${captures}/replay.png")
-    set_tests_properties(render_capture render_camera render_resize render_replay replay_completes capture_pixels
+    set_tests_properties(render_capture render_camera render_resize render_replay replay_completes replay_empty capture_pixels
         PROPERTIES TIMEOUT 60 LABELS "display;vulkan")
     set_tests_properties(capture_pixels PROPERTIES DEPENDS "render_capture;render_camera;render_resize;render_replay")
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set_tests_properties(vulkan_startup render_capture render_camera render_resize render_replay replay_completes
+        set_tests_properties(vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty
             capture_pixels PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()

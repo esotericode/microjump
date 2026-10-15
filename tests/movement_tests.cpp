@@ -135,6 +135,23 @@ TEST_CASE("running accelerates to run speed, turns at a limited rate and skids o
     CHECK(std::abs(mj::angle_difference(player.current().facing, mj::k_pi)) < 0.01F);
 }
 
+TEST_CASE("disabling jump grace periods still allows an immediate grounded jump") {
+    const auto world = world_of({k_floor});
+    for (const bool disable_coyote : {false, true}) {
+        for (const bool disable_buffer : {false, true}) {
+            auto player = settled_player(world, {0, 0.005F, 0});
+            if (disable_coyote)
+                player.tuning.coyote_time = 0;
+            if (disable_buffer)
+                player.tuning.jump_buffer = 0;
+            player.tick(with({}, button::jump_pressed | button::jump_held), world, k_dt);
+            CHECK_FALSE(player.current().grounded);
+            CHECK(player.current().state == mj::game::MoveState::jump);
+            CHECK(player.current().velocity.y > 0.0F);
+        }
+    }
+}
+
 TEST_CASE("coyote time allows a late jump off a ledge; buffered presses fire on landing") {
     // A 1 m high platform over a floor, running off its +X edge.
     const auto world = world_of({k_floor, {{0, 0.5F, 0}, {6, 1, 6}, {1, 1, 1}}});
@@ -297,6 +314,20 @@ TEST_CASE("follow camera pulls in past walls and clamps its orientation") {
     blocked.camera.set_orientation({7, 5});
     CHECK(blocked.camera.pitch() == doctest::Approx(blocked.camera.tuning.max_pitch));
     CHECK(blocked.camera.yaw() == doctest::Approx(7 - mj::k_tau));
+}
+
+TEST_CASE("camera collision overrides its preferred minimum distance at close walls") {
+    mj::game::PlayerState player;
+    player.position = {0, 0.005F, 0};
+    // The wall leaves room for the player but less than the camera's preferred 0.9 m.
+    const auto world = world_of({k_floor, {{0, 2, 1}, {10, 4, 1}, {1, 1, 1}}});
+    mj::game::FollowCamera camera;
+    camera.snap(player, 0);
+    camera.tick(player, world, k_dt);
+    for (const float alpha : {0.0F, 0.5F, 1.0F}) {
+        const auto pose = camera.pose(alpha, world);
+        CHECK(pose.position.z + camera.tuning.probe_radius < 0.5F);
+    }
 }
 
 TEST_CASE("committed replay of a real input session reproduces its recorded outcome") {

@@ -109,7 +109,9 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
                                                             : std::max(s.buffer_timer - dt, 0.0F);
     s.coyote_timer = s.grounded ? tuning.coyote_time : std::max(s.coyote_timer - dt, 0.0F);
 
-    if (s.buffer_timer > 0 && s.coyote_timer > 0 && s.state != MoveState::jump) {
+    const bool wants_jump = input.held(input_button::jump_pressed) || s.buffer_timer > 0;
+    const bool can_jump = s.grounded || s.coyote_timer > 0;
+    if (wants_jump && can_jump && s.state != MoveState::jump) {
         const Vec3 launch =
             s.grounded ? yaw_forward(s.facing) * s.ground_speed : horizontal(s.velocity);
         s.velocity =

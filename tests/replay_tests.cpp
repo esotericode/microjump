@@ -42,6 +42,9 @@ TEST_CASE("replay parser rejects malformed, oversized and unknown input") {
     CHECK_FALSE(mj::parse_replay(""));
     CHECK_FALSE(mj::parse_replay("microjump-replay 2\ntick-rate 120\n"));
     CHECK_FALSE(mj::parse_replay("microjump-replay 1\ntick-rate 60\n"));
+    const auto empty = mj::parse_replay(header);
+    REQUIRE(empty);
+    CHECK(empty->empty());
     CHECK_FALSE(mj::parse_replay(header + "1 0 1 0 0\n"));             // Missing field.
     CHECK_FALSE(mj::parse_replay(header + "1 0 1 0 0 0 7\n"));         // Extra field.
     CHECK_FALSE(mj::parse_replay(header + "0 0 1 0 0 0\n"));           // Empty run.
@@ -50,6 +53,8 @@ TEST_CASE("replay parser rejects malformed, oversized and unknown input") {
     CHECK_FALSE(mj::parse_replay(header + "1 0 1 0 0 64\n"));          // Unknown button.
     CHECK_FALSE(mj::parse_replay(header + "1 0 1x 0 0 0\n"));          // Trailing junk.
     CHECK_FALSE(mj::parse_replay(header + "99999999999 0 1 0 0 0\n")); // Too long.
+    // A maximum-sized run after a valid tick must not wrap the total and reach vector::insert.
+    CHECK_FALSE(mj::parse_replay(header + "1 0 0 0 0 0\n18446744073709551615 0 0 0 0 0\n"));
     const auto ok = mj::parse_replay(header + "# comment\r\n\n3 0 1 0 0 1\r\n");
     REQUIRE(ok);
     CHECK(ok->size() == 3);

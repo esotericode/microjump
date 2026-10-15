@@ -38,8 +38,9 @@ std::string describe(const Simulation &simulation) {
 
 int run(const LaunchOptions &options) {
     ValidationLog validation;
+    const bool replaying = !options.replay.empty();
     std::vector<TickInput> replay;
-    if (!options.replay.empty()) {
+    if (replaying) {
         auto loaded = load_replay(options.replay);
         if (!loaded) {
             log(loaded.error().message);
@@ -80,7 +81,7 @@ int run(const LaunchOptions &options) {
         bool use_free_camera = options.camera_test;
         bool first_resize = false, second_resize = false;
         bool captured = false;
-        bool replay_finished = false;
+        bool replay_finished = replaying && replay.empty();
         std::uint32_t pending_buttons = 0; // Press edges latched until the next tick.
         std::uint32_t rendered = 0;
         std::optional<std::uint32_t> scripted_frame;
@@ -144,7 +145,7 @@ int run(const LaunchOptions &options) {
                     if (input.reset_pressed)
                         free_camera.reset();
                 }
-            } else if (replay.empty()) {
+            } else if (!replaying) {
                 simulation.camera.look({input.look_x, input.look_y, input.look_stick_x,
                                         input.look_stick_y,
                                         static_cast<float>(std::min(elapsed, 0.1))});
@@ -162,7 +163,7 @@ int run(const LaunchOptions &options) {
                 if (use_free_camera)
                     free_camera.tick(camera_input, dt);
                 TickInput tick;
-                if (!replay.empty()) {
+                if (replaying) {
                     if (replay_index >= replay.size()) {
                         replay_finished = true;
                         return;
@@ -189,8 +190,8 @@ int run(const LaunchOptions &options) {
                 DrawInstance{k_player_mesh, yaw_translation(pose.facing, pose.position), 0, false}};
             status.free_camera = use_free_camera;
             status.gamepad = input.gamepad_connected;
-            status.input_mode = !replay.empty() ? "Replay " + std::to_string(replay_index) + "/" +
-                                                      std::to_string(replay.size())
+            status.input_mode = replaying ? "Replay " + std::to_string(replay_index) + "/" +
+                                                std::to_string(replay.size())
                                 : !options.record.empty() ? "Recording"
                                                           : "Live";
             const std::function<void()> overlay_lines = [&] {
@@ -234,7 +235,7 @@ int run(const LaunchOptions &options) {
             return 1;
         }
     }
-    if (!options.replay.empty())
+    if (replaying)
         log("Replay " + std::string(replay_index >= replay.size() ? "finished" : "stopped") + ": " +
             describe(simulation));
     if (!options.record.empty()) {

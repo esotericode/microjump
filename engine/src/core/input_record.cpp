@@ -116,7 +116,7 @@ std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text)
             return std::unexpected(line_error(line_number, "move input longer than 1"));
         if ((tick.buttons & ~input_button::all) != 0)
             return std::unexpected(line_error(line_number, "unknown button bits"));
-        if (ticks.size() + run > k_max_ticks)
+        if (run > k_max_ticks - ticks.size())
             return std::unexpected(line_error(line_number, "replay longer than four hours"));
         ticks.insert(ticks.end(), static_cast<std::size_t>(run), tick);
     }

@@ -7,6 +7,9 @@ hardware acceptance is still open (D-025).
 M2 stays **in progress** until the owner answers the playtest request below.
 Feel can't be verified from code or tests.
 
+Follow-up bug review and the historical shutdown-failure diagnosis:
+[M2 review](m2-review.md).
+
 ![Mid-jump in the M2 yard](captures/m2-jump.png)
 
 ## What works
