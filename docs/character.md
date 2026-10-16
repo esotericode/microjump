@@ -35,7 +35,7 @@ transforms this is the same rotation as before.
 | Move | Animation |
 | --- | --- |
 | Idle | Breathing and a blink every 3.7 s. |
-| Run | Boots swing and lift, gloves counter-swing, the body bobs and twists. The lean grows with speed, more past a run, and with acceleration. It banks into turns. |
+| Run | Boots swing and lift, gloves counter-swing, the body bobs and twists. The lean grows with speed, more past a run, and with acceleration. It banks a little into turns, at most about 7°. |
 | Fast running | Footfall dust above 10.5 m/s. |
 | Jump | A stretch on takeoff, tucked boots, raised arms. |
 | Landing | A squash on a bouncy spring, deeper for harder impacts (0.83 after a 2.5 m drop, never below 0.62). The eyes squeeze shut on hard landings, which also kick up a ring of dust. |

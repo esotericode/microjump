@@ -225,13 +225,15 @@ flowers(RX, RTOP, RZ, 8, 16, 44, colors=("#fff3a8", "#ffffff"))
 zone("Old Ruins", RX, RZ, 13)
 
 # South: the Long Pier, then a leap only a long jump clears down to Lantern Isle.
-shape("box", (0, -0.4, 22), (4, 0.8, 26), PLANK, material={"roughness": 0.75, "metallic": 0})
-for z in (12, 20, 28, 34.6):
+# The deck sits 6 cm proud of the grass: a shared plane would z-fight where they overlap.
+PIER_TOP = 0.06
+shape("box", (0, PIER_TOP - 0.4, 22), (4, 0.8, 26), PLANK, material={"roughness": 0.75, "metallic": 0})
+for z in (12, 20, 28, 34.6):  # Pilings run from below the deck to rail height.
     for x in (-2.1, 2.1):
-        shape("cylinder", (x, 0.45, z), (0.3, 0.9, 0.3), WOOD, material={"roughness": 0.8, "metallic": 0})
-lantern(-2.1, 0, 34.6, intensity=10)
-lantern(2.1, 0, 34.6, intensity=10)
-spark("Leap of faith", 0, 1.3, 39.5)  # Mid-leap: you can grab it and still fall short.
+        shape("cylinder", (x, -0.15, z), (0.3, 2.1, 0.3), WOOD, material={"roughness": 0.8, "metallic": 0})
+lantern(-2.1, 0.9, 34.6, intensity=10, height=1.2)  # Standing on the end pilings.
+lantern(2.1, 0.9, 34.6, intensity=10, height=1.2)
+spark("Leap of faith", 0, PIER_TOP + 1.3, 39.5)  # Mid-leap: you can grab it and still fall short.
 zone("The Long Pier", 0, 22, 10)
 
 LX, LTOP, LZ = 0, -4.0, 54.5

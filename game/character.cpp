@@ -225,14 +225,15 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
         const float accel = m_grounded ? (speed - length(horizontal(m_motion))) / dt : 0;
         lean = 0.12F * std::min(speed / k_run_speed, 1.0F) +
                0.2F * std::clamp((speed - k_run_speed) / 13, 0.0F, 1.0F) +
-               std::clamp(accel * 0.006F, -0.12F, 0.12F);
+               std::clamp(accel * 0.004F, -0.06F, 0.06F);
     }
     s.lean = smooth(s.lean, lean, 10, dt);
-    // Bank into ground turns; large single-tick turns (kicks, skid ends) are not turning.
+    // A hint of bank into ground turns (about 7 degrees at most): more reads as toppling.
+    // Large single-tick turns (kicks, skid ends) are not turning.
     const float turn = angle_difference(m_facing, player.facing);
     const float yaw_rate = std::abs(turn) < 0.5F ? turn / dt : 0;
-    const float bank = grounded ? std::clamp(yaw_rate * speed * 0.01F, -0.35F, 0.35F) : 0.0F;
-    s.bank = smooth(s.bank, bank, 8, dt);
+    const float bank = grounded ? std::clamp(yaw_rate * speed * 0.003F, -0.12F, 0.12F) : 0.0F;
+    s.bank = smooth(s.bank, bank, 6, dt);
 
     // A kick turns the body from the wall to its new facing, plus one full twirl.
     if (kicked) {

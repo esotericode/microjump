@@ -305,8 +305,9 @@ Level make_movement_yard() {
     for (int i = 0; i < 5; ++i)
         yard.cylinder({-6 + static_cast<float>(i) * 3, 1.5F, 20}, 1.2F, 3, k_white);
     // Low ceiling: 2.0 m clearance for a 1.6 m body, so jumping inside bumps the roof.
-    yard.box({4.5F, 1.3F, 15}, {0.6F, 2.6F, 6}, k_teal);
-    yard.box({8.5F, 1.3F, 15}, {0.6F, 2.6F, 6}, k_teal);
+    // The pillars stop under the slab, so their faces never share its plane (z-fighting).
+    yard.box({4.5F, 1, 15}, {0.6F, 2, 6}, k_teal);
+    yard.box({8.5F, 1, 15}, {0.6F, 2, 6}, k_teal);
     yard.box({6.5F, 2.3F, 15}, {4.6F, 0.6F, 6}, k_white);
     // A floating slab with an underside to hit.
     yard.box({-5, 3.2F, 9}, {4, 0.3F, 4}, k_white);

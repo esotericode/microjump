@@ -180,6 +180,15 @@ keeps you where you are, so tests load every shipped gate's target. Gates rest w
 recording or replaying, because a recording belongs to one level. The simulation only
 reports the step into a gate, and the game decides to travel.
 
+**No z-fighting.** Two differently coloured faces in the same plane flicker where they
+overlap, and that looks broken. Don't let shapes share a visible plane:
+- Stop a pillar under the slab it holds rather than inside it.
+- Raise a deck a few centimetres above the grass it crosses.
+- Leave out pieces that would sit entirely inside another.
+
+Faces buried inside another solid, and identical surfaces, are fine.
+`tests/surface_tests.cpp` checks every shipped level and names the shapes that fight.
+
 **Editing tips:** iterate with `--level` on your own copy. Pair `--capture-tick` with
 `--hide-overlay` for before/after screenshots. Recordings are tied to the level name, so
 renaming a level orphans its recordings.

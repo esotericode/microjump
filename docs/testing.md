@@ -178,6 +178,14 @@ With `MJ_SMOKE_TESTS=ON`:
 - `replay_isles_leap` replays `tests/replays/isles-long-leap.mjr`, from spawn down the
   pier and over the gap, through the whole game.
 
+## Z-fighting
+
+`surface_tests.cpp` builds every shipped level shape by shape and looks for visible
+z-fighting. That means front faces of two differently coloured shapes in the same plane,
+facing the same way and overlapping, where nothing solid covers the overlap. A small
+fixture checks that the detector finds a real overlap and ignores buried and identical
+faces.
+
 ## Particle rendering
 
 With `MJ_SMOKE_TESTS=ON`, `particle_render` draws a small controlled Vulkan scene and
