@@ -145,3 +145,13 @@ tests enabled, `render_spark_pickup` captures tick 140 with the counter at 1/16 
 `replay_spark_invitation` checks the completed replay at tick 170. Both require zero
 Vulkan validation errors. F1 can close diagnostics while leaving the hunt HUD visible;
 `--hide-overlay` suppresses both for clean scene captures.
+
+## Particle rendering
+
+With `MJ_SMOKE_TESTS=ON`, `particle_render` draws a small controlled Vulkan scene and
+compares its captures under `tests/captures/particles/`. It checks opacity against the
+background, radial edge falloff, opaque-world occlusion, consistent ordering when
+inputs are reversed, coincident layers without depth writes, and opaque PNG alpha.
+Shutdown validation errors fail the fixture too. CPU tests cover camera-depth sorting,
+invalid values, the submission budget, and the character emitter's interpolated birth
+and death intervals. See [particles](particles.md) for renderer and timing details.

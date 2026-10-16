@@ -43,6 +43,10 @@ forward renderer, and each frame has four passes:
 4. The **ImGui** overlay. The result is then blitted to the swapchain, and copied to a
    readback buffer for captures.
 
+After opaque scene draws, [dust and spark particles](particles.md) blend into HDR with
+soft radial edges, ambient/emissive colour, depth testing and no depth writes. They
+are sorted from far to near, so overlapping puffs blend consistently.
+
 Per-frame data goes in a uniform buffer: camera, sun, sky, fog, the shadow matrix and
 up to 16 lights. Each draw sends its transform, material flags, tint and emissive
 strength as 80-byte push constants. A transform may scale each axis (the animated

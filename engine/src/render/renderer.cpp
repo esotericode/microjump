@@ -63,7 +63,7 @@ struct FrameUniforms {
 };
 struct DrawConstants {
     std::array<Float4, 3> model_rows;
-    Float4 material; // x grid strength, y receives blob shadow, z emissive.
+    Float4 material; // x grid strength / particle radius, y blob, z emissive, w particle opacity.
     Float4 tint;
 };
 static_assert(sizeof(DrawConstants) == 80);
@@ -137,6 +137,7 @@ struct PipelineDescription {
     bool depth_write;
     VkCompareOp depth_compare;
     bool depth_bias;
+    bool alpha_blend = false;
     VkFormat color_format; // VK_FORMAT_UNDEFINED: no color attachment.
     VkFormat depth_format; // VK_FORMAT_UNDEFINED: no depth attachment.
 };
@@ -212,6 +213,13 @@ std::expected<VkPipeline, Error> create_pipeline(VkDevice device,
     VkPipelineColorBlendAttachmentState attachment{};
     attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                                 VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    attachment.blendEnable = description.alpha_blend ? VK_TRUE : VK_FALSE;
+    attachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    attachment.colorBlendOp = VK_BLEND_OP_ADD;
+    attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    attachment.alphaBlendOp = VK_BLEND_OP_ADD;
     const bool has_color = description.color_format != VK_FORMAT_UNDEFINED;
     VkPipelineColorBlendStateCreateInfo blend{};
     blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -308,6 +316,7 @@ struct Renderer::Impl {
     VkPipelineLayout scene_layout = VK_NULL_HANDLE;
     VkPipelineLayout post_pipeline_layout = VK_NULL_HANDLE;
     VkPipeline scene_pipeline = VK_NULL_HANDLE;
+    VkPipeline particle_pipeline = VK_NULL_HANDLE;
     VkPipeline sky_pipeline = VK_NULL_HANDLE;
     VkPipeline shadow_pipeline = VK_NULL_HANDLE;
     VkPipeline tonemap_pipeline = VK_NULL_HANDLE;
@@ -352,6 +361,7 @@ struct Renderer::Impl {
     void destroy_swapchain();
     void overlay(const FrameView &view);
     void draw_instances(VkCommandBuffer command, const FrameView &view, bool shadow_pass) const;
+    void draw_particles(VkCommandBuffer command, const FrameView &view) const;
     std::expected<bool, Error> draw(const FrameView &view);
 };
 
@@ -381,13 +391,14 @@ std::expected<void, Error> Renderer::Impl::initialize(std::span<const SceneMesh>
     if (!supports(vk.physical, k_color_format,
                   VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
         !supports(vk.physical, k_hdr_format,
-                  VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) ||
+                  VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+                      VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT) ||
         !supports(vk.physical, k_depth_format, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) ||
         !supports(vk.physical, k_shadow_format,
                   VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
                       VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)) {
         return std::unexpected(
-            Error{"GPU lacks required sRGB / RGBA16F / D32 / D16 shadow image formats"});
+            Error{"GPU lacks required sRGB / blendable RGBA16F / D32 / D16 shadow image formats"});
     }
     // Hardware bilinear shadow comparison smooths each tap; fall back to nearest taps.
     shadow_linear =
@@ -550,7 +561,7 @@ std::expected<void, Error> Renderer::Impl::create_descriptors() {
 }
 
 std::expected<void, Error> Renderer::Impl::create_pipelines() {
-    const std::array<std::pair<VkPipeline *, PipelineDescription>, 4> pipelines{{
+    const std::array<std::pair<VkPipeline *, PipelineDescription>, 5> pipelines{{
         {&shadow_pipeline,
          {.vertex_shader = "shadow.vert.spv",
           .fragment_shader = nullptr,
@@ -585,6 +596,19 @@ std::expected<void, Error> Renderer::Impl::create_pipelines() {
           .depth_write = true,
           .depth_compare = VK_COMPARE_OP_GREATER,
           .depth_bias = false,
+          .color_format = k_hdr_format,
+          .depth_format = k_depth_format}},
+        {&particle_pipeline,
+         {.vertex_shader = "particle.vert.spv",
+          .fragment_shader = "particle.frag.spv",
+          .layout = scene_layout,
+          .vertex_input = VertexInput::none,
+          .cull = VK_CULL_MODE_NONE,
+          .depth_test = true,
+          .depth_write = false,
+          .depth_compare = VK_COMPARE_OP_GREATER,
+          .depth_bias = false,
+          .alpha_blend = true,
           .color_format = k_hdr_format,
           .depth_format = k_depth_format}},
         {&tonemap_pipeline,
@@ -905,6 +929,32 @@ void Renderer::Impl::draw_instances(VkCommandBuffer command, const FrameView &vi
     }
 }
 
+void Renderer::Impl::draw_particles(VkCommandBuffer command, const FrameView &view) const {
+    if (view.particles.empty())
+        return;
+    const Vec3 forward = view_forward(view.camera.yaw, view.camera.pitch);
+    const Vec3 right = yaw_right(view.camera.yaw);
+    const Vec3 up = cross(right, forward);
+    const auto sorted = prepare_particles(view.particles, view.camera.position, forward);
+    vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, particle_pipeline);
+    for (const auto &particle : sorted) {
+        // Local +Z faces the camera; local X/Y span its image plane in world space.
+        DrawConstants constants{};
+        const std::array axes{right, up, -forward, particle.position};
+        for (std::size_t column = 0; column < axes.size(); ++column) {
+            constants.model_rows[0][column] = axes[column].x;
+            constants.model_rows[1][column] = axes[column].y;
+            constants.model_rows[2][column] = axes[column].z;
+        }
+        constants.material = {particle.radius, 0, particle.emissive, particle.opacity};
+        constants.tint = float4(particle.color);
+        vkCmdPushConstants(command, scene_layout,
+                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+                           sizeof(constants), &constants);
+        vkCmdDraw(command, 6, 1, 0, 0);
+    }
+}
+
 std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     const auto *capture = view.capture;
     if (std::isfinite(view.elapsed) && view.elapsed > 0)
@@ -1100,7 +1150,7 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
                    .destination_stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
                    .destination_access = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT});
 
-    // HDR scene: sky, then lit geometry.
+    // HDR scene: sky, lit geometry, then depth-tested transparent particles.
     image_barrier(command, frame.hdr.handle, VK_IMAGE_ASPECT_COLOR_BIT,
                   {.old_layout = VK_IMAGE_LAYOUT_UNDEFINED,
                    .new_layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1145,6 +1195,7 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     vkCmdDraw(command, 3, 1, 0, 0);
     vkCmdBindPipeline(command, VK_PIPELINE_BIND_POINT_GRAPHICS, scene_pipeline);
     draw_instances(command, view, false);
+    draw_particles(command, view);
     vkCmdEndRendering(command);
 
     // Tone map into the sRGB target, then the overlay.
@@ -1338,7 +1389,8 @@ Renderer::Impl::~Impl() {
         vkDestroySemaphore(vk.device, timeline, nullptr);
     if (timestamps != VK_NULL_HANDLE)
         vkDestroyQueryPool(vk.device, timestamps, nullptr);
-    for (const auto pipeline : {shadow_pipeline, sky_pipeline, scene_pipeline, tonemap_pipeline}) {
+    for (const auto pipeline :
+         {shadow_pipeline, sky_pipeline, scene_pipeline, particle_pipeline, tonemap_pipeline}) {
         if (pipeline != VK_NULL_HANDLE)
             vkDestroyPipeline(vk.device, pipeline, nullptr);
     }

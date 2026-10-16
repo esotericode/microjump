@@ -191,6 +191,7 @@ int run(const LaunchOptions &options) {
         CharacterAnimator character;
         character.snap(simulation.player.current());
         std::vector<CharacterPart> character_parts;
+        std::vector<ParticleInstance> particles;
         log("M4 playground ready: WASD move, Space jump/wall kick, Shift+jump long jump, R "
             "respawn, F1 overlay, F2 "
             "tuning, "
@@ -358,12 +359,14 @@ int run(const LaunchOptions &options) {
                                  .model = yaw_translation(0, {}),
                                  .grid = 1,
                                  .receives_blob = true});
+            particles.clear();
             if (diagnostics.show_capsule) {
                 instances.push_back(
                     {.mesh = k_player_mesh, .model = yaw_translation(pose.facing, pose.position)});
             } else {
                 character_parts.clear();
                 character.build(pose, alpha, character_parts);
+                character.build_particles(alpha, particles);
                 for (const auto &part : character_parts)
                     instances.push_back({.mesh = part.mesh == PartMesh::glossy ? k_glossy_part_mesh
                                                                                : k_matte_part_mesh,
@@ -384,21 +387,21 @@ int run(const LaunchOptions &options) {
                                      .emissive = 1.2F});
             }
             if (const auto last_spark = simulation.last_collected()) {
-                const float age =
-                    std::max(0.0F, seconds - static_cast<float>(simulation.last_collection_tick()) *
-                                                 static_cast<float>(FixedStep::k_tick));
-                if (age < 0.65F) {
+                const float age = seconds - static_cast<float>(simulation.last_collection_tick()) *
+                                                static_cast<float>(FixedStep::k_tick);
+                if (age > 0 && age < 0.65F) {
+                    const float life = age / 0.65F;
+                    const float fade_in = std::min(age / 0.035F, 1.0F);
                     for (int mote = 0; mote < 6; ++mote) {
                         const float angle = static_cast<float>(mote) * k_tau / 6;
                         const Vec3 drift{std::cos(angle) * age * 2, age * 1.8F,
                                          std::sin(angle) * age * 2};
-                        instances.push_back(
-                            {.mesh = k_bulb_mesh,
-                             .model = yaw_translation(0, level.collectibles[*last_spark].position +
-                                                             drift),
-                             .casts_shadow = false,
-                             .tint = {1, 0.65F, 0.15F},
-                             .emissive = (1 - age / 0.65F) * 2});
+                        particles.push_back(
+                            {.position = level.collectibles[*last_spark].position + drift,
+                             .radius = 0.16F + 0.08F * life,
+                             .color = {1, 0.65F, 0.15F},
+                             .opacity = fade_in * (1 - life) * 0.9F,
+                             .emissive = (1 - life) * 2});
                     }
                 }
             }
@@ -458,6 +461,7 @@ int run(const LaunchOptions &options) {
             view.camera = use_free_camera ? free_camera.interpolated(alpha)
                                           : simulation.camera.pose(alpha, geometry.collision);
             view.instances = instances;
+            view.particles = particles;
             view.blob = {pose.position,
                          lighting.blob ? simulation.player.tuning.radius * 1.35F : 0.0F,
                          lighting.blob_strength};

@@ -22,7 +22,7 @@ layout(set = 0, binding = 0) uniform Frame {
 } frame;
 layout(push_constant) uniform Draw {
     vec4 model_rows[3]; // affine model transform rows (rotation, scale, translation)
-    vec4 material;      // x grid strength, y receives blob shadow, z emissive
+    vec4 material;      // x grid / particle radius, y blob, z emissive, w particle opacity
     vec4 tint;
 } draw;
 

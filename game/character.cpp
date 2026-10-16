@@ -140,8 +140,10 @@ void CharacterAnimator::snap(const PlayerState &player) {
     m_squash_rate = 0;
     m_antenna_rate = {};
     m_clock = 0;
+    m_ticks = 0;
     m_dt = 0;
     m_puffs = {};
+    m_next_puff = 0;
 }
 
 void CharacterAnimator::cheer() {
@@ -190,8 +192,12 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
     const Vec3 right = yaw_right(player.facing);
 
     for (auto &puff : m_puffs) {
+        if (puff.life <= 0)
+            continue;
         puff.age += dt;
-        if (puff.age >= puff.life)
+        // Keep the final tick interval available to an interpolated render. The puff
+        // may already be dead at alpha=1 while still visible at alpha=0.
+        if (puff.age - dt >= puff.life)
             puff.life = 0;
     }
 
@@ -382,24 +388,31 @@ void CharacterAnimator::build(const PlayerPose &pose, float alpha,
                         0.22F * run * swing - 0.1F * s.dive + 0.12F * s.skid};
         add(translation(hand), {0.09F, 0.09F, 0.09F}, colors.cream);
     }
+}
 
-    // Dust and golden motes live in world space, easing to rest as they fade.
+void CharacterAnimator::build_particles(float alpha,
+                                        std::vector<ParticleInstance> &particles) const {
+    static const Palette colors;
+    alpha = std::clamp(alpha, 0.0F, 1.0F);
+    // Dust and golden motes live in world space, easing to rest as they fade. A
+    // newborn belongs to the current fixed tick, never to the interval before it.
     for (const auto &puff : m_puffs) {
         if (puff.life <= 0)
             continue;
-        const float t = std::clamp(puff.age - (1 - alpha) * m_dt, 0.0F, puff.life);
+        const float t = puff.age - (1 - alpha) * m_dt;
+        if (t <= 0 || t >= puff.life)
+            continue;
         const float u = t / puff.life;
         const Vec3 at = puff.origin + puff.velocity * (t * (1 - 0.5F * u)) +
                         Vec3{0, puff.gold ? 0.0F : 0.35F * t, 0};
-        const float radius =
-            puff.gold ? puff.size * (1 - u) : puff.size * (0.5F + 0.9F * u) * (1 - u * u);
-        if (radius <= 0.001F)
-            continue;
-        parts.push_back({.mesh = puff.gold ? PartMesh::glossy : PartMesh::matte,
-                         .model = translation(at) * scaling({radius, radius, radius}),
-                         .tint = puff.gold ? colors.gold : colors.dust,
-                         .emissive = puff.gold ? 2.2F * (1 - u) : 0.0F,
-                         .casts_shadow = false});
+        const float fade = std::clamp(t / (puff.gold ? 0.018F : 0.04F), 0.0F, 1.0F);
+        const float fade_in = fade * fade * (3 - 2 * fade);
+        const float tail = 1 - u;
+        particles.push_back({.position = at,
+                             .radius = puff.size * (puff.gold ? 1 - 0.35F * u : 1 + 1.4F * u),
+                             .color = puff.gold ? colors.gold : colors.dust,
+                             .opacity = fade_in * (puff.gold ? 0.9F * tail : 0.5F * tail * tail),
+                             .emissive = puff.gold ? 2.2F * tail : 0.0F});
     }
 }
 
