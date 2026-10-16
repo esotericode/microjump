@@ -73,6 +73,20 @@ tools/local-env.sh cmake --build --preset PRESET --parallel 4
 tools/local-env.sh ctest --preset PRESET -V
 ```
 
+The Release zip was extracted and run from `/tmp` with the development library
+path removed. It loaded the packaged default JSON, found its shaders, rendered
+and captured tick 60, then exited successfully.
+
+`tools/input-smoke.sh` drove real SDL keyboard/mouse events under Xvfb and recorded
+a 1,419-tick session on the new default playground. Replaying it on native Intel
+Vulkan reached the identical full-precision final state:
+
+```text
+tick 1419, feet (8.68328094, 0.0294266492, -14.1695566), state Idle, grounded, checkpoint 0
+```
+
+This is a functional input/replay check; no frame-rate measurements were used.
+
 These tests establish particular routes and fixtures, not approval of movement
 feel or proof that every jump is well tuned. The next M4 increment adds designated
 wall-jump surfaces and a momentum move, then exercises full routes with replays.

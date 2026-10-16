@@ -38,7 +38,7 @@ cmake --build --preset linux-debug    # build
 ctest --preset linux-debug            # run all automated tests
 ./build/linux-debug/game/microjump    # movement yard: WASD/Space/mouse, F1 overlay, F2 tuning
 ./build/linux-debug/game/microjump --capture-frame 12 --capture-out captures/scene.png
-./build/linux-debug/game/microjump --replay tests/replays/m2-input-smoke.mjr
+./build/linux-debug/game/microjump --level assets/levels/movement-yard.json --replay tests/replays/m2-input-smoke.mjr
 # Add -DMJ_SMOKE_TESTS=ON at configure time to include GPU/capture tests in CTest.
 ```
 
