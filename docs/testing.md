@@ -169,8 +169,8 @@ the ruins' columns and the cloud steps. It runs and judges each takeoff as a pla
 does: it jumps once its speed would carry it to the landing, or at an edge, and lines
 up the touchdown in the air. A wall-kick driver climbs the spire onto its tower. The
 long-leap test shows a long jump clears the pier's gap while a running jump falls
-short. Any respawn fails a route. `ROUTELOG=1` prints each tick of the traced routes,
-which helps when a new route won't pass.
+short. Any respawn fails a route. Setting `k_route_log` to true in the test prints each
+tick of the traced routes, which helps when a new route won't pass.
 
 `jump_chain_tests.cpp` covers the moves themselves:
 - the double and triple jump heights, timing window and speed rule;

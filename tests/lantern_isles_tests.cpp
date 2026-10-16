@@ -6,7 +6,6 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
-#include <cstdlib>
 #include <initializer_list>
 #include <string_view>
 
@@ -14,8 +13,10 @@ using mj::Vec3;
 
 namespace {
 constexpr float k_dt = 1.0F / 120;
+// Set to true to print every tick of the traced routes, when a new route won't pass.
+constexpr bool k_route_log = false;
 void trace(const char *tag, const mj::game::Simulation &simulation) {
-    if (std::getenv("ROUTELOG") == nullptr)
+    if (!k_route_log)
         return;
     const auto &s = simulation.player.current();
     std::printf("%s t%llu %.2f %.2f %.2f v %.2f %.2f %.2f %s %s r%u\n", tag,
