@@ -47,6 +47,9 @@ again right as you land (the overlay shows "Clean") to keep that speed. Jumping 
 mashing, turning hard or running uphill bleeds it away. Chained clean long jumps reach
 top speed.
 
+Dust follows skids and hard landings. Golden motes mark clean momentum hops and spark
+finds, so those successes stay visible with F1 diagnostics closed.
+
 ## Extras
 
 ```text

@@ -11,7 +11,8 @@ a spark-gold tip. Collision is still the 0.35 m × 1.6 m capsule from
 `CharacterAnimator` (`game/character.*`) builds 13 body parts each frame: the body and
 belly, the head, eyes, cheeks, the antenna stalk and tip, two gloves and two boots. Every
 part is one of two shared unit spheres (`make_part_mesh`: soft plastic or glossy), drawn
-with its own scale, rotation and tint. Dust puffs and gold motes follow, at most 24.
+with its own scale, rotation and tint. A separate bounded emitter supplies at most 24
+camera-facing dust puffs and gold motes to the [particle pass](particles.md).
 
 The renderer accepts any non-mirrored affine transform for a draw. The vertex shader
 transforms normals by the cofactor matrix, so squashed spheres shade correctly. For rigid
@@ -26,8 +27,8 @@ transforms this is the same rotation as before.
 - **Driven by real motion.** The run cycle advances with the actual ground distance
   covered, so the feet don't slide and stop against walls. The stride grows from
   1.2 m with speed.
-- **Respawns snap.** Moving more than 2 m in one tick resets the animator, so a respawn
-  never smears the body across the level.
+- **Teleports snap.** Moving more than 2 m in one tick resets the animator, keeping
+  long respawn moves from smearing the body across the level.
 
 ## What each move looks like
 
@@ -44,7 +45,9 @@ transforms this is the same rotation as before.
 | Clean hop | The antenna flashes and gold motes burst at the feet, so kept momentum is visible without F1. |
 | Spark found | The antenna flashes, the arms go up, and the body bounces. |
 
-The antenna tip lags behind acceleration on its own spring.
+The antenna tip lags behind acceleration on its own spring. Dust expands and fades
+through transparent, soft-edged discs; gold motes glow and fade. Both use fixed-tick
+births and lifetimes, including interpolation through the final tick of a puff's life.
 
 ## Tuning and debugging
 
@@ -55,8 +58,9 @@ in place of the character, for checking contacts.
 `tests/character_tests.cpp` runs the committed move tours through the animator. It checks
 that every part stays finite, non-mirrored and near the capsule at three blend factors
 per tick, and that the run, dive, twirl, squash, stretch, dust and clean-hop flash all
-happen. It also checks that landings squash in order of fall height and settle, and that
-respawns snap.
+happen. It also checks that landings squash in order of fall height and settle, that
+respawns snap, and that particle births, fades and expiry stay continuous across render
+cadences.
 
 ## Ideas for later
 

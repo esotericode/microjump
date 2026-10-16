@@ -3,6 +3,7 @@
 #include <mj/core/error.hpp>
 #include <mj/render/lighting.hpp>
 #include <mj/render/pacing.hpp>
+#include <mj/render/particles.hpp>
 #include <mj/scene/debug_camera.hpp>
 #include <mj/scene/mesh.hpp>
 
@@ -44,6 +45,7 @@ struct BlobShadow {
 struct FrameView {
     CameraPose camera;
     std::span<const DrawInstance> instances;
+    std::span<const ParticleInstance> particles; // Borrowed for draw(); never kept by the GPU.
     BlobShadow blob;
     Environment environment;
     std::span<const LocalLight> lights; // At most k_max_local_lights are used.

@@ -17,7 +17,7 @@ AI agents build it together: [AGENTS.md](AGENTS.md) guides them, and
 - **Movement:** running, skids, variable jumps, wall kicks, long jumps, and momentum
   you build on purpose.
 - **A renderer:** HDR forward rendering with sun shadows, 16 local lights, GGX
-  materials and a day/night cycle.
+  materials, fading dust and spark particles, and a day/night cycle.
 - **Input:** keyboard/mouse or gamepad, with live tuning of every movement, camera
   and lighting value.
 - **Diagnostics:** deterministic input record and replay, GPU frame capture, and

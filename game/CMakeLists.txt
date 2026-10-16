@@ -8,7 +8,7 @@ add_executable(microjump main.cpp debug_ui.cpp)
 target_link_libraries(microjump PRIVATE microjump_gameplay mj_imgui)
 mj_project_options(microjump)
 set(mj_shader_outputs)
-foreach(shader scene.vert scene.frag shadow.vert fullscreen.vert sky.frag tonemap.frag)
+foreach(shader scene.vert scene.frag shadow.vert fullscreen.vert sky.frag particle.vert particle.frag tonemap.frag)
     set(output "${CMAKE_CURRENT_BINARY_DIR}/shaders/${shader}.spv")
     add_custom_command(OUTPUT "${output}"
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/shaders"

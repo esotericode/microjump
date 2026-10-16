@@ -1,6 +1,6 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
     movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp frame_pacing_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp
-    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp)
+    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
@@ -33,6 +33,14 @@ set_tests_properties(cli_rejects_replay_level_mismatch PROPERTIES
 set_tests_properties(foundation cli_help cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level cli_rejects_replay_level_mismatch PROPERTIES
     ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
 if(MJ_SMOKE_TESTS)
+    add_executable(microjump_particle_render_tests particle_render_tests.cpp)
+    target_link_libraries(microjump_particle_render_tests PRIVATE mj::engine)
+    target_include_directories(microjump_particle_render_tests SYSTEM PRIVATE ${stb_SOURCE_DIR})
+    mj_project_options(microjump_particle_render_tests)
+    set_target_properties(microjump_particle_render_tests PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/game")
+    add_dependencies(microjump_particle_render_tests microjump_shaders)
+    add_test(NAME particle_render COMMAND microjump_particle_render_tests "${CMAKE_CURRENT_BINARY_DIR}/captures/particles")
+    set_tests_properties(particle_render PROPERTIES TIMEOUT 90 LABELS "display;vulkan;particles")
     add_executable(microjump_gamepad_smoke gamepad_window_tests.cpp "${PROJECT_SOURCE_DIR}/game/debug_ui.cpp")
     target_link_libraries(microjump_gamepad_smoke PRIVATE microjump_gameplay mj_imgui doctest::doctest)
     mj_project_options(microjump_gamepad_smoke)
@@ -108,7 +116,7 @@ if(MJ_SMOKE_TESTS)
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         set_tests_properties(gamepad_window vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
             capture_pixels render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
-            render_spark_pickup replay_spark_invitation PROPERTIES ENVIRONMENT
+            render_spark_pickup replay_spark_invitation particle_render PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()
 endif()

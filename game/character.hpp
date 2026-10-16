@@ -2,6 +2,7 @@
 
 #include "player.hpp"
 
+#include <mj/render/particles.hpp>
 #include <mj/scene/mesh.hpp>
 
 #include <array>
@@ -10,7 +11,7 @@
 
 namespace mj::game {
 
-// The two shared unit spheres every character part and puff is drawn with.
+// The two shared unit spheres every solid character part is drawn with.
 enum class PartMesh : std::uint8_t { matte, glossy };
 [[nodiscard]] SceneMesh make_part_mesh(PartMesh kind);
 
@@ -51,14 +52,16 @@ class CharacterAnimator {
     void tick(const PlayerState &player, float dt);
     // A found spark: the antenna flashes and the body gives a happy bounce.
     void cheer();
-    // Appends the body for the interpolated player pose, then any dust and motes.
+    // Appends only the solid body for the interpolated player pose.
     void build(const PlayerPose &pose, float alpha, std::vector<CharacterPart> &parts) const;
+    // Appends world-space dust and clean-hop motes for the transparent particle pass.
+    void build_particles(float alpha, std::vector<ParticleInstance> &particles) const;
 
     [[nodiscard]] const Pose &current() const {
         return m_current;
     }
 
-    // build() emits the body first, always this many parts, then up to k_max_puffs puffs.
+    // The solid body and transparent particle output are separately bounded.
     static constexpr std::size_t k_body_parts = 13;
     static constexpr std::size_t k_max_puffs = 24;
 
