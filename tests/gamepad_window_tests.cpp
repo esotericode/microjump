@@ -37,7 +37,7 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
         bool ready = false;
         for (int attempt = 0; attempt < 60 && !ready; ++attempt) {
             const auto input = (*window)->poll_events(
-                [&](const SDL_Event &event) { (*renderer)->process_event(event); }, false);
+                [&](const SDL_Event &event) { (*renderer)->process_event(event); }, {});
             mj::FrameView warmup;
             warmup.overlay = false;
             auto drawn = (*renderer)->draw(warmup);
@@ -102,16 +102,16 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
             if (frame == 155)
                 button(SDL_GAMEPAD_BUTTON_SOUTH, false);
 
+            // As in the game: the window withholds gamepad gameplay while the menu is open.
             const auto input = (*window)->poll_events(
-                [&](const SDL_Event &event) { (*renderer)->process_event(event); }, false);
+                [&](const SDL_Event &event) { (*renderer)->process_event(event); },
+                {.gamepad_gameplay = !open});
             REQUIRE(input.gamepad_connected);
             REQUIRE(input.focused);
             if (input.toggle_tuning)
                 open = !open;
             mj::TickInput live;
-            if (open) {
-                pending = 0;
-            } else {
+            {
                 if (input.recenter_pressed) {
                     simulation.camera.set_orientation({simulation.player.current().facing,
                                                        simulation.camera.tuning.default_pitch});
@@ -156,7 +156,7 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
             status.hours = lighting.cycle.hours;
             status.zone = mj::game::zone_at(level, simulation.player.current().position);
             status.gamepad_name = input.gamepad_name;
-            status.jump_label = input.jump_label;
+            status.gamepad_labels = input.gamepad_labels;
             const auto pose = simulation.player.interpolated(1);
             const std::array instances{
                 mj::DrawInstance{.mesh = {0},

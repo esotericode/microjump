@@ -24,8 +24,9 @@ Details: [M3 notes](docs/m3-lighting.md). M4 now starts with a **230 m JSON play
 40 raised route platforms, an extended sprint lane, a summit stair/ramp course,
 10 checkpoints and seven named regions. The original yard remains available as a
 separate level for regression replays. [M4 layout](docs/m4-playground.md), [wall/long jumps](docs/m4-moves.md) and the
-[level format](docs/level-format.md) describe editing and routes. Wall jumps and the
-momentum move remain the next M4 slice; display settings are M5.
+[level format](docs/level-format.md) describe editing and routes. Speed above a run is
+[momentum you build on purpose](docs/movement-momentum.md): long jumps and downhills
+build it, clean hops keep it. Display settings are M5.
 
 ![New platform routes from the finish deck](docs/captures/m4-field.png)
 
@@ -81,7 +82,9 @@ Gamepads supported by SDL's mappings connect at startup or during play. If the
 active controller disconnects, another connected pad takes over. The overlay
 shows its name and detected jump-button label. In the tuning window, use the
 D-pad/left stick to navigate, South to select or edit, and East to back out;
-Start closes it. Gameplay controls are neutral while tuning is open.
+Start closes it. While tuning is open the controller only drives the menu; the
+keyboard still moves the player, so values can be adjusted with the mouse while
+running (except while typing a number into a field).
 
 F2 → **Gamepad** adjusts independent move/look dead zones. **Camera** adjusts
 stick yaw/pitch speed and inverted Y. These tunables currently reset on restart;

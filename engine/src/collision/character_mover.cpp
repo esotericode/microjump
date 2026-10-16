@@ -53,6 +53,7 @@ struct Slider {
             if (is_walkable(normal, settings) && (mode == SlideMode::ground || remaining.y <= 0)) {
                 result.grounded = true;
                 result.ground_normal = normal;
+                result.ground_face_normal = hit->face_normal;
                 const Vec3 along = respect_walls(horizontal(remaining));
                 delta = along + Vec3{0, -(normal.x * along.x + normal.z * along.z) / normal.y, 0};
             } else {
@@ -112,6 +113,7 @@ struct Slider {
         base.y -= distance * hit->fraction;
         result.grounded = true;
         result.ground_normal = hit->normal;
+        result.ground_face_normal = hit->face_normal;
         return true;
     }
 };

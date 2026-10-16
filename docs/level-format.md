@@ -30,7 +30,7 @@ RGB vectors; intensity is separate.
 
 | Field | Meaning / defaults |
 | --- | --- |
-| `version`, `name` | Required. Version must be integer 1; names contain 1–80 UTF-8 bytes. |
+| `version`, `name` | Required. Version must be integer 1; names contain 1–80 UTF-8 bytes and no control characters. Recordings store the level `name` and refuse to replay on a differently named level. |
 | `kill_height` | Falling below this Y respawns at the active checkpoint; default −25. |
 | `shapes` | Required, 1–2048 placements. Each requires `kind`, `center`, `size`, `color`. |
 | `kind` | `box`, `ramp`, or `cylinder`. A cylinder uses X/Z diameter and Y height; X and Z must match. |

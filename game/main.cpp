@@ -42,13 +42,15 @@ int run(const LaunchOptions &options) {
     ValidationLog validation;
     const bool replaying = !options.replay.empty();
     std::vector<TickInput> replay;
+    std::string replay_level;
     if (replaying) {
-        auto loaded = load_replay(options.replay);
+        auto loaded = load_replay_file(options.replay);
         if (!loaded) {
             log(loaded.error().message);
             return 1;
         }
-        replay = std::move(*loaded);
+        replay = std::move(loaded->ticks);
+        replay_level = std::move(loaded->level);
         if (options.capture_tick && *options.capture_tick > replay.size()) {
             log("Capture tick exceeds the replay length");
             return 1;
@@ -67,6 +69,14 @@ int run(const LaunchOptions &options) {
     const Level level = std::move(*loaded_level);
     log("Level: " + level.name + " (" + std::to_string(level.shapes.size()) + " primitives, " +
         std::to_string(level.checkpoints.size()) + " checkpoints)");
+    if (replaying && !replay_level.empty() && replay_level != level.name) {
+        log("Replay was recorded on level '" + replay_level + "' but '" + level.name +
+            "' is loaded; pass --level with that level's file");
+        return 1;
+    }
+    if (replaying && replay_level.empty())
+        log("Replay predates level names (format 1/2); it assumes the loaded level '" + level.name +
+            "'");
     const LevelGeometry geometry = build_geometry(level);
     Simulation simulation(level, geometry.collision);
     std::vector<TickInput> recording;
@@ -119,16 +129,20 @@ int run(const LaunchOptions &options) {
         while (true) {
             // Replays ignore live look input, so they never grab the cursor.
             const bool capture_mouse = !tuning_open && !options.camera_test && !replaying;
+            // While tuning is open a controller drives the menu, so its gameplay input is
+            // withheld; the keyboard keeps moving the player unless ImGui is taking text.
             const auto input = (*window)->poll_events(
                 [&](const SDL_Event &event) { (*renderer)->process_event(event); },
-                capture_mouse && !(*renderer)->ui_wants_mouse());
+                {.capture_mouse = capture_mouse && !(*renderer)->ui_wants_mouse(),
+                 .gamepad_gameplay = !tuning_open});
+            const bool gameplay_input = input.focused && !(*renderer)->ui_wants_keyboard();
             if (input.quit)
                 break;
             if (input.toggle_overlay)
                 show_overlay = !show_overlay;
             if (input.toggle_tuning)
                 tuning_open = !tuning_open;
-            if (!input.focused || tuning_open)
+            if (!gameplay_input)
                 pending_buttons = 0;
             if (input.toggle_free_camera && !options.camera_test) {
                 use_free_camera = !use_free_camera;
@@ -159,7 +173,7 @@ int run(const LaunchOptions &options) {
             CameraInput camera_input;
             double simulation_elapsed = elapsed;
             TickInput live;
-            if (use_free_camera && !tuning_open) {
+            if (use_free_camera && (gameplay_input || options.camera_test)) {
                 camera_input = input.camera;
                 if (options.camera_test) {
                     simulation_elapsed = 0;
@@ -175,7 +189,7 @@ int run(const LaunchOptions &options) {
                     if (input.reset_pressed)
                         free_camera.reset();
                 }
-            } else if (!replaying && !tuning_open) {
+            } else if (!replaying && gameplay_input) {
                 if (input.recenter_pressed)
                     simulation.camera.set_orientation({simulation.player.current().facing,
                                                        simulation.camera.tuning.default_pitch});
@@ -262,7 +276,7 @@ int run(const LaunchOptions &options) {
             status.day_animating = lighting.cycle.animate;
             status.free_camera = use_free_camera;
             status.gamepad_name = input.gamepad_name;
-            status.jump_label = input.jump_label;
+            status.gamepad_labels = input.gamepad_labels;
             status.input_mode = replaying ? "Replay " + std::to_string(replay_index) + "/" +
                                                 std::to_string(replay.size())
                                 : !options.record.empty() ? "Recording"
@@ -321,7 +335,7 @@ int run(const LaunchOptions &options) {
         log("Replay " + std::string(replay_index >= replay.size() ? "finished" : "stopped") + ": " +
             describe(simulation));
     if (!options.record.empty()) {
-        if (auto saved = save_replay(options.record, recording); !saved) {
+        if (auto saved = save_replay(options.record, recording, level.name); !saved) {
             log(saved.error().message);
             return 1;
         }

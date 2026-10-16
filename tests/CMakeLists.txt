@@ -1,5 +1,5 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
-    movement_tests.cpp move_verbs_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp)
+    movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
@@ -23,7 +23,13 @@ add_test(NAME cli_rejects_unknown_argument COMMAND microjump --not-an-option)
 add_test(NAME cli_rejects_replay_overflow COMMAND microjump --replay "${CMAKE_CURRENT_SOURCE_DIR}/replays/overflow.mjr")
 add_test(NAME cli_rejects_missing_level COMMAND microjump --level "${CMAKE_CURRENT_BINARY_DIR}/no-level.json")
 set_tests_properties(cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level PROPERTIES WILL_FAIL TRUE)
-set_tests_properties(foundation cli_help cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level PROPERTIES
+# A version 3 recording names its level; replaying it on another level stops before any window.
+add_test(NAME cli_rejects_replay_level_mismatch COMMAND microjump
+    --level "${PROJECT_SOURCE_DIR}/assets/levels/movement-yard.json"
+    --replay "${CMAKE_CURRENT_SOURCE_DIR}/replays/m4-momentum-chain.mjr")
+set_tests_properties(cli_rejects_replay_level_mismatch PROPERTIES
+    PASS_REGULAR_EXPRESSION "Replay was recorded on level 'microjump-playground' but 'm2-yard' is loaded")
+set_tests_properties(foundation cli_help cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level cli_rejects_replay_level_mismatch PROPERTIES
     ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
 if(MJ_SMOKE_TESTS)
     add_executable(microjump_gamepad_smoke gamepad_window_tests.cpp "${PROJECT_SOURCE_DIR}/game/debug_ui.cpp")
@@ -75,8 +81,8 @@ if(MJ_SMOKE_TESTS)
     add_test(NAME replay_m4_moves COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>"
         "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/m4-moves-tour.mjr"
-        "-DEXPECTED=Capture state: tick 2808,.*grounded, checkpoint 10"
-        "-DCAPTURE_TICK=2808" "-DCAPTURE_OUT=${captures}/m4-moves.png"
+        "-DEXPECTED=Capture state: tick 2899,.*grounded, checkpoint 10"
+        "-DCAPTURE_TICK=2899" "-DCAPTURE_OUT=${captures}/m4-moves.png"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
     add_test(NAME render_playground COMMAND microjump --capture-tick 60 --capture-out "${captures}/playground.png")
     add_test(NAME playground_pixels COMMAND microjump_capture_check --scene "${captures}/playground.png")

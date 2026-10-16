@@ -730,8 +730,9 @@ std::expected<void, Error> Renderer::Impl::initialize_overlay() {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         imgui_context = true;
-        ImGui::GetIO().ConfigFlags |=
-            ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
+        // Gamepad-only navigation: keyboard players keep WASD/Space for movement while
+        // adjusting the tuning window with the mouse.
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
         ImGui::GetIO().IniFilename = nullptr;
         ImGui::GetIO().LogFilename = nullptr;
         ImGui::StyleColorsDark();
@@ -1227,6 +1228,9 @@ void Renderer::process_event(const SDL_Event &event) {
 }
 bool Renderer::ui_wants_mouse() const {
     return m_impl->imgui_context && ImGui::GetIO().WantCaptureMouse;
+}
+bool Renderer::ui_wants_keyboard() const {
+    return m_impl->imgui_context && ImGui::GetIO().WantCaptureKeyboard;
 }
 std::expected<bool, Error> Renderer::draw(const FrameView &view) {
     return m_impl->draw(view);

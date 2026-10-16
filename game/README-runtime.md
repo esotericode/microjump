@@ -7,13 +7,16 @@ is required. Release builds do not need the Vulkan SDK or development tools.
 - W/A/S/D or left stick: move. Partially tilt the stick to walk, or hold Ctrl / right shoulder.
 - Space or the South face button (A / Cross / B): jump; hold for height. Release and
   press again at a purple wall to kick outward; alternate walls to climb.
-- Shift + Space or left shoulder + jump: long jump while running.
+- Shift + Space or left shoulder + jump: long jump while running. On Windows, pressing
+  Shift five times quickly can open the Sticky Keys prompt. Turn off its keyboard
+  shortcut in Settings > Accessibility > Keyboard if it interrupts play.
 - Mouse or right stick: orbit the camera. Right-stick click: center it behind the player.
 - R, Home or Back / Select / Create: respawn at the last checkpoint pad stood on.
 - F1 or the North face button (Y / Triangle / X): toggle diagnostics.
 - F2 or Start / Options / Menu: open or close live tuning. Use D-pad / left stick to
   navigate, South to select/edit, left/right to adjust a selected slider, and East to
-  back out. Gameplay controls are neutral while tuning is open.
+  back out. While tuning is open the controller only drives the menu; the keyboard
+  still moves and jumps, so you can drag sliders with the mouse while playing.
 - In tuning, Gamepad adjusts move/look dead zones; Camera adjusts stick speeds and
   inverted Y. Tuning values reset on restart.
 - Controllers recognized by SDL connect at startup or during play. Unplugging the
@@ -52,6 +55,11 @@ the marked sprint lane, or south-east for the summit stairs and lighting pavilio
 Checkpoints are teal pads. Street lamps switch on at dusk. The F1 overlay names the
 current region. Purple paired walls east of the plaza lead to 6 m and 8 m finish
 decks with checkpoint pads. Try running long jumps along the sprint lane.
+
+Speed above a normal run is momentum. Long jumps and running downhill build it.
+Jumping again within a moment of landing (the F1 overlay shows "Clean") keeps it.
+Pressing too early, mashing, lingering on the ground, turning sharply or running
+uphill loses it. Chained clean long jumps build up to the speed cap.
 
 Levels are editable JSON files in `assets/levels/`. Use `--level PATH` to select one;
 the default is `playground.json` beside the executable. Old M2/M3 recordings use

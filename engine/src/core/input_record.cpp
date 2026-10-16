@@ -6,10 +6,13 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <utility>
 
 namespace mj {
 namespace {
-constexpr std::string_view k_magic = "microjump-replay 2";
+constexpr std::string_view k_magic = "microjump-replay 3";
+constexpr std::string_view k_level = "level ";
+constexpr std::size_t k_max_level_name = 80;
 constexpr std::string_view k_rate = "tick-rate 120";
 constexpr std::uint64_t k_max_ticks = 120ULL * 60 * 60 * 4; // Four hours.
 constexpr std::size_t k_max_bytes = 64ULL * 1024 * 1024;
@@ -35,14 +38,27 @@ template <typename T> bool parse_field(std::string_view field, T &value) {
     return result.ec == std::errc{} && result.ptr == field.data() + field.size();
 }
 
+bool valid_level_name(std::string_view name) {
+    if (name.empty() || name.size() > k_max_level_name)
+        return false;
+    for (const char c : name) {
+        const auto byte = static_cast<unsigned char>(c);
+        if (byte < 0x20 || byte == 0x7F)
+            return false;
+    }
+    return true;
+}
+
 Error line_error(std::size_t line, std::string_view message) {
     return {"Replay line " + std::to_string(line) + ": " + std::string(message)};
 }
 } // namespace
 
-std::string serialize_replay(std::span<const TickInput> ticks) {
+std::string serialize_replay(std::span<const TickInput> ticks, std::string_view level) {
     std::string out;
     out.append(k_magic).append("\n").append(k_rate).append("\n");
+    if (valid_level_name(level))
+        out.append(k_level).append(level).append("\n");
     out.append("# count move_x move_y camera_yaw camera_pitch buttons\n");
     for (std::size_t i = 0; i < ticks.size();) {
         std::size_t run = 1;
@@ -61,10 +77,13 @@ std::string serialize_replay(std::span<const TickInput> ticks) {
     return out;
 }
 
-std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text) {
-    std::vector<TickInput> ticks;
+std::expected<ReplayFile, Error> parse_replay_file(std::string_view text) {
+    ReplayFile replay;
+    auto &ticks = replay.ticks;
     std::size_t line_number = 0;
     bool header = false;
+    bool versioned_level = false; // Version 3 may name its level once, before any tick.
+    bool level_allowed = false;
     std::uint32_t allowed_buttons = input_button::all;
     bool rate = false;
     while (!text.empty()) {
@@ -77,8 +96,10 @@ std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text)
         if (!header) {
             if (line == "microjump-replay 1")
                 allowed_buttons = input_button::v1;
-            else if (line != k_magic)
-                return std::unexpected(Error{"Not a microjump replay (version 1 or 2)"});
+            else if (line == k_magic)
+                versioned_level = true;
+            else if (line != "microjump-replay 2")
+                return std::unexpected(Error{"Not a microjump replay (version 1, 2 or 3)"});
             header = true;
             continue;
         }
@@ -86,10 +107,20 @@ std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text)
             if (line != k_rate)
                 return std::unexpected(line_error(line_number, "expected 'tick-rate 120'"));
             rate = true;
+            level_allowed = versioned_level;
             continue;
         }
         if (line.empty() || line.front() == '#')
             continue;
+        if (line.starts_with(k_level)) {
+            const auto name = line.substr(k_level.size());
+            if (!level_allowed || !valid_level_name(name))
+                return std::unexpected(line_error(line_number, "unexpected or invalid level"));
+            replay.level = std::string(name);
+            level_allowed = false;
+            continue;
+        }
+        level_allowed = false;
         std::array<std::string_view, 6> fields{};
         std::size_t count = 0;
         while (!line.empty()) {
@@ -125,13 +156,20 @@ std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text)
     }
     if (!rate)
         return std::unexpected(Error{"Replay header is incomplete"});
-    return ticks;
+    return replay;
+}
+
+std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text) {
+    auto replay = parse_replay_file(text);
+    if (!replay)
+        return std::unexpected(replay.error());
+    return std::move(replay->ticks);
 }
 
 std::expected<void, Error> save_replay(const std::filesystem::path &path,
-                                       std::span<const TickInput> ticks) {
+                                       std::span<const TickInput> ticks, std::string_view level) {
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
-    const auto text = serialize_replay(ticks);
+    const auto text = serialize_replay(ticks, level);
     file.write(text.data(), static_cast<std::streamsize>(text.size()));
     file.close();
     if (!file)
@@ -139,7 +177,7 @@ std::expected<void, Error> save_replay(const std::filesystem::path &path,
     return {};
 }
 
-std::expected<std::vector<TickInput>, Error> load_replay(const std::filesystem::path &path) {
+std::expected<ReplayFile, Error> load_replay_file(const std::filesystem::path &path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file)
         return std::unexpected(Error{"Cannot open replay: " + path.string()});
@@ -151,7 +189,14 @@ std::expected<std::vector<TickInput>, Error> load_replay(const std::filesystem::
     file.read(text.data(), size);
     if (!file)
         return std::unexpected(Error{"Cannot read replay: " + path.string()});
-    return parse_replay(text);
+    return parse_replay_file(text);
+}
+
+std::expected<std::vector<TickInput>, Error> load_replay(const std::filesystem::path &path) {
+    auto replay = load_replay_file(path);
+    if (!replay)
+        return std::unexpected(replay.error());
+    return std::move(replay->ticks);
 }
 
 } // namespace mj

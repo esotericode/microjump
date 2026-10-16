@@ -14,6 +14,24 @@ float axis(SDL_Gamepad *gamepad, SDL_GamepadAxis which) {
     return std::clamp(static_cast<float>(SDL_GetGamepadAxis(gamepad, which)) / 32767.0F, -1.0F,
                       1.0F);
 }
+GamepadFamily family(SDL_Gamepad *gamepad) {
+    switch (SDL_GetGamepadType(gamepad)) {
+    case SDL_GAMEPAD_TYPE_XBOX360:
+    case SDL_GAMEPAD_TYPE_XBOXONE:
+        return GamepadFamily::xbox;
+    case SDL_GAMEPAD_TYPE_PS3:
+    case SDL_GAMEPAD_TYPE_PS4:
+    case SDL_GAMEPAD_TYPE_PS5:
+        return GamepadFamily::playstation;
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_PRO:
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_LEFT:
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_RIGHT:
+    case SDL_GAMEPAD_TYPE_NINTENDO_SWITCH_JOYCON_PAIR:
+        return GamepadFamily::nintendo;
+    default:
+        return GamepadFamily::generic;
+    }
+}
 std::string_view jump_label(SDL_Gamepad *gamepad) {
     switch (SDL_GetGamepadButtonLabel(gamepad, SDL_GAMEPAD_BUTTON_SOUTH)) {
     case SDL_GAMEPAD_BUTTON_LABEL_A:
@@ -27,6 +45,22 @@ std::string_view jump_label(SDL_Gamepad *gamepad) {
     }
 }
 } // namespace
+
+GamepadLabels gamepad_labels(GamepadFamily family, std::string_view jump) {
+    GamepadLabels labels;
+    labels.jump = jump;
+    switch (family) {
+    case GamepadFamily::xbox:
+        return {jump, "LB", "RB", "RS (click)", "View", "Menu"};
+    case GamepadFamily::playstation:
+        return {jump, "L1", "R1", "R3", "Share/Create", "Options"};
+    case GamepadFamily::nintendo:
+        return {jump, "L", "R", "R stick (click)", "-", "+"};
+    case GamepadFamily::generic:
+        break;
+    }
+    return labels;
+}
 
 StickReading apply_dead_zone(StickReading raw, float dead_zone) {
     if (!std::isfinite(raw.x) || !std::isfinite(raw.y))
@@ -122,7 +156,7 @@ GamepadFrame Gamepad::sample(const GamepadTuning &tuning, bool focused) {
     state.connected = true;
     const char *name = SDL_GetGamepadName(m_handle);
     state.name = name != nullptr ? name : "Unnamed gamepad";
-    state.jump_label = jump_label(m_handle);
+    state.labels = gamepad_labels(family(m_handle), jump_label(m_handle));
     if (!focused)
         return state;
     state.move = apply_dead_zone(

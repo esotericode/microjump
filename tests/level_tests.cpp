@@ -58,6 +58,7 @@ TEST_CASE("level parsing rejects malformed versions, placement, material and lig
           {"\"version\": 1", "\"version\": 1.5"},
           {"\"name\": \"Test yard\"", "\"name\": null"},
           {"\"name\": \"Test yard\"", "\"name\": \"\""},
+          {"\"name\": \"Test yard\"", "\"name\": \"Two\\nlines\""},
           {"\"name\": \"Test yard\"", "\"name\":\"First\",\"name\":\"Second\""},
           {"\"name\": \"Test yard\"", "\"typo\": \"Test yard\""},
           {"\"kind\":\"box\"", "\"kind\":\"mesh\""},
