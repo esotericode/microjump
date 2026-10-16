@@ -30,6 +30,7 @@ install(FILES "${sdl3_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME SDL3.
 install(FILES "${volk_SOURCE_DIR}/LICENSE.md" DESTINATION licenses RENAME volk.txt COMPONENT Runtime)
 install(FILES "${imgui_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses RENAME imgui.txt COMPONENT Runtime)
 install(FILES "${stb_SOURCE_DIR}/LICENSE" DESTINATION licenses RENAME stb.txt COMPONENT Runtime)
+install(FILES "${nlohmann_json_SOURCE_DIR}/LICENSE.MIT" DESTINATION licenses RENAME nlohmann-json.txt COMPONENT Runtime)
 if(MJ_BUILD_TESTS)
     install(FILES "${doctest_SOURCE_DIR}/LICENSE.txt" DESTINATION licenses
             RENAME doctest.txt COMPONENT Runtime)

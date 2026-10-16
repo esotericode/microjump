@@ -24,6 +24,7 @@ struct LaunchOptions {
     std::filesystem::path capture_out;
     std::filesystem::path record;
     std::filesystem::path replay;
+    std::filesystem::path level; // Empty uses assets/levels/playground.json beside the executable.
     std::optional<float> time_of_day; // Hours, 0..24.
     std::optional<ShadowQuality> shadow_quality;
 };

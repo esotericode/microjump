@@ -20,10 +20,14 @@ M3 adds real-time lighting:
 - a lighting pavilion with material samples and orbiting colored lights, plus street lamps
   that switch on at dusk
 
-Details: [M3 notes](docs/m3-lighting.md). The full JSON playground with wall jumps (M4)
-and display settings (M5) come later.
+Details: [M3 notes](docs/m3-lighting.md). M4 now starts with a **230 m JSON playground**:
+40 raised route platforms, an extended sprint lane, a summit stair/ramp course,
+10 checkpoints and seven named regions. The original yard remains available as a
+separate level for regression replays. [M4 notes](docs/m4-playground.md) and the
+[level format](docs/level-format.md) describe editing and routes. Wall jumps and the
+momentum move remain the next M4 slice; display settings are M5.
 
-![M3 lighting pavilion at night](docs/captures/m3-pavilion-night-b.png)
+![New platform routes from the finish deck](docs/captures/m4-field.png)
 
 ## Linux
 
@@ -52,8 +56,8 @@ tools/local-env.sh ctest --preset linux-debug
 tools/local-env.sh ./build/linux-debug/game/microjump
 ```
 
-The wrapper provides local tool/library paths and a documented Fontconfig-only LSan
-suppression for the system Wayland GTK decoration plugin. All other leak checks stay
+The wrapper provides local tool/library paths and scoped Fontconfig / libdecor GTK LSan
+suppressions for the system Wayland decoration plugin. All other leak checks stay
 active. Sanitized builds link SDL's X11 backend directly so Xlib cache roots remain
 visible to LSan. See [M0 evidence](docs/m0-evidence.md) and [M1 evidence](docs/m1-evidence.md).
 
@@ -72,7 +76,7 @@ visible to LSan. See [M0 evidence](docs/m0-evidence.md) and [M1 evidence](docs/m
 | Escape / close | — | Exit |
 
 The overlay shows FPS/frame time, pixel resolution, effective VSync and cap state, plus
-movement state, speed, position, ground angle and checkpoint. VSync is FIFO with no
+movement state, speed, position, ground angle, checkpoint, loaded level and region. VSync is FIFO with no
 application FPS cap for now; display-setting controls and persistence are M5. The
 simulation runs at a fixed 120 Hz with interpolated rendering, so render rate never
 changes movement.
@@ -83,9 +87,13 @@ changes movement.
 # Record every simulation tick's input on exit, then replay it (exits when it ends).
 ./build/linux-debug/game/microjump --record captures/run.mjr
 ./build/linux-debug/game/microjump --replay captures/run.mjr
+# Load an authored level; old M2/M3 recordings use the original yard.
+./build/linux-debug/game/microjump --level assets/levels/movement-yard.json \
+    --replay tests/replays/m2-input-smoke.mjr
 # Lighting: start time (hours) and sun shadow preset; clean or tick-timed captures.
 ./build/linux-debug/game/microjump --time-of-day 21 --shadow-quality high
-./build/linux-debug/game/microjump --replay tests/replays/m3-pavilion-tour.mjr --time-of-day 22 \
+./build/linux-debug/game/microjump --level assets/levels/movement-yard.json \
+    --replay tests/replays/m3-pavilion-tour.mjr --time-of-day 22 \
     --hide-overlay --capture-tick 1380 --capture-out captures/pavilion.png
 # Correctness fixtures: camera movement and two live resizes before capture.
 ./build/linux-debug/game/microjump --camera-test --capture-frame 36 --capture-out captures/camera.png
@@ -96,7 +104,8 @@ Frame numbers are one-based rendered frames. `--capture-frame` saves that frame 
 exits; use it with `--capture-out`. PNGs come from the GPU color target after scene
 and overlay drawing, before the same image is blitted to the presentation surface.
 They use actual pixels, so a high-DPI display can produce a larger PNG than the
-logical window size. `--smoke-test` renders 12 frames and exits. Unknown/invalid
+logical window size. `--capture-tick` captures the exact simulation state with interpolation
+disabled, so it is reproducible across render cadences. `--smoke-test` renders 12 frames and exits. Unknown/invalid
 arguments fail explicitly. Asset/shader paths resolve relative to the executable.
 
 ## Windows
@@ -112,7 +121,7 @@ build\windows-debug\game\microjump.exe --capture-frame 12 --capture-out frame.pn
 ```
 
 CI builds MSVC Debug/Release and uploads a Windows Release zip: executable, compiled
-`shaders/`, SDL3, redistributable MSVC runtime DLLs and license notices. Extract the
+`shaders/`, JSON levels in `assets/levels/`, SDL3, redistributable MSVC runtime DLLs and license notices. Extract the
 entire zip and run `microjump.exe`. A Vulkan 1.3 GPU driver is required; Release does
 not need an installed SDK. Hosted Windows CI has no suitable GPU, so hardware rendering
 and controls on the owner's PC remain a separate acceptance check linked from the PR.
@@ -124,7 +133,8 @@ movement behavior (jump apex, acceleration, skid, coyote time, buffering, stairs
 respawn, camera obstruction), bit-identical simulation at different render cadences,
 the replay format and a committed real-input replay. It also covers the lighting math:
 inverse, look-at, orthographic projection, texel-snapped shadow fitting, day/night
-continuity, and light fixtures. With `MJ_SMOKE_TESTS=ON` it adds GPU
+continuity, and light fixtures. Level tests check schema validation, the legacy recording,
+every playground checkpoint, the extended lane and summit stairs. With `MJ_SMOKE_TESTS=ON` it adds GPU
 render/camera/resize/replay captures and day/night/pavilion lighting captures, all with
 decoded pixel checks. CI uploads those
 captures and runtime zips. No benchmarks or FPS targets.

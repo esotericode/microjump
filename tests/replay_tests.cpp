@@ -71,4 +71,7 @@ TEST_CASE("record and replay command line options are validated") {
     CHECK_FALSE(parse({"--record", "a.mjr", "--replay", "b.mjr"}));
     CHECK_FALSE(parse({"--replay", "a.mjr", "--replay", "b.mjr"}));
     CHECK_FALSE(parse({"--camera-test", "--replay", "a.mjr"}));
+    CHECK(parse({"--level", "yard.json"})->level == "yard.json");
+    CHECK_FALSE(parse({"--level"}));
+    CHECK_FALSE(parse({"--level", "a.json", "--level", "b.json"}));
 }

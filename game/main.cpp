@@ -1,5 +1,6 @@
 #include "debug_ui.hpp"
 #include "level.hpp"
+#include "level_io.hpp"
 #include "simulation.hpp"
 
 #include <mj/core/fixed_step.hpp>
@@ -55,7 +56,17 @@ int run(const LaunchOptions &options) {
         log("Replaying " + std::to_string(replay.size()) + " ticks from " +
             options.replay.string());
     }
-    const Level level = make_movement_yard();
+    const auto level_path = options.level.empty()
+                                ? Window::executable_directory() / "assets/levels/playground.json"
+                                : options.level;
+    auto loaded_level = load_level(level_path);
+    if (!loaded_level) {
+        log(loaded_level.error().message);
+        return 1;
+    }
+    const Level level = std::move(*loaded_level);
+    log("Level: " + level.name + " (" + std::to_string(level.shapes.size()) + " primitives, " +
+        std::to_string(level.checkpoints.size()) + " checkpoints)");
     const LevelGeometry geometry = build_geometry(level);
     Simulation simulation(level, geometry.collision);
     std::vector<TickInput> recording;
@@ -101,7 +112,8 @@ int run(const LaunchOptions &options) {
         if (options.shadow_quality)
             lighting.shadows.quality = *options.shadow_quality;
         std::vector<DrawInstance> instances;
-        log("M3 ready: WASD move, Space jump, mouse look, R respawn, F1 overlay, F2 tuning, "
+        log("M4 playground ready: WASD move, Space jump, mouse look, R respawn, F1 overlay, F2 "
+            "tuning, "
             "F3 free camera.");
         while (true) {
             // Replays ignore live look input, so they never grab the cursor.
@@ -234,6 +246,8 @@ int run(const LaunchOptions &options) {
                 }
             }
             status.hours = lighting.cycle.hours;
+            status.level = level.name;
+            status.zone = zone_at(level, pose.position);
             status.day_animating = lighting.cycle.animate;
             status.free_camera = use_free_camera;
             status.gamepad = input.gamepad_connected;
@@ -325,10 +339,11 @@ int main(int argc, char *argv[]) {
                 "  --smoke-test  Render 12 frames and exit.\n"
                 "  --record PATH  Save every simulation tick's input on exit.\n"
                 "  --replay PATH  Play recorded input instead of live input, then exit.\n"
+                "  --level PATH  Load a version-1 JSON level; default is the packaged playground.\n"
                 "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
                 "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
                 "  --hide-overlay  Start with the F1 overlay hidden (clean captures).\n"
-                "  --capture-tick N  Capture the first frame after simulation tick N.\n"
+                "  --capture-tick N  Capture the exact state at simulation tick N.\n"
                 "  --resize-test / --camera-test  Scripted render correctness checks.\n"
                 "  Debug builds require Vulkan validation layers.\n"
                 "  WASD move, Space jump, Ctrl walk, mouse look, R respawn, F1 overlay,\n"

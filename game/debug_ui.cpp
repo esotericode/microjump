@@ -7,6 +7,8 @@ namespace mj::game {
 void movement_overlay(const Simulation &simulation, const SessionStatus &status) {
     const auto &s = simulation.player.current();
     const float speed = length(horizontal(s.velocity));
+    ImGui::Text("Level: %s  |  %.*s", status.level.c_str(), static_cast<int>(status.zone.size()),
+                status.zone.data());
     ImGui::Text("State: %-5s  %s", to_string(s.state), s.grounded ? "grounded" : "airborne");
     ImGui::Text("Speed %.2f m/s   Vy %+.2f m/s", static_cast<double>(speed),
                 static_cast<double>(s.velocity.y));
