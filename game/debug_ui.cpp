@@ -20,9 +20,14 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
     ImGui::Text("Input: %s", status.input_mode.c_str());
     if (!status.gamepad_name.empty()) {
         ImGui::Text("Gamepad: %s", status.gamepad_name.c_str());
-        ImGui::Text("%.*s jump  |  LB + jump: long jump  |  RB walk",
-                    static_cast<int>(status.jump_label.size()), status.jump_label.data());
-        ImGui::TextUnformatted("R3 center camera  |  Back respawn  |  Start tuning");
+        const auto &b = status.gamepad_labels;
+        const std::string actions = std::string(b.jump) + " jump  |  " + std::string(b.long_jump) +
+                                    " + jump: long jump  |  " + std::string(b.walk) + " walk";
+        const std::string menus = std::string(b.recenter) + ": center camera  |  " +
+                                  std::string(b.respawn) + " respawn  |  " + std::string(b.menu) +
+                                  " tuning";
+        ImGui::TextUnformatted(actions.c_str());
+        ImGui::TextUnformatted(menus.c_str());
     }
     const int minutes = static_cast<int>(status.hours * 60) % (24 * 60);
     ImGui::Text("Time %02d:%02d %s", minutes / 60, minutes % 60,

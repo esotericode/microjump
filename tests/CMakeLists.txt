@@ -23,7 +23,13 @@ add_test(NAME cli_rejects_unknown_argument COMMAND microjump --not-an-option)
 add_test(NAME cli_rejects_replay_overflow COMMAND microjump --replay "${CMAKE_CURRENT_SOURCE_DIR}/replays/overflow.mjr")
 add_test(NAME cli_rejects_missing_level COMMAND microjump --level "${CMAKE_CURRENT_BINARY_DIR}/no-level.json")
 set_tests_properties(cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level PROPERTIES WILL_FAIL TRUE)
-set_tests_properties(foundation cli_help cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level PROPERTIES
+# A version 3 recording names its level; replaying it on another level stops before any window.
+add_test(NAME cli_rejects_replay_level_mismatch COMMAND microjump
+    --level "${PROJECT_SOURCE_DIR}/assets/levels/movement-yard.json"
+    --replay "${CMAKE_CURRENT_SOURCE_DIR}/replays/m4-momentum-chain.mjr")
+set_tests_properties(cli_rejects_replay_level_mismatch PROPERTIES
+    PASS_REGULAR_EXPRESSION "Replay was recorded on level 'microjump-playground' but 'm2-yard' is loaded")
+set_tests_properties(foundation cli_help cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level cli_rejects_replay_level_mismatch PROPERTIES
     ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
 if(MJ_SMOKE_TESTS)
     add_executable(microjump_gamepad_smoke gamepad_window_tests.cpp "${PROJECT_SOURCE_DIR}/game/debug_ui.cpp")

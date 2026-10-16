@@ -36,7 +36,7 @@ SDL_Window *Window::native_handle() const {
 }
 
 InputState Window::poll_events(const std::function<void(const SDL_Event &)> &handler,
-                               bool capture_mouse) {
+                               PollOptions options) {
     SDL_Event event;
     InputState input;
     while (SDL_PollEvent(&event)) {
@@ -59,7 +59,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     const auto flags = SDL_GetWindowFlags(m_window);
     const bool focused =
         (flags & SDL_WINDOW_INPUT_FOCUS) != 0 && (flags & SDL_WINDOW_MINIMIZED) == 0;
-    const bool capture = focused && capture_mouse;
+    const bool capture = focused && options.capture_mouse;
     const bool changed = capture != m_mouse_captured;
     if (changed) {
         if (!SDL_SetWindowRelativeMouseMode(m_window, capture)) {
@@ -83,7 +83,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     input.focused = focused;
     input.gamepad_connected = pad.connected;
     input.gamepad_name = pad.name;
-    input.jump_label = pad.jump_label;
+    input.gamepad_labels = pad.labels;
     if (!focused) {
         // Ignore gameplay and UI press edges received while the window is inactive.
         const bool quit = input.quit;
@@ -91,7 +91,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
         input.quit = quit;
         input.gamepad_connected = pad.connected;
         input.gamepad_name = pad.name;
-        input.jump_label = pad.jump_label;
+        input.gamepad_labels = pad.labels;
         return input;
     }
     const bool *keys = SDL_GetKeyboardState(nullptr);
@@ -110,6 +110,10 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
         input.move_x = right / keyboard_length;
         input.move_y = forward / keyboard_length;
     }
+    input.toggle_tuning = input.toggle_tuning || pad.toggle_tuning;
+    input.toggle_overlay = input.toggle_overlay || pad.toggle_overlay;
+    if (!options.gamepad_gameplay)
+        return input;
     if (pad.move.x * pad.move.x + pad.move.y * pad.move.y >
         input.move_x * input.move_x + input.move_y * input.move_y) {
         input.move_x = pad.move.x;
@@ -123,8 +127,6 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     input.walk_held = input.walk_held || pad.walk_held;
     input.reset_pressed = input.reset_pressed || pad.reset_pressed;
     input.recenter_pressed = pad.recenter_pressed;
-    input.toggle_tuning = input.toggle_tuning || pad.toggle_tuning;
-    input.toggle_overlay = input.toggle_overlay || pad.toggle_overlay;
     return input;
 }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -13,6 +14,19 @@ struct StickReading {
 };
 // Radial dead zone, rescaled to full tilt. Invalid tuning safely uses the default.
 [[nodiscard]] StickReading apply_dead_zone(StickReading raw, float dead_zone);
+// Button names for on-screen prompts, by controller family. `jump` comes from SDL's
+// face-button label (A, B or Cross) when known.
+enum class GamepadFamily : std::uint8_t { generic, xbox, playstation, nintendo };
+struct GamepadLabels {
+    std::string_view jump = "South";
+    std::string_view long_jump = "Left shoulder";
+    std::string_view walk = "Right shoulder";
+    std::string_view recenter = "Right stick";
+    std::string_view respawn = "Back";
+    std::string_view menu = "Start";
+};
+[[nodiscard]] GamepadLabels gamepad_labels(GamepadFamily family, std::string_view jump);
+
 struct GamepadTuning {
     float move_dead_zone = 0.18F;
     float look_dead_zone = 0.18F;
@@ -30,7 +44,7 @@ struct GamepadFrame {
     bool toggle_tuning = false;
     bool toggle_overlay = false;
     std::string name;
-    std::string_view jump_label = "South";
+    GamepadLabels labels;
 };
 // One active SDL gamepad. SDL must outlive this owner; no video/window is required.
 // Existing devices work at startup; disconnect hands off to another connected pad.

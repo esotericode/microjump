@@ -42,7 +42,14 @@ struct InputState {
     bool recenter_pressed = false;
     bool gamepad_connected = false;
     std::string gamepad_name;
-    std::string_view jump_label = "South";
+    GamepadLabels gamepad_labels;
+};
+
+struct PollOptions {
+    bool capture_mouse = false; // Relative mouse look while the window is focused.
+    // false while a controller drives a menu: the pad still reports its connection and the
+    // menu/overlay toggles, but no movement, camera or jump input.
+    bool gamepad_gameplay = true;
 };
 
 // Owns SDL video initialization and the window. Vulkan resources must die first.
@@ -55,9 +62,8 @@ class Window {
     Window &operator=(const Window &) = delete;
 
     [[nodiscard]] SDL_Window *native_handle() const;
-    // Captures the mouse for looking while the window is focused and `capture_mouse` is set.
     [[nodiscard]] InputState poll_events(const std::function<void(const SDL_Event &)> &handler,
-                                         bool capture_mouse);
+                                         PollOptions options);
     [[nodiscard]] PixelSize pixel_size() const;
     [[nodiscard]] std::expected<void, Error> resize(int width, int height);
     [[nodiscard]] static std::filesystem::path executable_directory();

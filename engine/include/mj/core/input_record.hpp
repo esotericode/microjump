@@ -35,11 +35,22 @@ struct TickInput {
     }
 };
 
+// A recording plus the name of the level it was made on (version 3; empty for older files).
+struct ReplayFile {
+    std::string level;
+    std::vector<TickInput> ticks;
+};
+
 // Versioned, line-based text format with run-length encoding and exact float round trips.
-[[nodiscard]] std::string serialize_replay(std::span<const TickInput> ticks);
+// A level name that is empty or contains control characters is not written.
+[[nodiscard]] std::string serialize_replay(std::span<const TickInput> ticks,
+                                           std::string_view level = {});
+[[nodiscard]] std::expected<ReplayFile, Error> parse_replay_file(std::string_view text);
 [[nodiscard]] std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text);
 [[nodiscard]] std::expected<void, Error> save_replay(const std::filesystem::path &path,
-                                                     std::span<const TickInput> ticks);
+                                                     std::span<const TickInput> ticks,
+                                                     std::string_view level = {});
+[[nodiscard]] std::expected<ReplayFile, Error> load_replay_file(const std::filesystem::path &path);
 [[nodiscard]] std::expected<std::vector<TickInput>, Error>
 load_replay(const std::filesystem::path &path);
 

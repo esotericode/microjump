@@ -12,7 +12,7 @@ namespace mj::game {
 struct SessionStatus {
     bool free_camera = false;
     std::string gamepad_name;
-    std::string_view jump_label = "South";
+    GamepadLabels gamepad_labels;
     std::string input_mode; // "Live", "Recording: path" or "Replay: n/m".
     std::string level;
     std::string_view zone;

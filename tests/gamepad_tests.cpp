@@ -165,6 +165,23 @@ TEST_CASE("SDL gamepad switches to an already connected backup when the active p
     CHECK_FALSE(state.jump_pressed); // An old backup press is not a fresh jump.
 }
 
+TEST_CASE("prompts name controller buttons by family") {
+    const auto xbox = mj::gamepad_labels(mj::GamepadFamily::xbox, "A");
+    CHECK(xbox.jump == "A");
+    CHECK(xbox.long_jump == "LB");
+    CHECK(xbox.recenter == "RS (click)");
+    const auto playstation = mj::gamepad_labels(mj::GamepadFamily::playstation, "Cross");
+    CHECK(playstation.long_jump == "L1");
+    CHECK(playstation.walk == "R1");
+    CHECK(playstation.menu == "Options");
+    const auto nintendo = mj::gamepad_labels(mj::GamepadFamily::nintendo, "B");
+    CHECK(nintendo.long_jump == "L");
+    CHECK(nintendo.menu == "+");
+    const auto generic = mj::gamepad_labels(mj::GamepadFamily::generic, "South");
+    CHECK(generic.long_jump == "Left shoulder");
+    CHECK(generic.respawn == "Back");
+}
+
 TEST_CASE("radial stick tuning remains finite at invalid and extreme values") {
     const float nan = std::numeric_limits<float>::quiet_NaN();
     for (const float dead_zone : {-2.0F, 0.0F, 0.18F, 0.95F, 1.0F, 2.0F, nan}) {

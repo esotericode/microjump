@@ -53,6 +53,11 @@ the press edge, including a complete Shift+Space tap between simulation ticks.
 Old executables do not support version 2. Recordings still require matching level
 and tuning, and exact float equality is a same-build guarantee.
 
+**Version 3 (2026-10-16)** adds an optional `level <name>` line after `tick-rate`,
+written by every new recording. The game refuses to replay a named recording on a
+differently named level. Recordings from versions 1 and 2 have no name, so they
+still load, with a note that they assume the loaded level.
+
 ## Verification
 
 `tests/replays/m4-moves-tour.mjr` is a **scripted** continuous route, generated from
