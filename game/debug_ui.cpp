@@ -16,6 +16,9 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
     ImGui::Text("Ground %.0f deg   Checkpoint %zu   Respawns %u", static_cast<double>(slope),
                 simulation.active_checkpoint(), simulation.respawns());
     ImGui::Text("Input: %s%s", status.input_mode.c_str(), status.gamepad ? "   |   Gamepad" : "");
+    const int minutes = static_cast<int>(status.hours * 60) % (24 * 60);
+    ImGui::Text("Time %02d:%02d %s", minutes / 60, minutes % 60,
+                status.day_animating ? "(day/night running)" : "(paused, F2 > Lighting)");
     ImGui::Separator();
     if (status.free_camera) {
         ImGui::TextUnformatted("FREE CAMERA  WASD/QE fly  Shift fast  Home reset");
@@ -33,20 +36,47 @@ void slider(const char *label, float &value, float low, float high, const char *
 void angle_slider(const char *label, float &radians, float low_degrees, float high_degrees) {
     ImGui::SliderAngle(label, &radians, low_degrees, high_degrees);
 }
+
+void lighting_section(LightingControls &lighting) {
+    if (!ImGui::CollapsingHeader("Lighting", ImGuiTreeNodeFlags_DefaultOpen))
+        return;
+    auto &cycle = lighting.cycle;
+    slider("Time of day (h)", cycle.hours, 0, 24, "%.2f");
+    ImGui::Checkbox("Animate day/night", &cycle.animate);
+    slider("Day length (s)", cycle.day_seconds, 20, 900, "%.0f");
+    slider("Exposure scale", cycle.exposure_scale, 0.25F, 4);
+    int quality = static_cast<int>(lighting.shadows.quality);
+    if (ImGui::Combo("Shadow quality", &quality, "Low\0Medium\0High\0"))
+        lighting.shadows.quality = static_cast<ShadowQuality>(quality);
+    slider("Depth bias", lighting.shadows.constant_bias, 0, 16);
+    slider("Slope bias", lighting.shadows.slope_bias, 0, 8);
+    slider("Normal offset (texels)", lighting.shadows.normal_offset, 0, 6);
+    ImGui::Checkbox("Local lights", &lighting.local_lights);
+    ImGui::SameLine();
+    ImGui::Checkbox("Bulbs", &lighting.bulbs);
+    ImGui::Checkbox("Contact (blob) shadow", &lighting.blob);
+    slider("Blob strength", lighting.blob_strength, 0, 1);
+    if (ImGui::Button("Reset lighting")) {
+        const float hours = lighting.cycle.hours;
+        lighting = {};
+        lighting.cycle.hours = hours;
+    }
+}
 } // namespace
 
-void tuning_window(Simulation &simulation, bool &open) {
+void tuning_window(Simulation &simulation, LightingControls &lighting, bool &open) {
     if (!open)
         return;
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 420, 18), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(400, 620), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Movement tuning", &open)) {
+    if (!ImGui::Begin("Tuning", &open)) {
         ImGui::End();
         return;
     }
     auto &t = simulation.player.tuning;
     auto &c = simulation.camera.tuning;
     ImGui::TextWrapped("Edits apply from the next tick. Replays assume default tuning.");
+    lighting_section(lighting);
     if (ImGui::Button("Reset movement"))
         t = {};
     ImGui::SameLine();

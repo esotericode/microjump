@@ -7,6 +7,7 @@ add_library(microjump_engine STATIC
     src/core/png.cpp
     src/platform/window.cpp
     src/scene/mesh.cpp
+    src/render/lighting.cpp
     src/render/renderer.cpp
     src/render/vulkan_context.cpp)
 add_library(mj::engine ALIAS microjump_engine)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mj/core/error.hpp>
+#include <mj/render/lighting.hpp>
 #include <mj/scene/debug_camera.hpp>
 #include <mj/scene/mesh.hpp>
 
@@ -26,18 +27,26 @@ struct DrawInstance {
     Mat4 model;                 // Rigid transform (rotation + translation only).
     float grid = 0;             // Strength of the 1 m world-space grid lines (0..1).
     bool receives_blob = false; // Darkened by the blob shadow below the caster.
+    bool casts_shadow = true;
+    Vec3 tint{1, 1, 1}; // Multiplies the vertex albedo.
+    float emissive = 0; // Adds albedo * tint * emissive, unlit (light bulbs).
 };
 
-// A soft contact shadow under the player. Placeholder depth cue until the M3 shadow maps.
+// A soft contact shadow directly under the player: a platforming cue that stays useful when
+// the sun's shadow falls sideways or the player is in shade.
 struct BlobShadow {
     Vec3 caster;      // Feet position of the caster.
     float radius = 0; // Zero disables it.
+    float strength = 0.35F;
 };
 
 struct FrameView {
     CameraPose camera;
     std::span<const DrawInstance> instances;
     BlobShadow blob;
+    Environment environment;
+    std::span<const LocalLight> lights; // At most k_max_local_lights are used.
+    ShadowSettings shadows;
     double elapsed = 0; // Real seconds since the previous frame, for the FPS readout.
     bool overlay = true;
     // Extra lines inside the diagnostics overlay, then free-standing debug windows (ImGui).

@@ -8,10 +8,22 @@ variable height, coyote time and buffering, and steers in the air. It moves thro
 graybox test yard (slopes, stairs, steps, platforms, walls) with an engine-owned
 collide-and-slide controller. A third-person camera orbits with obstruction handling.
 Input can be recorded and replayed deterministically, and every movement and camera value
-is tunable live. Dynamic shadows (M3), the full JSON playground with wall jumps (M4) and
-display settings (M5) come later. Details and evidence: [M2 notes](docs/m2-movement.md).
+is tunable live ([M2 notes](docs/m2-movement.md)).
 
-![M2 movement yard, mid-jump](docs/captures/m2-jump.png)
+M3 adds real-time lighting:
+
+- an HDR forward renderer with tone mapping
+- a dynamic sun shadow map with Low/Medium/High quality
+- up to 16 moving point and spot lights
+- roughness/metallic materials
+- a sky, and a day/night cycle where the moon takes over at night
+- a lighting pavilion with material samples and orbiting colored lights, plus street lamps
+  that switch on at dusk
+
+Details: [M3 notes](docs/m3-lighting.md). The full JSON playground with wall jumps (M4)
+and display settings (M5) come later.
+
+![M3 lighting pavilion at night](docs/captures/m3-pavilion-night-b.png)
 
 ## Linux
 
@@ -55,7 +67,7 @@ visible to LSan. See [M0 evidence](docs/m0-evidence.md) and [M1 evidence](docs/m
 | Mouse | Right stick | Orbit the camera (mouse is captured while focused) |
 | R / Home | Back | Respawn at the last checkpoint |
 | F1 | — | Toggle the diagnostics/movement overlay |
-| F2 | Start | Movement and camera tuning window (frees the mouse) |
+| F2 | Start | Tuning window: lighting (time of day, day/night, shadow quality, biases), movement, camera (frees the mouse) |
 | F3 | — | Free-flight camera (WASD/QE, Shift fast, Home reset) |
 | Escape / close | — | Exit |
 
@@ -71,6 +83,10 @@ changes movement.
 # Record every simulation tick's input on exit, then replay it (exits when it ends).
 ./build/linux-debug/game/microjump --record captures/run.mjr
 ./build/linux-debug/game/microjump --replay captures/run.mjr
+# Lighting: start time (hours) and sun shadow preset; clean or tick-timed captures.
+./build/linux-debug/game/microjump --time-of-day 21 --shadow-quality high
+./build/linux-debug/game/microjump --replay tests/replays/m3-pavilion-tour.mjr --time-of-day 22 \
+    --hide-overlay --capture-tick 1380 --capture-out captures/pavilion.png
 # Correctness fixtures: camera movement and two live resizes before capture.
 ./build/linux-debug/game/microjump --camera-test --capture-frame 36 --capture-out captures/camera.png
 ./build/linux-debug/game/microjump --resize-test --capture-frame 16 --capture-out captures/resized.png
@@ -106,8 +122,11 @@ and controls on the owner's PC remain a separate acceptance check linked from th
 CTest covers math/mesh/CLI correctness, collision queries and the character mover,
 movement behavior (jump apex, acceleration, skid, coyote time, buffering, stairs, slopes,
 respawn, camera obstruction), bit-identical simulation at different render cadences,
-the replay format and a committed real-input replay. With `MJ_SMOKE_TESTS=ON` it adds
-GPU render/camera/resize/replay captures and decoded pixel checks. CI uploads those
+the replay format and a committed real-input replay. It also covers the lighting math:
+inverse, look-at, orthographic projection, texel-snapped shadow fitting, day/night
+continuity, and light fixtures. With `MJ_SMOKE_TESTS=ON` it adds GPU
+render/camera/resize/replay captures and day/night/pavilion lighting captures, all with
+decoded pixel checks. CI uploads those
 captures and runtime zips. No benchmarks or FPS targets.
 
 ```sh

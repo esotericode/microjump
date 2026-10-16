@@ -63,6 +63,7 @@ class Window {
     SDL_Gamepad *m_gamepad = nullptr;
     bool m_sdl_initialized = false;
     bool m_mouse_captured = false;
+    std::uint64_t m_capture_started_ns = 0;
 };
 
 // Radial dead zone with rescaling, so small stick drift is ignored and full tilt reaches 1.
