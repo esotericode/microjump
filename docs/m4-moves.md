@@ -11,10 +11,12 @@ east of the plaza now have 6 m and 8 m finish decks with checkpoint pads. Ground
 bypasses still connect the courses; R / gamepad Back returns to the active pad.
 
 For a **long jump**, run first, hold Shift / gamepad left shoulder, and press
-jump. Below the speed threshold it produces an ordinary jump. Holding jump
-preserves height; releasing cuts the ascent. Long jumps travel farther with a
-lower arc, keep horizontal momentum on landing, and cannot multiply speed
-through repeated immediate takeoffs. Airborne modifier presses grant no boost.
+jump. Below the speed threshold it produces an ordinary jump. Long jumps travel
+farther with a lower, fixed arc and keep horizontal momentum on landing. Airborne
+modifier presses grant no boost. **Update 2026-10-16:** long jumps and wall kicks
+no longer shorten when jump is released, and chaining and keeping speed follow the
+[momentum model](movement-momentum.md): clean chains build speed up to a cap, and
+sloppy timing loses it.
 
 ## Implementation and tuning
 
@@ -62,8 +64,12 @@ three wall kicks, lands on the finish deck and activates checkpoint 10:
 tick 2808, feet (64.4703598, 6.06500101, -57.9915848), state Run, grounded, checkpoint 10
 ```
 
+The momentum update regenerated this route (see [movement-momentum.md](movement-momentum.md)).
+It now finishes at tick 2899, `feet (64.4703598, 6.0650005, -57.9959755)`, checkpoint 10.
+The captures below were taken with the earlier route.
+
 The integration test runs that recording through the full rendered game, captures
-tick 2808 and requires the expected checkpoint, a clean exit and zero Vulkan
+the final tick and requires the expected checkpoint, a clean exit and zero Vulkan
 validation errors. A focused simulation fixture also climbs the taller pair and
 lands on its 8 m exit. Every checkpoint is checked for safe settling/activation.
 

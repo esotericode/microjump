@@ -27,6 +27,9 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
     const int minutes = static_cast<int>(status.hours * 60) % (24 * 60);
     ImGui::Text("Time %02d:%02d %s", minutes / 60, minutes % 60,
                 status.day_animating ? "(day/night running)" : "(paused, F2 > Lighting)");
+    const float momentum = std::max(speed - simulation.player.tuning.run_speed, 0.0F);
+    ImGui::Text("Momentum %+.1f m/s   Last hop: %s", static_cast<double>(momentum),
+                to_string(s.last_hop));
     ImGui::Text("Wall kick window: %s",
                 s.wall_timer > 0 && (!s.wall_used || dot(s.wall_normal, s.last_kick_normal) <= 0.5F)
                     ? "ready"
@@ -125,9 +128,20 @@ void tuning_window(Simulation &simulation, LightingControls &lighting, GamepadTu
         ImGui::Text("Derived: gravity %.1f m/s^2, launch %.2f m/s",
                     static_cast<double>(t.gravity()), static_cast<double>(t.jump_velocity()));
     }
+    if (ImGui::CollapsingHeader("Momentum", ImGuiTreeNodeFlags_DefaultOpen)) {
+        slider("Max speed", t.max_speed, 5, 40);
+        slider("Hop window", t.hop_window, 0, 0.2F, "%.3f s");
+        slider("Early hop keeps", t.early_hop_retention, 0, 1);
+        slider("Ground friction", t.overspeed_friction, 0, 60);
+        slider("Slope momentum", t.slope_momentum, 0, 2);
+        slider("Air drag", t.air_drag, 0, 10);
+        ImGui::TextUnformatted("Momentum = speed above run speed. Clean hop: jump within the");
+        ImGui::TextUnformatted("hop window of landing. Long jumps and downhill running build it.");
+    }
     if (ImGui::CollapsingHeader("Wall / long jump", ImGuiTreeNodeFlags_DefaultOpen)) {
         slider("Long jump min speed", t.long_jump_min_speed, 0, 15);
         slider("Long jump speed x", t.long_jump_speed_scale, 1, 3);
+        slider("Long jump chain boost", t.long_jump_chain_boost, 0, 8);
         slider("Long jump up speed", t.long_jump_up_speed, 2, 16);
         slider("Wall kick speed", t.wall_jump_speed, 2, 16);
         slider("Wall kick up speed", t.wall_jump_up_speed, 2, 18);

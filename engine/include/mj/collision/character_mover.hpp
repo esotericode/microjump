@@ -22,6 +22,7 @@ struct MoveResult {
     Vec3 base;
     bool grounded = false;
     Vec3 ground_normal{0, 1, 0};
+    Vec3 ground_face_normal{0, 1, 0}; // Triangle normal; edge contacts tilt ground_normal.
     bool hit_wall = false;
     Vec3 wall_normal;
     Vec3 jump_wall_normal; // Nonzero only for a designated, near-vertical face contact.

@@ -3,12 +3,17 @@
 #include <mj/collision/character_mover.hpp>
 #include <mj/core/input_record.hpp>
 
+#include <algorithm>
 #include <cstdint>
 
 namespace mj::game {
 
 enum class MoveState : std::uint8_t { idle, run, skid, jump, wall_jump, long_jump, fall };
 [[nodiscard]] const char *to_string(MoveState state);
+
+// How the last grounded takeoff was timed relative to its landing (see docs/movement-momentum.md).
+enum class HopTiming : std::uint8_t { none, clean, early, late };
+[[nodiscard]] const char *to_string(HopTiming timing);
 
 // Every movement value in one place. Units: meters, seconds, radians. Edited live in the
 // tuning window (F2); see docs/m2-movement.md for what each value does.
@@ -27,8 +32,8 @@ struct PlayerTuning {
     // Jump and air.
     float jump_height = 2.2F; // Apex from standstill with the button held.
     float jump_time_to_apex = 0.38F;
-    float jump_speed_bonus = 0.12F;     // Launch speed added per m/s of ground speed.
-    float release_gravity_scale = 2.8F; // While rising after the button is released.
+    float jump_speed_bonus = 0.12F;     // Launch speed per m/s of ground speed, up to run speed.
+    float release_gravity_scale = 2.8F; // Ordinary jumps only, while rising after a release.
     float fall_gravity_scale = 1.45F;
     float terminal_speed = 32.0F;
     float air_acceleration = 9.0F;
@@ -36,9 +41,18 @@ struct PlayerTuning {
     float air_turn_rate = 5.0F;
     float coyote_time = 0.1F;
     float jump_buffer = 0.12F;
+    // Momentum: ground speed above run_speed. Built by long jumps and downhill running, kept
+    // by clean hops, lost to friction, uphill running, sharp turns, braking and air drag.
+    float max_speed = 22.0F;
+    float hop_window = 0.075F;        // A takeoff this close to landing (either side) is clean.
+    float early_hop_retention = 0.4F; // Momentum kept by a jump pressed before that window.
+    float overspeed_friction = 14.0F; // Momentum lost per second on flat ground.
+    float slope_momentum = 0.4F;      // Fraction of slope gravity that adds to/drains momentum.
+    float air_drag = 0.6F;            // Momentum lost per second in the air.
     // M4 moves. Long jump needs grounded speed plus the modifier at takeoff.
     float long_jump_min_speed = 6.0F;
-    float long_jump_speed_scale = 1.8F;
+    float long_jump_speed_scale = 1.8F; // Launch from up to run speed...
+    float long_jump_chain_boost = 2.5F; // ...or current speed plus this, whichever is larger.
     float long_jump_up_speed = 8.5F;
     float wall_jump_speed = 8.5F;
     float wall_jump_up_speed = 12.0F;
@@ -55,6 +69,9 @@ struct PlayerTuning {
     [[nodiscard]] float jump_velocity() const {
         return 2 * jump_height / jump_time_to_apex;
     }
+    [[nodiscard]] float top_speed() const { // Never below run speed, whatever the sliders say.
+        return std::max(max_speed, run_speed);
+    }
 };
 
 struct PlayerState {
@@ -65,6 +82,7 @@ struct PlayerState {
     MoveState state = MoveState::idle;
     bool grounded = true;
     Vec3 ground_normal{0, 1, 0};
+    Vec3 ground_face_normal{0, 1, 0}; // Surface slope, unaffected by rounded edge contacts.
     float coyote_timer = 0;
     float buffer_timer = 0;
     Vec3 wall_normal;
@@ -73,6 +91,9 @@ struct PlayerState {
     float recovery_timer = 0;
     bool wall_used = false; // Same-facing walls cannot be farmed before landing.
     bool landed = false;    // Became grounded this tick.
+    float ground_time = 0;  // Since the last landing.
+    float press_age = 0;    // Since the first press of the current buffered press chain.
+    HopTiming last_hop = HopTiming::none;
 };
 
 struct PlayerPose {
@@ -101,7 +122,9 @@ class Player {
         float amount = 0;
     };
     void ground_motion(Steering steering, float dt);
+    [[nodiscard]] float slope_acceleration() const;
     void air_motion(Steering steering, bool jump_held, float dt);
+    void hop_timing();
     bool wall_jump(bool requested, bool touching = false);
 
     PlayerState m_current;

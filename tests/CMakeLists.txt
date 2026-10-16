@@ -1,5 +1,5 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
-    movement_tests.cpp move_verbs_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp)
+    movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
@@ -75,8 +75,8 @@ if(MJ_SMOKE_TESTS)
     add_test(NAME replay_m4_moves COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>"
         "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/m4-moves-tour.mjr"
-        "-DEXPECTED=Capture state: tick 2808,.*grounded, checkpoint 10"
-        "-DCAPTURE_TICK=2808" "-DCAPTURE_OUT=${captures}/m4-moves.png"
+        "-DEXPECTED=Capture state: tick 2899,.*grounded, checkpoint 10"
+        "-DCAPTURE_TICK=2899" "-DCAPTURE_OUT=${captures}/m4-moves.png"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
     add_test(NAME render_playground COMMAND microjump --capture-tick 60 --capture-out "${captures}/playground.png")
     add_test(NAME playground_pixels COMMAND microjump_capture_check --scene "${captures}/playground.png")

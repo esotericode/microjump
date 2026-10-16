@@ -169,12 +169,15 @@ TEST_CASE("long jump trades height for distance and requires grounded running sp
             CHECK(distance > normal_distance * 1.15F);
             CHECK(apex < normal_apex * 0.6F);
             CHECK(player.current().ground_speed > player.tuning.run_speed);
-            // Immediate chained long jumps retain a bounded launch speed.
+            // An immediate chained long jump adds a bounded boost (docs/movement-momentum.md).
+            const float landed = player.current().ground_speed;
             player.tick(
                 {0, 1, 0, 0, button::jump_pressed | button::jump_held | button::long_jump_held},
                 floor, k_dt);
-            CHECK(mj::length(mj::horizontal(player.current().velocity)) <=
-                  player.tuning.run_speed * player.tuning.long_jump_speed_scale + 1e-4F);
+            const float chained = mj::length(mj::horizontal(player.current().velocity));
+            CHECK(chained == doctest::Approx(std::min(landed + player.tuning.long_jump_chain_boost,
+                                                      player.tuning.max_speed))
+                                 .epsilon(1e-3));
         }
     }
     auto stopped = running();
@@ -293,7 +296,7 @@ TEST_CASE("committed playground route runs, long jumps, wall climbs and activate
     }
     CHECK(long_jumped);
     CHECK(kicks == 3);
-    CHECK(simulation.ticks() == 2808);
+    CHECK(simulation.ticks() == 2899);
     CHECK(simulation.active_checkpoint() == 10);
     CHECK(simulation.respawns() == 0);
     const auto &p = simulation.player.current();
@@ -301,7 +304,7 @@ TEST_CASE("committed playground route runs, long jumps, wall climbs and activate
     CHECK_FALSE(p.wall_used);
     CHECK(p.position.x == doctest::Approx(64.470360F).epsilon(1e-4));
     CHECK(p.position.y == doctest::Approx(6.065001F).epsilon(1e-4));
-    CHECK(p.position.z == doctest::Approx(-57.991585F).epsilon(1e-4));
+    CHECK(p.position.z == doctest::Approx(-57.995975F).epsilon(1e-4));
     simulation.tick({0, 0, 0, 0, button::reset_pressed}, k_dt);
     CHECK(simulation.respawns() == 1);
     CHECK(mj::length(simulation.player.current().position - level->checkpoints[10].position) <

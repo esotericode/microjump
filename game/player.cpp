@@ -22,6 +22,20 @@ const char *to_string(MoveState state) {
     return "?";
 }
 
+const char *to_string(HopTiming timing) {
+    switch (timing) {
+    case HopTiming::none:
+        return "--";
+    case HopTiming::clean:
+        return "Clean";
+    case HopTiming::early:
+        return "Early";
+    case HopTiming::late:
+        return "Late";
+    }
+    return "?";
+}
+
 void Player::place(Vec3 position, float facing) {
     m_current = {};
     m_current.position = position;
@@ -66,10 +80,36 @@ void Player::ground_motion(Steering steering, float dt) {
     s.facing = std::remainder(s.facing, k_tau);
     const float alignment = std::max(std::cos(turn), 0.0F);
     const float target = amount * tuning.run_speed * (1 - tuning.turn_slowdown * (1 - alignment));
-    const float rate_of_change =
-        s.ground_speed < target ? tuning.ground_acceleration : tuning.ground_deceleration;
-    s.ground_speed = approach(s.ground_speed, target, rate_of_change * dt);
+    const float slope = slope_acceleration() * amount; // Positive running downhill.
+    if (s.ground_speed > tuning.run_speed && amount > 0.9F && alignment > 0.9F) {
+        // Carrying momentum straight ahead: downhill adds to it, uphill drains it, and flat
+        // ground wears it down after the landing window. Turning or easing off the stick
+        // falls through to the ordinary deceleration below, so momentum is never accidental.
+        float change = slope;
+        if (slope <= 0 && s.ground_time > tuning.hop_window)
+            change -= tuning.overspeed_friction;
+        s.ground_speed = std::max(s.ground_speed + change * dt, target);
+    } else {
+        const float rate_of_change =
+            s.ground_speed < target ? tuning.ground_acceleration : tuning.ground_deceleration;
+        s.ground_speed = approach(s.ground_speed, target, rate_of_change * dt);
+        if (slope > 0 && alignment > 0.9F)
+            s.ground_speed += slope * dt; // Running downhill builds speed past the run speed.
+    }
+    s.ground_speed = std::min(s.ground_speed, tuning.top_speed());
     s.state = MoveState::run;
+}
+
+float Player::slope_acceleration() const {
+    // Gravity along the walkable surface, projected on the facing direction. The horizontal
+    // part of the surface normal points downhill. Rounded edge contacts (stepping off a pad)
+    // tilt the contact normal, so use the face; steep or vertical faces contribute nothing.
+    const auto &s = m_current;
+    const Vec3 n = s.ground_face_normal;
+    if (n.y < std::cos(tuning.collision.max_slope))
+        return 0;
+    return tuning.slope_momentum * tuning.gravity() * n.y *
+           dot(horizontal(n), yaw_forward(s.facing));
 }
 
 void Player::air_motion(Steering steering, bool jump_held, float dt) {
@@ -78,13 +118,20 @@ void Player::air_motion(Steering steering, bool jump_held, float dt) {
     float scale = 1;
     const bool rising_jump = s.state == MoveState::jump || s.state == MoveState::wall_jump ||
                              s.state == MoveState::long_jump;
-    if (s.velocity.y > 0 && rising_jump && !jump_held)
+    // Only ordinary jumps are variable; long jumps and wall kicks keep fixed, readable arcs.
+    if (s.velocity.y > 0 && s.state == MoveState::jump && !jump_held)
         scale = tuning.release_gravity_scale;
     else if (s.velocity.y <= 0)
         scale = tuning.fall_gravity_scale;
     s.velocity.y = std::max(s.velocity.y - tuning.gravity() * scale * dt, -tuning.terminal_speed);
     if (s.velocity.y <= 0 && rising_jump)
         s.state = MoveState::fall;
+    const float flying = length(horizontal(s.velocity));
+    if (flying > tuning.run_speed) {
+        const float kept = std::max(flying - tuning.air_drag * dt, tuning.run_speed) / flying;
+        s.velocity.x *= kept;
+        s.velocity.z *= kept;
+    }
     if (amount <= 0 || s.recovery_timer > 0)
         return;
     // Steering adds acceleration along the input but never raises speed beyond what the
@@ -99,6 +146,22 @@ void Player::air_motion(Steering steering, bool jump_held, float dt) {
     const float turn = angle_difference(s.facing, yaw_of(direction));
     s.facing = std::remainder(
         s.facing + std::clamp(turn, -tuning.air_turn_rate * dt, tuning.air_turn_rate * dt), k_tau);
+}
+
+void Player::hop_timing() {
+    // Called for a grounded takeoff. `lead` is how long before touchdown the press chain
+    // began (negative when pressed after landing).
+    auto &s = m_current;
+    const float lead = s.press_age - s.ground_time;
+    const float momentum = s.ground_speed - tuning.run_speed;
+    if (momentum <= 0) {
+        s.last_hop = HopTiming::none; // Only takeoffs carrying momentum are judged.
+    } else if (lead > tuning.hop_window + 1e-4F) {
+        s.last_hop = HopTiming::early;
+        s.ground_speed = tuning.run_speed + momentum * tuning.early_hop_retention;
+    } else {
+        s.last_hop = s.ground_time > tuning.hop_window + 1e-4F ? HopTiming::late : HopTiming::clean;
+    }
 }
 
 bool Player::wall_jump(bool requested, bool touching) {
@@ -125,14 +188,19 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
     s.landed = false;
     s.wall_timer = std::max(s.wall_timer - dt, 0.0F);
     s.recovery_timer = std::max(s.recovery_timer - dt, 0.0F);
+    if (s.grounded)
+        s.ground_time += dt;
     const Vec3 stick =
         yaw_right(input.camera_yaw) * input.move_x + yaw_forward(input.camera_yaw) * input.move_y;
     const float amount = std::min(length(stick), 1.0F);
     const Vec3 direction = amount > 0.02F ? normalized(stick) : Vec3{};
     const float effective = amount > 0.02F ? amount : 0.0F;
 
-    s.buffer_timer = input.held(input_button::jump_pressed) ? tuning.jump_buffer
-                                                            : std::max(s.buffer_timer - dt, 0.0F);
+    // A press chain starts when no press is buffered; repeated presses inside the buffer
+    // continue it, so mashing before a landing still counts as an early press.
+    const bool pressed = input.held(input_button::jump_pressed);
+    s.press_age = pressed && s.buffer_timer <= 0 ? 0.0F : s.press_age + dt;
+    s.buffer_timer = pressed ? tuning.jump_buffer : std::max(s.buffer_timer - dt, 0.0F);
     s.coyote_timer = s.grounded ? tuning.coyote_time : std::max(s.coyote_timer - dt, 0.0F);
 
     const bool wants_jump = input.held(input_button::jump_pressed) || s.buffer_timer > 0;
@@ -140,18 +208,30 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
     bool consumed_jump = false;
     if (wants_jump && can_jump && s.state != MoveState::jump) {
         consumed_jump = true;
+        if (s.grounded)
+            hop_timing();
         const Vec3 launch =
             s.grounded ? yaw_forward(s.facing) * s.ground_speed : horizontal(s.velocity);
+        const float speed = length(launch);
         const bool long_jump = s.grounded && s.state != MoveState::skid &&
                                input.held(input_button::long_jump_held) &&
                                s.ground_speed >= tuning.long_jump_min_speed;
-        s.velocity =
-            long_jump
-                ? normalized(launch) * (std::min(length(launch), tuning.run_speed) *
-                                        tuning.long_jump_speed_scale) +
-                      Vec3{0, tuning.long_jump_up_speed, 0}
-                : launch +
-                      Vec3{0, tuning.jump_velocity() + tuning.jump_speed_bonus * length(launch), 0};
+        if (long_jump) {
+            // A fixed boost from running speed, or more when chained from carried momentum,
+            // so speed builds over several clean long jumps up to max_speed.
+            const float boosted =
+                std::max(std::min(speed, tuning.run_speed) * tuning.long_jump_speed_scale,
+                         speed + tuning.long_jump_chain_boost);
+            s.velocity = normalized(launch) * std::min(boosted, tuning.top_speed()) +
+                         Vec3{0, tuning.long_jump_up_speed, 0};
+        } else {
+            // Height gained from speed stops at run speed: momentum buys distance, not height.
+            s.velocity =
+                launch + Vec3{0,
+                              tuning.jump_velocity() +
+                                  tuning.jump_speed_bonus * std::min(speed, tuning.run_speed),
+                              0};
+        }
         s.grounded = false;
         s.state = long_jump ? MoveState::long_jump : MoveState::jump;
         s.buffer_timer = 0;
@@ -194,16 +274,17 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
     if (moved.grounded) {
         if (!s.grounded) {
             s.landed = true;
+            s.ground_time = 0;
             const Vec3 flat = horizontal(s.velocity);
             const float speed = length(flat);
             if (speed > 0.5F) {
                 // Keep momentum along the direction of travel, preferring the current facing.
                 const float along = dot(flat, yaw_forward(s.facing));
                 if (along > speed * 0.7F) {
-                    s.ground_speed = along;
+                    s.ground_speed = std::min(along, tuning.top_speed());
                 } else {
                     s.facing = yaw_of(flat);
-                    s.ground_speed = speed;
+                    s.ground_speed = std::min(speed, tuning.top_speed());
                 }
             } else {
                 s.ground_speed = 0;
@@ -212,6 +293,7 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
         }
         s.grounded = true;
         s.ground_normal = moved.ground_normal;
+        s.ground_face_normal = moved.ground_face_normal;
         s.velocity.y = 0;
     } else {
         if (s.grounded) {

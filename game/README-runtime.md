@@ -53,6 +53,11 @@ Checkpoints are teal pads. Street lamps switch on at dusk. The F1 overlay names 
 current region. Purple paired walls east of the plaza lead to 6 m and 8 m finish
 decks with checkpoint pads. Try running long jumps along the sprint lane.
 
+Speed above a normal run is momentum. Long jumps and running downhill build it.
+Jumping again within a moment of landing (the F1 overlay shows "Clean") keeps it.
+Pressing too early, mashing, lingering on the ground, turning sharply or running
+uphill loses it. Chained clean long jumps build up to the speed cap.
+
 Levels are editable JSON files in `assets/levels/`. Use `--level PATH` to select one;
 the default is `playground.json` beside the executable. Old M2/M3 recordings use
 `--level assets/levels/movement-yard.json`. Replays require the same level and tuning.
