@@ -254,10 +254,21 @@ bool Player::wall_jump(bool requested, bool touching) {
     return true;
 }
 
-void Player::tick(const TickInput &input, const CollisionWorld &world, float dt) {
+void Player::tick(const TickInput &input, const CollisionScene &world, float dt) {
     m_previous = {m_current.position, m_current.facing};
     auto &s = m_current;
     s.landed = false;
+    // A moving platform carries its rider through its last step and turns them with it,
+    // unless something solid is in the way. Leaving it keeps the platform's velocity.
+    Vec3 platform_velocity{};
+    const bool riding = s.grounded && s.ground_body;
+    if (riding) {
+        const auto carry = world.carry(*s.ground_body, s.position);
+        const auto blocked = world.sweep({capsule(), carry.offset, tuning.collision.skin});
+        s.position += carry.offset * (blocked ? blocked->fraction : 1.0F);
+        s.facing = std::remainder(s.facing + carry.turn, k_tau);
+        platform_velocity = carry.offset * (1.0F / dt);
+    }
     s.wall_timer = std::max(s.wall_timer - dt, 0.0F);
     s.recovery_timer = std::max(s.recovery_timer - dt, 0.0F);
     if (s.grounded)
@@ -375,12 +386,17 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
                 s.velocity -= wall * into;
         }
     }
+    // Landing on a moving platform counts only the speed relative to it, so a hop in place
+    // lands in place.
+    Vec3 ground_velocity{};
+    if (moved.grounded && moved.ground_body && !s.grounded)
+        ground_velocity = world.carry(*moved.ground_body, moved.base).offset * (1.0F / dt);
     if (moved.grounded) {
         if (!s.grounded && s.state == MoveState::dive) {
             // A dive lands on its belly and slides on along the way it was flying.
             s.landed = true;
             s.ground_time = 0;
-            const Vec3 flat = horizontal(s.velocity);
+            const Vec3 flat = horizontal(s.velocity - ground_velocity);
             if (length(flat) > 0.5F)
                 s.facing = yaw_of(flat);
             s.ground_speed = std::min(length(flat), tuning.top_speed());
@@ -388,9 +404,14 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
         } else if (!s.grounded) {
             s.landed = true;
             s.ground_time = 0;
-            const Vec3 flat = horizontal(s.velocity);
+            const Vec3 flat = horizontal(s.velocity - ground_velocity);
             const float speed = length(flat);
-            if (speed > 0.5F) {
+            if (moved.ground_body) {
+                // On a mover, keep only forward speed relative to it, never turning round:
+                // dropping onto a moving platform lands you standing on it.
+                s.ground_speed =
+                    std::clamp(dot(flat, yaw_forward(s.facing)), 0.0F, tuning.top_speed());
+            } else if (speed > 0.5F) {
                 // Keep momentum along the direction of travel, preferring the current facing.
                 const float along = dot(flat, yaw_forward(s.facing));
                 if (along > speed * 0.7F) {
@@ -407,6 +428,7 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
         s.grounded = true;
         s.ground_normal = moved.ground_normal;
         s.ground_face_normal = moved.ground_face_normal;
+        s.ground_body = moved.ground_body;
         s.velocity.y = 0;
     } else {
         if (s.grounded) {
@@ -418,6 +440,7 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
             s.jump_chain = 0;
         }
         s.grounded = false;
+        s.ground_body.reset();
     }
     if (s.grounded && moved.ground_bounce > 0) {
         // A springy floor throws you up on a fixed arc, keeping your way and speed.
@@ -426,7 +449,10 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
         s.state = MoveState::bounce;
         s.jump_chain = 0;
         s.coyote_timer = 0;
+        s.ground_body.reset();
     }
+    if (riding && !s.grounded)
+        s.velocity += platform_velocity;
     if (s.grounded) {
         s.wall_timer = 0;
         s.recovery_timer = 0;

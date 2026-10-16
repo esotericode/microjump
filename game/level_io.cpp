@@ -7,6 +7,8 @@
 #include <charconv>
 #include <fstream>
 #include <initializer_list>
+#include <numbers>
+#include <optional>
 #include <set>
 
 namespace mj::game {
@@ -154,6 +156,145 @@ bool bounded_depth(std::string_view text) {
     }
     return true;
 }
+// One primitive; `path` names it in errors. Empty when it is not even an object.
+std::optional<Shape> read_shape(Reader &read, const Json &item, const std::string &path) {
+    if (!read.object(item, path,
+                     {"kind", "center", "size", "color", "yaw", "material", "wall_jump", "solid",
+                      "taper", "tip", "bounce"}))
+        return std::nullopt;
+    Shape shape;
+    const auto &kind = read.member(item, "kind", path);
+    if (kind == "box")
+        shape.kind = ShapeKind::box;
+    else if (kind == "ramp")
+        shape.kind = ShapeKind::ramp;
+    else if (kind == "cylinder")
+        shape.kind = ShapeKind::cylinder;
+    else if (kind == "ellipsoid")
+        shape.kind = ShapeKind::ellipsoid;
+    else if (kind == "cone")
+        shape.kind = ShapeKind::cone;
+    else
+        read.fail(path + ".kind", "expected box, ramp, cylinder, ellipsoid or cone");
+    shape.center = read.vector(read.member(item, "center", path), path + ".center", -4096, 4096);
+    shape.size = read.vector(read.member(item, "size", path), path + ".size", 0.01F, 512);
+    shape.color = read.albedo(read.member(item, "color", path), path + ".color");
+    shape.yaw = read.scalar(item, "yaw", path, -10000, 10000, 0);
+    if (shape.kind == ShapeKind::cylinder && std::abs(shape.size.x - shape.size.z) > 1e-5F)
+        read.fail(path + ".size", "cylinder X and Z diameters must match");
+    if (item.contains("material")) {
+        const auto &material = item["material"];
+        if (read.object(material, path + ".material", {"roughness", "metallic"})) {
+            shape.surface.roughness =
+                read.scalar(material, "roughness", path + ".material", 0, 1, 0.7F);
+            shape.surface.metallic = read.scalar(material, "metallic", path + ".material", 0, 1, 0);
+        }
+    }
+    shape.wall_jump = read.boolean(item, "wall_jump", path, false);
+    shape.solid = read.boolean(item, "solid", path, true);
+    if (shape.kind != ShapeKind::cone && (item.contains("taper") || item.contains("tip")))
+        read.fail(path, "only cones have a taper or tip");
+    shape.taper = read.scalar(item, "taper", path, 0, 1, 0);
+    if (item.contains("tip")) {
+        const auto &tip = item["tip"];
+        if (tip == "down")
+            shape.tip_down = true;
+        else if (tip != "up")
+            read.fail(path + ".tip", "expected up or down");
+    }
+    if (shape.wall_jump && !shape.solid)
+        read.fail(path + ".wall_jump", "a wall-jump shape must be solid");
+    shape.bounce = read.scalar(item, "bounce", path, 0, 40, 0);
+    if (shape.bounce > 0 && !shape.solid)
+        read.fail(path + ".bounce", "a bounce shape must be solid");
+    return shape;
+}
+
+// Fastest a mover's surface may travel: per tick it stays well under the player's radius,
+// so a mover pushing the player can never pass through them.
+constexpr double k_max_mover_speed = 20;
+
+// The motion fields sit directly on the mover object; see docs/levels.md.
+std::optional<Mover> read_mover(Reader &read, const Json &item, const std::string &path) {
+    if (!read.object(item, path,
+                     {"name", "pivot", "yaw", "shapes", "path", "loop", "pause", "orbit", "spin",
+                      "period", "phase"}))
+        return std::nullopt;
+    Mover mover;
+    mover.name = read.name(read.member(item, "name", path), path + ".name");
+    mover.pivot = read.vector(read.member(item, "pivot", path), path + ".pivot", -4096, 4096);
+    mover.yaw = read.scalar(item, "yaw", path, -10000, 10000, 0);
+    const auto &shapes = read.member(item, "shapes", path);
+    double reach = 0; // Farthest horizontal extent of a shape from the pivot.
+    if (read.array(shapes, path + ".shapes", 1, 64)) {
+        for (std::size_t i = 0; i < shapes.size(); ++i) {
+            const auto shape =
+                read_shape(read, shapes[i], path + ".shapes[" + std::to_string(i) + "]");
+            if (!shape)
+                break;
+            reach = std::max(reach, static_cast<double>(length(horizontal(shape->center)) +
+                                                        length(horizontal(shape->size)) * 0.5F));
+            mover.shapes.push_back(*shape);
+        }
+    }
+    if (read.error.empty() && std::none_of(mover.shapes.begin(), mover.shapes.end(),
+                                           [](const Shape &shape) { return shape.solid; }))
+        read.fail(path + ".shapes", "a mover needs at least one solid shape");
+    auto &motion = mover.motion;
+    if (item.contains("path") && read.array(item["path"], path + ".path", 2, 16)) {
+        for (std::size_t i = 0; i < item["path"].size(); ++i)
+            motion.path.push_back(
+                read.vector(item["path"][i], path + ".path[" + std::to_string(i) + "]", -512, 512));
+    }
+    motion.loop = read.boolean(item, "loop", path, false);
+    motion.pause = read.scalar(item, "pause", path, 0, 60, 0);
+    if (item.contains("orbit")) {
+        const auto &orbit = item["orbit"];
+        if (read.object(orbit, path + ".orbit", {"radius", "upright", "yaw"})) {
+            motion.orbit_radius = read.number(read.member(orbit, "radius", path + ".orbit"),
+                                              path + ".orbit.radius", 0.1, 64);
+            motion.orbit_vertical = read.boolean(orbit, "upright", path + ".orbit", false);
+            motion.orbit_yaw = read.scalar(orbit, "yaw", path + ".orbit", -10000, 10000, 0);
+        }
+    }
+    motion.spin = read.scalar(item, "spin", path, -10, 10, 0);
+    motion.period = read.scalar(item, "period", path, 0.5, 600, 0);
+    motion.phase = read.scalar(item, "phase", path, 0, 1, 0);
+    if (!read.error.empty())
+        return mover;
+    const bool travels = !motion.path.empty() || motion.orbit_radius > 0;
+    if (!travels && motion.spin == 0)
+        read.fail(path, "a mover needs a path, an orbit or a spin");
+    if (travels && !item.contains("period"))
+        read.fail(path + ".period", "a path or orbit needs a period");
+    if (!travels && item.contains("period"))
+        read.fail(path + ".period", "only a path or orbit has a period");
+    if (!read.error.empty())
+        return mover;
+    // Peak speed: an eased leg peaks at pi/2 times its average; spin moves the far rim.
+    double speed = std::abs(motion.spin) * reach;
+    if (motion.orbit_radius > 0)
+        speed += 2 * std::numbers::pi * motion.orbit_radius / motion.period;
+    if (!motion.path.empty()) {
+        // Legs share the moving time in proportion to their length, so all keep one speed.
+        const auto &points = motion.path;
+        double total = 0;
+        for (std::size_t i = 0; i + 1 < points.size(); ++i)
+            total += length(points[i + 1] - points[i]);
+        total = motion.loop ? total + length(points.front() - points.back()) : 2 * total;
+        const std::size_t legs = motion.loop ? points.size() : 2 * (points.size() - 1);
+        const double moving = motion.period - motion.pause * static_cast<double>(legs);
+        if (total <= 0)
+            read.fail(path + ".path", "a path needs two different points");
+        else if (moving <= 0.1 * motion.period)
+            read.fail(path + ".pause", "pauses leave too little of the period for moving");
+        else
+            speed += std::numbers::pi / 2 * total / moving;
+    }
+    if (read.error.empty() && speed > k_max_mover_speed)
+        read.fail(path, "moves faster than 20 m/s; lengthen its period or slow its spin");
+    return mover;
+}
 } // namespace
 
 bool valid_level_file(std::string_view text) {
@@ -187,7 +328,7 @@ std::expected<Level, Error> parse_level(std::string_view text) {
     Reader read;
     if (!read.object(root, "level",
                      {"version", "name", "kill_height", "shapes", "checkpoints", "lights", "zones",
-                      "collectibles", "portals", "atmosphere", "title"}))
+                      "collectibles", "portals", "atmosphere", "title", "movers"}))
         return std::unexpected(Error{read.error});
     const auto &version = read.member(root, "version", "level");
     if (!version.is_number_integer() || version != 1)
@@ -199,60 +340,11 @@ std::expected<Level, Error> parse_level(std::string_view text) {
     const auto &shapes = read.member(root, "shapes", "level");
     if (read.array(shapes, "level.shapes", 1, 2048)) {
         for (std::size_t i = 0; i < shapes.size(); ++i) {
-            const auto &item = shapes[i];
-            const auto path = "level.shapes[" + std::to_string(i) + "]";
-            if (!read.object(item, path,
-                             {"kind", "center", "size", "color", "yaw", "material", "wall_jump",
-                              "solid", "taper", "tip", "bounce"}))
+            const auto shape =
+                read_shape(read, shapes[i], "level.shapes[" + std::to_string(i) + "]");
+            if (!shape)
                 break;
-            Shape shape;
-            const auto &kind = read.member(item, "kind", path);
-            if (kind == "box")
-                shape.kind = ShapeKind::box;
-            else if (kind == "ramp")
-                shape.kind = ShapeKind::ramp;
-            else if (kind == "cylinder")
-                shape.kind = ShapeKind::cylinder;
-            else if (kind == "ellipsoid")
-                shape.kind = ShapeKind::ellipsoid;
-            else if (kind == "cone")
-                shape.kind = ShapeKind::cone;
-            else
-                read.fail(path + ".kind", "expected box, ramp, cylinder, ellipsoid or cone");
-            shape.center =
-                read.vector(read.member(item, "center", path), path + ".center", -4096, 4096);
-            shape.size = read.vector(read.member(item, "size", path), path + ".size", 0.01F, 512);
-            shape.color = read.albedo(read.member(item, "color", path), path + ".color");
-            shape.yaw = read.scalar(item, "yaw", path, -10000, 10000, 0);
-            if (shape.kind == ShapeKind::cylinder && std::abs(shape.size.x - shape.size.z) > 1e-5F)
-                read.fail(path + ".size", "cylinder X and Z diameters must match");
-            if (item.contains("material")) {
-                const auto &material = item["material"];
-                if (read.object(material, path + ".material", {"roughness", "metallic"})) {
-                    shape.surface.roughness =
-                        read.scalar(material, "roughness", path + ".material", 0, 1, 0.7F);
-                    shape.surface.metallic =
-                        read.scalar(material, "metallic", path + ".material", 0, 1, 0);
-                }
-            }
-            shape.wall_jump = read.boolean(item, "wall_jump", path, false);
-            shape.solid = read.boolean(item, "solid", path, true);
-            if (shape.kind != ShapeKind::cone && (item.contains("taper") || item.contains("tip")))
-                read.fail(path, "only cones have a taper or tip");
-            shape.taper = read.scalar(item, "taper", path, 0, 1, 0);
-            if (item.contains("tip")) {
-                const auto &tip = item["tip"];
-                if (tip == "down")
-                    shape.tip_down = true;
-                else if (tip != "up")
-                    read.fail(path + ".tip", "expected up or down");
-            }
-            if (shape.wall_jump && !shape.solid)
-                read.fail(path + ".wall_jump", "a wall-jump shape must be solid");
-            shape.bounce = read.scalar(item, "bounce", path, 0, 40, 0);
-            if (shape.bounce > 0 && !shape.solid)
-                read.fail(path + ".bounce", "a bounce shape must be solid");
-            level.shapes.push_back(shape);
+            level.shapes.push_back(*shape);
         }
     }
     if (read.error.empty() && std::none_of(level.shapes.begin(), level.shapes.end(),
@@ -370,6 +462,19 @@ std::expected<Level, Error> parse_level(std::string_view text) {
             if (portal.position.y <= level.kill_height)
                 read.fail(path + ".position", "portal must be above the kill plane");
             level.portals.push_back(portal);
+        }
+    }
+    const auto &movers = read.member(root, "movers", "level", false);
+    if (root.contains("movers") && read.array(movers, "level.movers", 0, 64)) {
+        std::set<std::string> names;
+        for (std::size_t i = 0; i < movers.size(); ++i) {
+            const auto path = "level.movers[" + std::to_string(i) + "]";
+            const auto mover = read_mover(read, movers[i], path);
+            if (!mover)
+                break;
+            if (!names.insert(mover->name).second)
+                read.fail(path + ".name", "mover names must be unique");
+            level.movers.push_back(*mover);
         }
     }
     if (root.contains("atmosphere")) {

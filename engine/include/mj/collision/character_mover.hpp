@@ -22,8 +22,9 @@ struct MoveResult {
     Vec3 base;
     bool grounded = false;
     Vec3 ground_normal{0, 1, 0};
-    Vec3 ground_face_normal{0, 1, 0}; // Triangle normal; edge contacts tilt ground_normal.
-    float ground_bounce = 0;          // The ground's authored launch speed, if springy.
+    Vec3 ground_face_normal{0, 1, 0};         // Triangle normal; edge contacts tilt ground_normal.
+    float ground_bounce = 0;                  // The ground's authored launch speed, if springy.
+    std::optional<std::uint32_t> ground_body; // The moving body stood on, if any.
     bool hit_wall = false;
     Vec3 wall_normal;
     Vec3 jump_wall_normal; // Nonzero only for a designated, near-vertical face contact.
@@ -35,8 +36,9 @@ struct MoveResult {
     return normal.y >= std::cos(settings.max_slope);
 }
 
-// Kinematic collide-and-slide for an upright capsule against static world triangles.
-[[nodiscard]] MoveResult move_character(const CollisionWorld &world, const MoveSettings &settings,
+// Kinematic collide-and-slide for an upright capsule against world triangles, including
+// moving bodies at their scene poses (a body is treated as still during the move).
+[[nodiscard]] MoveResult move_character(const CollisionScene &world, const MoveSettings &settings,
                                         const MoveRequest &request);
 
 } // namespace mj

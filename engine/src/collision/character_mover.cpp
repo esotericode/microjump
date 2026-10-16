@@ -10,7 +10,7 @@ namespace {
 enum class SlideMode : std::uint8_t { ground, air };
 
 struct Slider {
-    const CollisionWorld &world;
+    const CollisionScene &world;
     const MoveSettings &settings;
     Capsule shape;
     MoveResult result{};
@@ -58,7 +58,8 @@ struct Slider {
                 result.grounded = true;
                 result.ground_normal = normal;
                 result.ground_face_normal = hit->face_normal;
-                result.ground_bounce = world.triangles()[hit->triangle].bounce;
+                result.ground_bounce = world.triangle(hit->body, hit->triangle).bounce;
+                result.ground_body = hit->body;
                 const Vec3 along = respect_walls(horizontal(remaining));
                 delta = along + Vec3{0, -(normal.x * along.x + normal.z * along.z) / normal.y, 0};
             } else {
@@ -72,7 +73,7 @@ struct Slider {
                 } else if (std::abs(normal.y) < 0.7F) {
                     result.hit_wall = true;
                     result.wall_normal = normal;
-                    if (world.triangles()[hit->triangle].wall_jump &&
+                    if (world.triangle(hit->body, hit->triangle).wall_jump &&
                         std::abs(hit->face_normal.y) < 0.1F && dot(normal, hit->face_normal) > 0.9F)
                         result.jump_wall_normal = normalized(horizontal(hit->face_normal));
                 }
@@ -116,6 +117,7 @@ struct Slider {
                 result.grounded = true;
                 result.ground_normal = {0, 1, 0};
                 result.ground_face_normal = {0, 1, 0};
+                result.ground_body.reset();
             }
         }
         return base;
@@ -137,7 +139,8 @@ struct Slider {
         result.grounded = true;
         result.ground_normal = hit->normal;
         result.ground_face_normal = hit->face_normal;
-        result.ground_bounce = world.triangles()[hit->triangle].bounce;
+        result.ground_bounce = world.triangle(hit->body, hit->triangle).bounce;
+        result.ground_body = hit->body;
         return true;
     }
 };
@@ -148,7 +151,7 @@ float horizontal_progress(Vec3 from, Vec3 to, Vec3 direction) {
 
 } // namespace
 
-MoveResult move_character(const CollisionWorld &world, const MoveSettings &settings,
+MoveResult move_character(const CollisionScene &world, const MoveSettings &settings,
                           const MoveRequest &request) {
     Capsule shape = request.shape;
     shape.base += world.depenetration(shape, settings.skin);

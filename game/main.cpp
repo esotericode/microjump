@@ -35,6 +35,7 @@ constexpr MeshHandle k_spark_mesh{3};
 constexpr MeshHandle k_matte_part_mesh{4};
 constexpr MeshHandle k_glossy_part_mesh{5};
 constexpr MeshHandle k_portal_ring_mesh{6};
+constexpr std::uint32_t k_first_mover_mesh = 7; // The level's movers follow, one mesh each.
 
 // The level being played, its geometry and the simulation that references both. It is held
 // by pointer and never moves, so traveling through a gate swaps in a whole new one.
@@ -230,14 +231,16 @@ int run(const LaunchOptions &options) {
             return 1;
         }
         // Order matches the k_*_mesh handles above.
-        std::array meshes{world->geometry.mesh,
-                          make_player_mesh(world->simulation.player.tuning.radius,
-                                           world->simulation.player.tuning.height),
-                          make_bulb_mesh(),
-                          make_spark_mesh(),
-                          make_part_mesh(PartMesh::matte),
-                          make_part_mesh(PartMesh::glossy),
-                          make_portal_ring_mesh()};
+        std::vector meshes{world->geometry.mesh,
+                           make_player_mesh(world->simulation.player.tuning.radius,
+                                            world->simulation.player.tuning.height),
+                           make_bulb_mesh(),
+                           make_spark_mesh(),
+                           make_part_mesh(PartMesh::matte),
+                           make_part_mesh(PartMesh::glossy),
+                           make_portal_ring_mesh()};
+        meshes.insert(meshes.end(), world->geometry.mover_meshes.begin(),
+                      world->geometry.mover_meshes.end());
         auto renderer = Renderer::create(**window, **context, meshes);
         if (!renderer) {
             log(renderer.error().message);
@@ -327,6 +330,9 @@ int run(const LaunchOptions &options) {
         const auto replace_world =
             [&](std::unique_ptr<LoadedLevel> next) -> std::expected<void, Error> {
             meshes[k_world_mesh.index] = next->geometry.mesh;
+            meshes.resize(k_first_mover_mesh);
+            meshes.insert(meshes.end(), next->geometry.mover_meshes.begin(),
+                          next->geometry.mover_meshes.end());
             if (auto uploaded = (*renderer)->set_meshes(meshes); !uploaded)
                 return uploaded;
             world = std::move(next);
@@ -403,7 +409,6 @@ int run(const LaunchOptions &options) {
             // Bound per frame: traveling replaces them, but only between frames.
             Simulation &simulation = world->simulation;
             const Level &level = world->level;
-            const LevelGeometry &geometry = world->geometry;
             // Input and time are sampled once the display has caught up (docs/engine.md).
             if (auto paced = (*renderer)->wait_for_display(diagnostics.display_pacing); !paced) {
                 log(paced.error().message);
@@ -587,6 +592,13 @@ int run(const LaunchOptions &options) {
                                  .model = yaw_translation(0, {}),
                                  .grid = level.atmosphere.grid ? 1.0F : 0.0F,
                                  .receives_blob = true});
+            // The grid stays off movers: world-space lines would swim across them.
+            for (std::uint32_t i = 0; i < level.movers.size(); ++i) {
+                const auto at = simulation.mover_pose(i, alpha);
+                instances.push_back({.mesh = {k_first_mover_mesh + i},
+                                     .model = yaw_translation(at.yaw, at.position),
+                                     .receives_blob = true});
+            }
             particles.clear();
             if (diagnostics.show_capsule) {
                 instances.push_back(
@@ -725,7 +737,7 @@ int run(const LaunchOptions &options) {
                 (options.capture_tick && !captured && simulation.ticks() >= *options.capture_tick);
             FrameView view;
             view.camera = use_free_camera ? free_camera.interpolated(alpha)
-                                          : simulation.camera.pose(alpha, geometry.collision);
+                                          : simulation.camera.pose(alpha, simulation.scene());
             view.instances = instances;
             view.particles = particles;
             view.blob = {pose.position,

@@ -129,7 +129,7 @@ std::optional<RayHit> CollisionWorld::raycast(const Ray &ray) const {
                 return;
             const Vec3 normal = m_normals[index];
             best = RayHit{*distance, dot(normal, ray.direction) > 0 ? -normal : normal,
-                          ray.origin + ray.direction * *distance, index};
+                          ray.origin + ray.direction * *distance, index, std::nullopt};
         });
     return best;
 }
@@ -160,7 +160,7 @@ std::optional<SweepHit> CollisionWorld::sweep(const SweepQuery &query) const {
                 // (including over a convex edge) must not block on rounding noise.
                 if (dot(touch.normal, direction) >= -1.0e-3F)
                     return;
-                best = SweepHit{t, touch.normal, face, touch.point, index};
+                best = SweepHit{t, touch.normal, face, touch.point, index, std::nullopt};
                 return;
             }
             t += (touch.gap - query.skin * 0.5F) / travel;
@@ -171,9 +171,23 @@ std::optional<SweepHit> CollisionWorld::sweep(const SweepQuery &query) const {
         const auto touch =
             contact({offset(segment, query.displacement * t), radius, triangle, face});
         if (!best || t < best->fraction)
-            best = SweepHit{t, touch.normal, face, touch.point, index};
+            best = SweepHit{t, touch.normal, face, touch.point, index, std::nullopt};
     });
     return best;
+}
+
+Penetration CollisionWorld::deepest_penetration(const Capsule &shape, float skin) const {
+    const Segment segment = shape.segment();
+    const float pad = shape.radius + skin;
+    const Aabb bounds{segment.start - Vec3{pad, pad, pad}, segment.end + Vec3{pad, pad, pad}};
+    Penetration deepest;
+    visit_overlapping(bounds, [&](std::uint32_t index) {
+        const auto touch = contact({segment, shape.radius, m_triangles[index], m_normals[index]});
+        const float needed = skin * 0.5F - touch.gap;
+        if (needed > deepest.depth)
+            deepest = {touch.normal * needed, needed};
+    });
+    return deepest;
 }
 
 Vec3 CollisionWorld::depenetration(const Capsule &shape, float skin) const {
@@ -181,23 +195,89 @@ Vec3 CollisionWorld::depenetration(const Capsule &shape, float skin) const {
     for (int pass = 0; pass < 4; ++pass) {
         Capsule moved = shape;
         moved.base += total;
-        const Segment segment = moved.segment();
-        const float pad = shape.radius + skin;
-        const Aabb bounds{segment.start - Vec3{pad, pad, pad}, segment.end + Vec3{pad, pad, pad}};
-        Vec3 push{};
-        float deepest = 0;
-        visit_overlapping(bounds, [&](std::uint32_t index) {
-            const auto touch =
-                contact({segment, shape.radius, m_triangles[index], m_normals[index]});
-            const float needed = skin * 0.5F - touch.gap;
-            if (needed > deepest) {
-                deepest = needed;
-                push = touch.normal * needed;
-            }
-        });
-        if (deepest <= 0)
+        const auto deepest = deepest_penetration(moved, skin);
+        if (deepest.depth <= 0)
             break;
-        total += push;
+        total += deepest.push;
+    }
+    return total;
+}
+
+std::uint32_t CollisionWorld::add_body(std::span<const Triangle> local, BodyPose rest) {
+    m_bodies.emplace_back(local);
+    m_rest_poses.push_back(rest);
+    return static_cast<std::uint32_t>(m_bodies.size() - 1);
+}
+
+BodyPose CollisionScene::pose(std::uint32_t body) const {
+    return body < m_poses.size() ? m_poses[body] : m_world->rest_pose(body);
+}
+
+BodyCarry CollisionScene::carry(std::uint32_t body, Vec3 point) const {
+    const BodyPose now = pose(body);
+    const BodyPose before = body < m_previous.size() ? m_previous[body] : now;
+    return {to_world(now, to_local(before, point)) - point, angle_difference(before.yaw, now.yaw)};
+}
+
+const Triangle &CollisionScene::triangle(std::optional<std::uint32_t> body,
+                                         std::uint32_t index) const {
+    return (body ? m_world->body(*body) : *m_world).triangles()[index];
+}
+
+std::optional<RayHit> CollisionScene::raycast(const Ray &ray) const {
+    auto best = m_world->raycast(ray);
+    for (std::uint32_t i = 0; i < m_world->body_count(); ++i) {
+        const BodyPose at = pose(i);
+        const float limit = best ? best->distance : ray.max_distance;
+        auto hit = m_world->body(i).raycast(
+            {to_local(at, ray.origin), rotate_yaw(ray.direction, -at.yaw), limit});
+        if (!hit || (best && hit->distance >= best->distance))
+            continue;
+        hit->normal = rotate_yaw(hit->normal, at.yaw);
+        hit->point = to_world(at, hit->point);
+        hit->body = i;
+        best = hit;
+    }
+    return best;
+}
+
+// Each body is swept in its own space: a yaw turn keeps the capsule upright there.
+std::optional<SweepHit> CollisionScene::sweep(const SweepQuery &query) const {
+    auto best = m_world->sweep(query);
+    for (std::uint32_t i = 0; i < m_world->body_count(); ++i) {
+        const BodyPose at = pose(i);
+        SweepQuery local = query;
+        local.shape.base = to_local(at, query.shape.base);
+        local.displacement = rotate_yaw(query.displacement, -at.yaw);
+        auto hit = m_world->body(i).sweep(local);
+        if (!hit || (best && hit->fraction >= best->fraction))
+            continue;
+        hit->normal = rotate_yaw(hit->normal, at.yaw);
+        hit->face_normal = rotate_yaw(hit->face_normal, at.yaw);
+        hit->point = to_world(at, hit->point);
+        hit->body = i;
+        best = hit;
+    }
+    return best;
+}
+
+Vec3 CollisionScene::depenetration(const Capsule &shape, float skin) const {
+    Vec3 total{};
+    for (int pass = 0; pass < 4; ++pass) {
+        Capsule moved = shape;
+        moved.base += total;
+        Penetration deepest = m_world->deepest_penetration(moved, skin);
+        for (std::uint32_t i = 0; i < m_world->body_count(); ++i) {
+            const BodyPose at = pose(i);
+            Capsule local = moved;
+            local.base = to_local(at, moved.base);
+            const auto inside = m_world->body(i).deepest_penetration(local, skin);
+            if (inside.depth > deepest.depth)
+                deepest = {rotate_yaw(inside.push, at.yaw), inside.depth};
+        }
+        if (deepest.depth <= 0)
+            break;
+        total += deepest.push;
     }
     return total;
 }
