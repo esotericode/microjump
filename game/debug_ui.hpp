@@ -35,6 +35,7 @@ struct DiagnosticsControls {
     bool wait_idle = false;
     bool rebuild_shadow_map = false;
     bool rebuild_swapchain = false;
+    bool show_capsule = false; // Draw the collision capsule instead of the character.
 };
 
 // Diagnostics overlay lines: movement state, speeds, checkpoint and controls.

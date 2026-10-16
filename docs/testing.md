@@ -124,6 +124,15 @@ reported as leaks.
 - Replays are exact within one build. Committed-replay tests allow tiny tolerances for
   other compilers.
 
+## Character
+
+`character_tests.cpp` plays the committed move tours through the animator and checks
+every body part at three blend factors per tick. Each part must be finite, non-mirrored
+and near the collision capsule. The run, long-jump dive, wall-kick twirl, squash,
+stretch, dust and clean-hop flash must all appear. The tests also check that landings
+squash in order of fall height and settle, and that respawns snap instead of
+interpolating. See [character](character.md).
+
 ## Spark hunt
 
 The collectible tests cover strict optional JSON data, capsule and swept pickups, wall
