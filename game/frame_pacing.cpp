@@ -34,6 +34,7 @@ PacingSummary summarize(std::span<const FrameSample> samples) {
         sum += sample.delta_ms;
         summary.min_ms = std::min(summary.min_ms, sample.delta_ms);
         summary.max_ms = std::max(summary.max_ms, sample.delta_ms);
+        summary.display_wait_ms += sample.display_wait_ms;
         summary.wait_ms += sample.wait_ms;
         summary.acquire_ms += sample.acquire_ms;
         summary.present_ms += sample.present_ms;
@@ -46,6 +47,7 @@ PacingSummary summarize(std::span<const FrameSample> samples) {
     }
     const auto count = static_cast<double>(samples.size());
     summary.mean_ms = sum / count;
+    summary.display_wait_ms /= count;
     summary.wait_ms /= count;
     summary.acquire_ms /= count;
     summary.present_ms /= count;
@@ -65,11 +67,12 @@ PacingSummary summarize(std::span<const FrameSample> samples) {
 
 std::string describe(const PacingSummary &summary) {
     return std::format("{} frames, {:.3f} ms mean, jitter {:.3f} ms, range {:.2f}-{:.2f} ms, "
-                       "long {}, uneven ticks {}, wait {:.2f} / acquire {:.2f} / present {:.2f} "
-                       "ms, GPU {:.2f} ms",
+                       "long {}, uneven ticks {}, display {:.2f} / wait {:.2f} / acquire {:.2f} / "
+                       "present {:.2f} ms, GPU {:.2f} ms",
                        summary.frames, summary.mean_ms, summary.deviation_ms, summary.min_ms,
-                       summary.max_ms, summary.long_frames, summary.uneven_ticks, summary.wait_ms,
-                       summary.acquire_ms, summary.present_ms, summary.gpu_ms);
+                       summary.max_ms, summary.long_frames, summary.uneven_ticks,
+                       summary.display_wait_ms, summary.wait_ms, summary.acquire_ms,
+                       summary.present_ms, summary.gpu_ms);
 }
 
 void FramePacing::add(const FrameSample &sample) {
@@ -82,11 +85,12 @@ void FramePacing::add(const FrameSample &sample) {
     if (!m_log.is_open())
         return;
     m_log << std::format("{},{:.3f},{:.3f},{:.3f},{},{:.3f},{:.3f},{:.3f},{:.3f},{:.3f},{:.3f},"
-                         "{:.3f},{:.3f},{},{:.2f},{:.2f},{}\n",
+                         "{:.3f},{:.3f},{:.3f},{},{:.2f},{:.2f},{}\n",
                          m_frame, m_time_ms, sample.delta_ms, sample.sim_delta_ms, sample.ticks,
-                         sample.alpha, sample.sim_cpu_ms, sample.rebuild_ms, sample.wait_ms,
-                         sample.acquire_ms, sample.record_ms, sample.present_ms, sample.gpu_ms,
-                         sample.image, sample.mouse_dx, sample.mouse_dy, sample.events);
+                         sample.alpha, sample.sim_cpu_ms, sample.display_wait_ms, sample.rebuild_ms,
+                         sample.wait_ms, sample.acquire_ms, sample.record_ms, sample.present_ms,
+                         sample.gpu_ms, sample.image, sample.mouse_dx, sample.mouse_dy,
+                         sample.events);
 }
 
 PacingStats FramePacing::stats() const {
@@ -126,8 +130,9 @@ bool FramePacing::open_log(const std::filesystem::path &path) {
     if (!m_log.is_open())
         return false;
     m_log_path = path;
-    m_log << "frame,time_ms,delta_ms,sim_delta_ms,ticks,alpha,sim_cpu_ms,rebuild_ms,wait_ms,"
-             "acquire_ms,record_ms,present_ms,gpu_ms,image,mouse_dx,mouse_dy,events\n";
+    m_log << "frame,time_ms,delta_ms,sim_delta_ms,ticks,alpha,sim_cpu_ms,display_wait_ms,"
+             "rebuild_ms,wait_ms,acquire_ms,record_ms,present_ms,gpu_ms,image,mouse_dx,mouse_dy,"
+             "events\n";
     return true;
 }
 

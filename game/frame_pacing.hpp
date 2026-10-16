@@ -25,6 +25,7 @@ struct FrameSample {
     std::uint32_t ticks = 0; // Simulation ticks run this frame.
     float alpha = 0;         // Render interpolation factor.
     double sim_cpu_ms = 0;   // Time spent running those ticks.
+    double display_wait_ms = 0;
     double rebuild_ms = 0;
     double wait_ms = 0;
     double acquire_ms = 0;
@@ -56,7 +57,8 @@ struct PacingSummary {
     double max_ms = 0;
     std::uint32_t long_frames = 0;  // More than 1.5x the median interval.
     std::uint32_t uneven_ticks = 0; // Tick count differs from the previous frame.
-    double wait_ms = 0;             // Means of the renderer's blocking points.
+    double display_wait_ms = 0;     // Means of the renderer's blocking points.
+    double wait_ms = 0;
     double acquire_ms = 0;
     double present_ms = 0;
     double gpu_ms = -1;

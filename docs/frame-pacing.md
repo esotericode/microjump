@@ -34,16 +34,18 @@ The diagnostics below tell these apart without guessing.
 - **F2 → Diagnostics: frame pacing:**
   - the display refresh rate;
   - **Snap frame time to refresh** (an experiment, off by default);
+  - **Pace frames to the display** (on by default when the driver supports it) and
+    **Frames queued** (1 or 2; default 2), see the fix below;
   - one-shot buttons: **Wait for GPU idle**, **Rebuild shadow map** (same quality) and
     **Recreate swapchain**;
   - **Start/Stop frame log**, which writes `frame-log.csv` beside the executable.
 - **`--frame-log PATH`:** a CSV with one row per frame. Columns: interval, interval
-  fed to the simulation, ticks, interpolation alpha, simulation CPU time, rebuild
-  stall, then waits in frame slot / acquire / record / present. After those come GPU
-  time from timestamp queries, swapchain image and mouse deltas. Events include
-  `shadow_rebuilt_High`, `swapchain_rebuilt`, `tuning_open`, `mouse_captured`,
-  `focus_lost`, `action_*` and `phase_N`.
-- **`--pacing-test`:** a scripted run of 8 phases of 5 s each:
+  fed to the simulation, ticks, interpolation alpha, simulation CPU time, display wait,
+  rebuild stall, then waits in frame slot / acquire / record / present. After those come
+  GPU time from timestamp queries, swapchain image and mouse deltas. Events include
+  `shadow_rebuilt_High`, `swapchain_rebuilt`, `display_wait_timeout`, `tuning_open`,
+  `mouse_captured`, `focus_lost`, `action_*` and `phase_N`.
+- **`--pacing-test`:** a scripted run of 9 phases of 5 s each:
   1. baseline;
   2. shadows High;
   3. shadows Low;
@@ -51,14 +53,16 @@ The diagnostics below tell these apart without guessing.
   5. GPU idle wait;
   6. shadow map rebuilt at the same quality;
   7. swapchain recreated;
-  8. frame time snapped to the refresh rate.
+  8. frame time snapped to the refresh rate;
+  9. display pacing turned off, then a GPU idle wait (the original trigger, for
+     comparison).
 
   It prints one steady-state summary per phase (the last 4 s, after the rebuild
   hitch) and exits.
-- **Startup log:** shows the display refresh rate, swapchain image count, and whether
-  GPU timestamps are available.
+- **Startup log:** shows the display refresh rate, swapchain image count, whether
+  GPU timestamps are available, and whether present wait (display pacing) is available.
 
-## Local result (Linux, Intel Meteor Lake, GNOME Wayland, Debug build)
+## Local result before the fix (Linux, Intel Meteor Lake, GNOME Wayland, Debug build)
 
 Zero validation errors. Steady state was unchanged across all phases: means of
 16.67–16.78 ms, with the CPU blocked about 15.2 ms in acquire in every phase. The
@@ -99,29 +103,59 @@ appear at startup. Mouse capture and the tuning window had no effect.
 
 ## Fix (D-045)
 
-1. **No device-wide wait on shadow changes.**
+The engine paced frames on the GPU: a frame started as soon as its frame slot's previous
+work finished, and the game clock was read at that moment. That is only smooth if the
+driver releases swapchain images once per refresh. The NVIDIA driver stopped doing so,
+and nothing in our loop tied frames back to the display. The fix makes the loop pace to
+the display itself, and removes the stall that triggered the driver behavior.
+
+1. **Display pacing (`VK_KHR_present_id` + `VK_KHR_present_wait`).**
+   - These optional extensions are enabled when the device has them (D-003 allows
+     optional features detected at runtime). The startup log says which path is in use.
+   - Every present carries an increasing ID. At the top of each loop iteration, before
+     input is polled and the clock is read, `Renderer::wait_for_display` blocks until the
+     display has shown the frame before last (`queued_frames` = 2, the default), using
+     `vkWaitForPresentKHR`.
+   - Frames therefore start once per shown refresh, and the game time each one samples
+     advances by one refresh, however the driver queues or recycles images. Rendering two
+     frames in one refresh is no longer possible, because each frame start needs a frame
+     to have been shown since the last one.
+   - `queued_frames = 1` (F2) has one refresh less latency. Locally it missed refreshes
+     at High shadows (51 of 188 frames): GNOME reports presentation a few ms after
+     the refresh and composites a few ms before the next, which left less than the 8–11 ms
+     the GPU needed. With 2 there is a full refresh of headroom.
+   - The wait times out after 100 ms (a hidden window may never show a present). The game
+     then continues paced by the swapchain, and the CSV logs `display_wait_timeout`.
+   - Without the extensions (e.g. lavapipe), the loop behaves as before.
+2. **No device-wide wait on shadow changes.**
    - The new shadow map is created immediately.
    - Each frame slot rebinds it after that slot's own previous frame has finished.
    - The old map is retired until the timeline shows that no in-flight frame uses it.
    - A shadow change now costs about 0.1 ms locally, against 5–9 ms with
      `vkDeviceWaitIdle`, and passes validation.
    - Resizes, swapchain recreation and the diagnostic idle button still idle the device.
-2. **Automatic recovery.**
-   - The renderer checks 32-frame windows for the combined signature: at least 12
-     frames reacquired the image just presented, and the intervals split into at
-     least 10 short frames (under 0.3× the mean) and 10 long ones (over 1.6× the
-     mean).
-   - On a match it recreates the swapchain, the same fix as the owner's button.
-   - It is logged (`Paired presentation detected …`, CSV event `pacing_recovered`)
-     and rate-limited to 3 recreations per 30 s, after which it stops.
-   - It can be turned off with F2 → Diagnostics → *Recover from paired presentation*.
-   - Unit tests replay 32-frame windows taken from the Windows logs (paired and
-     recovered) and from Linux. Either symptom alone does not trigger recovery.
-   - On the Linux machine, natively and under Xvfb with software Vulkan, all four
-     images rotate (`0 1 2 3`) with zero reuse, and no recovery fires.
 
-Still to confirm on Windows: the scripted test should show no paired phase, and the
-*GPU idle wait* phase should recover automatically if that stall re-triggers pairing.
+An earlier version of this fix detected the paired pattern and recreated the swapchain.
+It was replaced: it reacted to one driver's symptom with thresholds from one log, and it
+would have missed variants (other refresh rates, VRR, other ratios).
+
+**Local result with the fix** (`--pacing-test`, Intel Meteor Lake, GNOME Wayland, Debug
+build with ASan and validation, present wait available, 4 swapchain images). Zero
+validation errors.
+
+| Phase | Jitter | Long frames |
+| --- | --- | --- |
+| Shadows High / Low / Medium | 0.12–0.14 ms | 0 |
+| GPU idle wait | 0.13 ms | 0 |
+| Swapchain recreated | 0.13 ms | 0 |
+| Display pacing off, GPU idle wait | 2.45 ms (intervals 1.8–47 ms) | 2 |
+
+Phases 1, 6 and 8 each had one or two single 33 ms frames, the same random compositor
+hiccups as before the fix.
+
+Still to confirm on Windows: every phase except 9 should show low jitter. Phase 9
+shows whether the driver still pairs frames when unpaced; that is useful to know, but not
+a failure.
 
 ## Original request to the owner (Windows)
 

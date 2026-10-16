@@ -217,9 +217,12 @@ std::expected<void, Error> VulkanContext::select_device() {
         if (result != VK_SUCCESS) {
             return std::unexpected(vk_error("vkEnumerateDeviceExtensionProperties", result));
         }
-        support.swapchain = std::ranges::any_of(extensions, [](const auto &extension) {
-            return std::strcmp(extension.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0;
-        });
+        const auto has_extension = [&extensions](const char *name) {
+            return std::ranges::any_of(extensions, [name](const auto &extension) {
+                return std::strcmp(extension.extensionName, name) == 0;
+            });
+        };
+        support.swapchain = has_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
         std::uint32_t format_count = 0;
         result = vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &format_count, nullptr);
         if (result != VK_SUCCESS) {
@@ -238,6 +241,8 @@ std::expected<void, Error> VulkanContext::select_device() {
         }
         m_physical_device = device;
         m_queue_family = graphics_family;
+        m_present_wait = has_extension(VK_KHR_PRESENT_ID_EXTENSION_NAME) &&
+                         has_extension(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
         log(std::string("Vulkan device: ") + properties.deviceName);
         break;
     }
@@ -245,6 +250,20 @@ std::expected<void, Error> VulkanContext::select_device() {
         return std::unexpected(
             Error{"No Vulkan 1.3 device supports presentation, dynamic rendering, "
                   "synchronization2 and timeline semaphores"});
+    }
+
+    // Optional: present IDs and waits let the renderer pace frames to the display.
+    VkPhysicalDevicePresentWaitFeaturesKHR present_wait{};
+    present_wait.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR;
+    VkPhysicalDevicePresentIdFeaturesKHR present_id{};
+    present_id.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR;
+    present_id.pNext = &present_wait;
+    if (m_present_wait) {
+        VkPhysicalDeviceFeatures2 features{};
+        features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        features.pNext = &present_id;
+        vkGetPhysicalDeviceFeatures2(m_physical_device, &features);
+        m_present_wait = present_id.presentId == VK_TRUE && present_wait.presentWait == VK_TRUE;
     }
 
     const float priority = 1.0F;
@@ -257,18 +276,24 @@ std::expected<void, Error> VulkanContext::select_device() {
     features13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
     features13.dynamicRendering = VK_TRUE;
     features13.synchronization2 = VK_TRUE;
+    if (m_present_wait)
+        features13.pNext = &present_id; // present_id chains present_wait.
     VkPhysicalDeviceVulkan12Features features12{};
     features12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     features12.pNext = &features13;
     features12.timelineSemaphore = VK_TRUE;
-    const char *extension = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
+    std::vector<const char *> device_extensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+    if (m_present_wait) {
+        device_extensions.push_back(VK_KHR_PRESENT_ID_EXTENSION_NAME);
+        device_extensions.push_back(VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+    }
     VkDeviceCreateInfo device_info{};
     device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     device_info.pNext = &features12;
     device_info.queueCreateInfoCount = 1;
     device_info.pQueueCreateInfos = &queue_info;
-    device_info.enabledExtensionCount = 1;
-    device_info.ppEnabledExtensionNames = &extension;
+    device_info.enabledExtensionCount = static_cast<std::uint32_t>(device_extensions.size());
+    device_info.ppEnabledExtensionNames = device_extensions.data();
     if (const auto result = vkCreateDevice(m_physical_device, &device_info, nullptr, &m_device);
         result != VK_SUCCESS) {
         return std::unexpected(vk_error("vkCreateDevice", result));
@@ -277,6 +302,9 @@ std::expected<void, Error> VulkanContext::select_device() {
     vkGetDeviceQueue(m_device, m_queue_family, 0, &m_graphics_queue);
     log("Vulkan 1.3 device ready: dynamic rendering, synchronization2, timeline semaphores "
         "enabled");
+    log(m_present_wait ? "Present wait: available; frames are paced to the display"
+                       : "Present wait: unavailable; frames are paced by swapchain image "
+                         "availability");
     return {};
 }
 

@@ -120,6 +120,7 @@ int run(const LaunchOptions &options) {
         FramePacing pacing;
         status.pacing = &pacing;
         DiagnosticsControls diagnostics;
+        diagnostics.display_pacing_supported = (*renderer)->display_pacing_supported();
         diagnostics.refresh_hz = (*window)->refresh_rate();
         log("Display refresh: " + std::format("{:.2f}", diagnostics.refresh_hz) + " Hz");
         const auto start_frame_log = [&](const std::filesystem::path &path) {
@@ -152,7 +153,7 @@ int run(const LaunchOptions &options) {
             const char *name;
             std::function<void()> enter;
         };
-        const std::array<PacingPhase, 8> pacing_phases{{
+        const std::array<PacingPhase, 9> pacing_phases{{
             {"baseline (shadows Medium)", [] {}},
             {"shadows High", [&] { lighting.shadows.quality = ShadowQuality::high; }},
             {"shadows Low", [&] { lighting.shadows.quality = ShadowQuality::low; }},
@@ -162,13 +163,20 @@ int run(const LaunchOptions &options) {
              [&] { (*renderer)->request(RenderAction::rebuild_shadow_map); }},
             {"swapchain recreated", [&] { (*renderer)->request(RenderAction::rebuild_swapchain); }},
             {"frame time snapped to refresh", [&] { diagnostics.snap_to_refresh = true; }},
+            // Shows what the driver does without display pacing after the original trigger.
+            {"display pacing off, GPU idle wait",
+             [&] {
+                 diagnostics.display_pacing.enabled = false;
+                 (*renderer)->request(RenderAction::wait_idle);
+             }},
         }};
         std::size_t pacing_phase = 0;
         auto phase_started = std::chrono::steady_clock::now();
         std::vector<FrameSample> phase_samples;
         if (options.pacing_test) {
             lighting.shadows.quality = ShadowQuality::medium;
-            log("Pacing test: 8 phases of 5 s; keep the window focused and visible");
+            log(std::format("Pacing test: {} phases of 5 s; keep the window focused and visible",
+                            pacing_phases.size()));
         }
         std::vector<DrawInstance> instances;
         log("M4 playground ready: WASD move, Space jump/wall kick, Shift+jump long jump, R "
@@ -176,6 +184,11 @@ int run(const LaunchOptions &options) {
             "tuning, "
             "F3 free camera.");
         while (true) {
+            // Input and time are sampled once the display has caught up (docs/frame-pacing.md).
+            if (auto paced = (*renderer)->wait_for_display(diagnostics.display_pacing); !paced) {
+                log(paced.error().message);
+                return 1;
+            }
             // Replays ignore live look input, so they never grab the cursor.
             const bool capture_mouse = !tuning_open && !options.camera_test && !replaying;
             // While tuning is open a controller drives the menu, so its gameplay input is
@@ -363,8 +376,9 @@ int run(const LaunchOptions &options) {
                               tuning_open);
             };
             if (options.pacing_test) {
-                status.input_mode += " | Pacing test " + std::to_string(pacing_phase + 1) +
-                                     "/8: " + pacing_phases[pacing_phase].name;
+                status.input_mode +=
+                    std::format(" | Pacing test {}/{}: {}", pacing_phase + 1, pacing_phases.size(),
+                                pacing_phases[pacing_phase].name);
                 if (now - phase_started >= std::chrono::seconds(5)) {
                     log(std::format("Pacing phase {} ({}): {}", pacing_phase + 1,
                                     pacing_phases[pacing_phase].name,
@@ -396,7 +410,6 @@ int run(const LaunchOptions &options) {
             view.overlay_lines = &overlay_lines;
             view.debug_windows = &debug_windows;
             view.capture = capture ? &options.capture_out : nullptr;
-            (*renderer)->set_pacing_recovery(diagnostics.pacing_recovery);
             auto result = (*renderer)->draw(view);
             if (!result) {
                 log(result.error().message);
@@ -439,8 +452,8 @@ int run(const LaunchOptions &options) {
                     note("swapchain_rebuilt");
                 if (timing.suboptimal)
                     note("suboptimal");
-                if (timing.recovered)
-                    note("pacing_recovered");
+                if (timing.display_timeout)
+                    note("display_wait_timeout");
                 if (snapping)
                     note("snap");
                 const FrameSample sample{.delta_ms = elapsed * 1000,
@@ -448,6 +461,7 @@ int run(const LaunchOptions &options) {
                                          .ticks = frame_ticks,
                                          .alpha = alpha,
                                          .sim_cpu_ms = simulation_ms,
+                                         .display_wait_ms = timing.display_wait_ms,
                                          .rebuild_ms = timing.rebuild_ms,
                                          .wait_ms = timing.wait_ms,
                                          .acquire_ms = timing.acquire_ms,

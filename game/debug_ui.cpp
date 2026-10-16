@@ -195,8 +195,19 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
     if (ImGui::CollapsingHeader("Diagnostics: frame pacing")) {
         auto &d = panels.diagnostics;
         ImGui::Text("Display refresh: %.2f Hz", static_cast<double>(d.refresh_hz));
+        if (d.display_pacing_supported) {
+            ImGui::Checkbox("Pace frames to the display", &d.display_pacing.enabled);
+            ImGui::TextUnformatted("Frames queued:");
+            for (const std::uint32_t queued : {1U, 2U}) {
+                ImGui::SameLine();
+                const auto label = std::to_string(queued);
+                if (ImGui::RadioButton(label.c_str(), d.display_pacing.queued_frames == queued))
+                    d.display_pacing.queued_frames = queued;
+            }
+        } else {
+            ImGui::TextUnformatted("Display pacing unavailable (no VK_KHR_present_wait).");
+        }
         ImGui::Checkbox("Snap frame time to refresh", &d.snap_to_refresh);
-        ImGui::Checkbox("Recover from paired presentation", &d.pacing_recovery);
         ImGui::TextUnformatted("Experiments (each is logged):");
         d.wait_idle = ImGui::Button("Wait for GPU idle");
         ImGui::SameLine();

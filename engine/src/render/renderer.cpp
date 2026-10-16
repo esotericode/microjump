@@ -1,6 +1,5 @@
 #include <mj/core/png.hpp>
 #include <mj/platform/window.hpp>
-#include <mj/render/pacing.hpp>
 #include <mj/render/renderer.hpp>
 #include <mj/render/vulkan_context.hpp>
 
@@ -288,18 +287,6 @@ struct Renderer::Impl {
         Image image;
         std::uint64_t release = 0; // Timeline value after which it is unused.
     };
-    // Recent acquire/present behavior, to detect paired presentation (see docs/frame-pacing.md).
-    struct PacingWatch {
-        static constexpr std::size_t k_window = 32;
-        std::array<double, k_window> intervals{};
-        std::array<bool, k_window> repeats{};
-        std::size_t count = 0;
-        std::uint32_t last_presented = std::numeric_limits<std::uint32_t>::max();
-        std::chrono::steady_clock::time_point previous{};
-        std::vector<std::chrono::steady_clock::time_point> recoveries;
-        bool enabled = true;
-        bool gave_up = false;
-    };
     struct MeshRange {
         std::uint32_t first = 0;
         std::uint32_t count = 0;
@@ -331,6 +318,7 @@ struct Renderer::Impl {
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
     std::vector<VkImage> swap_images;
     std::vector<VkSemaphore> presented;
+    std::uint64_t present_id = 0; // Last VK_KHR_present_id value on this swapchain.
     VkExtent2D extent{};
     PixelSize requested_size{};
     VkFormat swap_format = VK_FORMAT_UNDEFINED;
@@ -345,7 +333,8 @@ struct Renderer::Impl {
     FrameTiming timing;
     std::uint32_t shadow_generation = 0;
     std::vector<Retired> retired;
-    PacingWatch pacing;
+    double display_wait_ms = 0; // Reported with the next drawn frame.
+    bool display_timeout = false;
     bool action_wait_idle = false;
     bool action_rebuild_shadow = false;
 
@@ -356,7 +345,7 @@ struct Renderer::Impl {
     std::expected<void, Error> create_shadow_map(ShadowQuality quality);
     void bind_shadow_map(Frame &frame) const;
     void release_retired();
-    bool watch_pacing(std::uint32_t image_index);
+    std::expected<void, Error> wait_for_display(const DisplayPacing &pacing);
     std::expected<void, Error> create_swapchain(PixelSize size);
     std::expected<void, Error> initialize_overlay();
     std::expected<void, Error> wait(std::uint64_t value) const;
@@ -667,37 +656,30 @@ void Renderer::Impl::release_retired() {
     std::erase_if(retired, [completed](const Retired &item) { return item.release <= completed; });
 }
 
-// Watches for paired presentation (mj/render/pacing.hpp) over windows of 32 frames and
-// requests a swapchain rebuild, at most 3 times in 30 s. Returns true when one is requested.
-bool Renderer::Impl::watch_pacing(std::uint32_t image_index) {
-    auto &watch = pacing;
-    const auto now = std::chrono::steady_clock::now();
-    const bool first = watch.previous == std::chrono::steady_clock::time_point{};
-    const double interval = std::chrono::duration<double, std::milli>(now - watch.previous).count();
-    watch.previous = now;
-    const bool repeat = image_index == watch.last_presented;
-    watch.last_presented = image_index;
-    if (first || !watch.enabled || watch.gave_up)
-        return false;
-    watch.intervals[watch.count % PacingWatch::k_window] = interval;
-    watch.repeats[watch.count % PacingWatch::k_window] = repeat;
-    if (++watch.count < PacingWatch::k_window)
-        return false;
-    if (!paired_presentation({watch.intervals, watch.repeats}))
-        return false;
-    const auto repeats = std::count(watch.repeats.begin(), watch.repeats.end(), true);
-    watch.count = 0;
-    std::erase_if(watch.recoveries,
-                  [now](auto time) { return now - time > std::chrono::seconds(30); });
-    if (watch.recoveries.size() >= 3) {
-        watch.gave_up = true;
-        log("Paired presentation persists after 3 swapchain recreations; leaving it");
-        return false;
-    }
-    watch.recoveries.push_back(now);
-    log("Paired presentation detected (" + std::to_string(repeats) +
-        "/32 frames reacquired the image just presented); recreating the swapchain");
-    return true;
+// Waiting for the display, not just for the GPU, keeps one frame per refresh even when a
+// driver hands back images early (an NVIDIA Windows driver paired frames that way; see
+// docs/frame-pacing.md). A present that is never shown (hidden window) times out harmlessly.
+std::expected<void, Error> Renderer::Impl::wait_for_display(const DisplayPacing &pacing) {
+    display_wait_ms = 0;
+    display_timeout = false;
+    if (!vk.present_wait || !pacing.enabled || swapchain == VK_NULL_HANDLE || recreate)
+        return {};
+    const auto target = display_wait_target(present_id, pacing);
+    if (!target)
+        return {};
+    constexpr std::uint64_t k_timeout_ns = 100'000'000;
+    const auto started = std::chrono::steady_clock::now();
+    const auto result = vkWaitForPresentKHR(vk.device, swapchain, *target, k_timeout_ns);
+    display_wait_ms =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started)
+            .count();
+    if (result == VK_TIMEOUT)
+        display_timeout = true;
+    else if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+        recreate = true;
+    else if (result != VK_SUCCESS)
+        return std::unexpected(vulkan_error("vkWaitForPresentKHR", result));
+    return {};
 }
 
 void Renderer::Impl::destroy_swapchain() {
@@ -713,6 +695,7 @@ void Renderer::Impl::destroy_swapchain() {
     }
     presented.clear();
     swap_images.clear();
+    present_id = 0; // IDs are per swapchain.
     if (swapchain != VK_NULL_HANDLE)
         vkDestroySwapchainKHR(vk.device, swapchain, nullptr);
     swapchain = VK_NULL_HANDLE;
@@ -934,6 +917,10 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
         return std::chrono::duration<double, std::milli>(to - from).count();
     };
     timing = {};
+    timing.display_wait_ms = display_wait_ms;
+    timing.display_timeout = display_timeout;
+    display_wait_ms = 0;
+    display_timeout = false;
     const auto started = Clock::now();
     const bool resized =
         recreate || size.width != requested_size.width || size.height != requested_size.height;
@@ -952,10 +939,6 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
         timing.swapchain_rebuilt = resized;
         if (resized) {
             recreate = false;
-            // New images start a fresh pacing history.
-            pacing.count = 0;
-            pacing.last_presented = std::numeric_limits<std::uint32_t>::max();
-            pacing.previous = {};
             if (imgui_renderer) {
                 ImGui_ImplVulkan_Shutdown();
                 imgui_renderer = false;
@@ -1002,8 +985,6 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     const auto acquired = Clock::now();
     timing.acquire_ms = milliseconds(acquire_started, acquired);
     timing.image = image_index;
-    if (acquire == VK_SUCCESS || acquire == VK_SUBOPTIMAL_KHR)
-        timing.recovered = watch_pacing(image_index); // Rebuilds at the next draw.
     timing.swapchain_images = static_cast<std::uint32_t>(swap_images.size());
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate = true;
@@ -1015,7 +996,7 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
         return std::unexpected(vulkan_error("vkAcquireNextImageKHR", acquire));
     }
     timing.suboptimal = acquire == VK_SUBOPTIMAL_KHR;
-    recreate = timing.recovered || timing.suboptimal;
+    recreate = timing.suboptimal;
     auto &io = ImGui::GetIO();
     if ((SDL_GetWindowFlags(window->native_handle()) & SDL_WINDOW_INPUT_FOCUS) != 0)
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
@@ -1298,6 +1279,15 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     present.swapchainCount = 1;
     present.pSwapchains = &swapchain;
     present.pImageIndices = &image_index;
+    VkPresentIdKHR present_ids{};
+    const std::uint64_t id = present_id + 1;
+    if (vk.present_wait) {
+        present_ids.sType = VK_STRUCTURE_TYPE_PRESENT_ID_KHR;
+        present_ids.swapchainCount = 1;
+        present_ids.pPresentIds = &id;
+        present.pNext = &present_ids;
+        present_id = id;
+    }
     const auto present_started = Clock::now();
     timing.record_ms = milliseconds(acquired, present_started);
     const auto result = vkQueuePresentKHR(vk.queue, &present);
@@ -1394,8 +1384,11 @@ bool Renderer::ui_wants_mouse() const {
 const FrameTiming &Renderer::last_timing() const {
     return m_impl->timing;
 }
-void Renderer::set_pacing_recovery(bool enabled) {
-    m_impl->pacing.enabled = enabled;
+std::expected<void, Error> Renderer::wait_for_display(const DisplayPacing &pacing) {
+    return m_impl->wait_for_display(pacing);
+}
+bool Renderer::display_pacing_supported() const {
+    return m_impl->vk.present_wait;
 }
 void Renderer::request(RenderAction action) {
     switch (action) {

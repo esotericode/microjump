@@ -2,6 +2,7 @@
 
 #include <mj/core/error.hpp>
 #include <mj/render/lighting.hpp>
+#include <mj/render/pacing.hpp>
 #include <mj/scene/debug_camera.hpp>
 #include <mj/scene/mesh.hpp>
 
@@ -58,18 +59,19 @@ struct FrameView {
 // Where the CPU spent the last draw call, for frame-pacing diagnostics. Times are
 // milliseconds; gpu_ms is the GPU time of this slot's previous frame (-1 if unavailable).
 struct FrameTiming {
-    double rebuild_ms = 0; // Device idle wait plus shadow/swapchain rebuild, if any.
-    double wait_ms = 0;    // Waiting for the frame slot's previous GPU work.
-    double acquire_ms = 0; // vkAcquireNextImageKHR.
-    double record_ms = 0;  // Overlay, recording and submission.
-    double present_ms = 0; // vkQueuePresentKHR.
+    double display_wait_ms = 0; // wait_for_display before this frame's input and time.
+    double rebuild_ms = 0;      // Device idle wait plus shadow/swapchain rebuild, if any.
+    double wait_ms = 0;         // Waiting for the frame slot's previous GPU work.
+    double acquire_ms = 0;      // vkAcquireNextImageKHR.
+    double record_ms = 0;       // Overlay, recording and submission.
+    double present_ms = 0;      // vkQueuePresentKHR.
     double gpu_ms = -1;
     std::uint32_t image = 0;
     std::uint32_t swapchain_images = 0;
     bool shadow_rebuilt = false;
     bool swapchain_rebuilt = false;
-    bool suboptimal = false; // Acquire or present asked for a swapchain rebuild.
-    bool recovered = false;  // Paired presentation detected; the swapchain will be rebuilt.
+    bool suboptimal = false;      // Acquire or present asked for a swapchain rebuild.
+    bool display_timeout = false; // The display wait gave up (e.g. a hidden window).
 };
 
 // One-shot diagnostic actions, applied at the start of the next draw.
@@ -92,8 +94,11 @@ class Renderer {
     [[nodiscard]] std::expected<bool, Error> draw(const FrameView &view);
     [[nodiscard]] const FrameTiming &last_timing() const;
     void request(RenderAction action);
-    // Recreate the swapchain when presentation falls into paired frames (default on).
-    void set_pacing_recovery(bool enabled);
+    // Blocks until the display has shown the earlier frame `pacing` allows to be queued.
+    // Call it before sampling input and time for the next frame. Does nothing when the
+    // device lacks VK_KHR_present_wait or pacing is disabled.
+    [[nodiscard]] std::expected<void, Error> wait_for_display(const DisplayPacing &pacing);
+    [[nodiscard]] bool display_pacing_supported() const;
 
   private:
     struct Impl;

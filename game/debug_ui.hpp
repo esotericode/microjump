@@ -5,6 +5,7 @@
 #include "simulation.hpp"
 
 #include <mj/platform/gamepad.hpp>
+#include <mj/render/pacing.hpp>
 
 #include <string>
 
@@ -25,7 +26,8 @@ struct SessionStatus {
 // F2 > Diagnostics: frame-pacing experiments. Buttons set one-shot requests for main.
 struct DiagnosticsControls {
     bool snap_to_refresh = false;
-    bool pacing_recovery = true; // Recreate the swapchain on paired presentation.
+    bool display_pacing_supported = false; // VK_KHR_present_wait is available.
+    DisplayPacing display_pacing;
     float refresh_hz = 0;
     bool logging = false;
     std::string log_path;
