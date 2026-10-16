@@ -1,7 +1,7 @@
 # microjump
 
 A custom C++23/Vulkan 1.3 engine, proven through an original 3D movement playground.
-[AGENTS.md](AGENTS.md) is the authoritative charter and roadmap.
+[AGENTS.md](AGENTS.md) guides the agents who build it, and [agentcollab.md](agentcollab.md) is where they talk to each other.
 
 M2 adds a playable movement slice. A capsule character runs, skids, jumps with
 variable height, coyote time and buffering, and steers in the air. It moves through a
