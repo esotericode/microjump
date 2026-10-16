@@ -25,6 +25,7 @@ struct VulkanDevice {
     VkSurfaceKHR surface;
     VkQueue queue;
     std::uint32_t queue_family;
+    bool present_wait; // VK_KHR_present_id + VK_KHR_present_wait are enabled.
 };
 
 class VulkanContext {
@@ -35,8 +36,8 @@ class VulkanContext {
     VulkanContext(const VulkanContext &) = delete;
     VulkanContext &operator=(const VulkanContext &) = delete;
     [[nodiscard]] VulkanDevice device() const {
-        return {m_instance, m_physical_device, m_device,
-                m_surface,  m_graphics_queue,  m_queue_family};
+        return {m_instance,       m_physical_device, m_device,      m_surface,
+                m_graphics_queue, m_queue_family,    m_present_wait};
     }
 
   private:
@@ -52,6 +53,7 @@ class VulkanContext {
     VkDevice m_device = VK_NULL_HANDLE;
     VkQueue m_graphics_queue = VK_NULL_HANDLE;
     std::uint32_t m_queue_family = 0;
+    bool m_present_wait = false;
 };
 
 } // namespace mj

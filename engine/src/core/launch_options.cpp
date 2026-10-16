@@ -19,6 +19,8 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             options.camera_test = true;
         } else if (argument == "--hide-overlay") {
             options.hide_overlay = true;
+        } else if (argument == "--pacing-test") {
+            options.pacing_test = true;
         } else if (argument == "--time-of-day") {
             ++index;
             float hours = -1;
@@ -62,11 +64,12 @@ parse_launch_options(std::span<const std::string_view> arguments) {
                 return std::unexpected(Error{"Duplicate frame count option"});
             destination = count;
         } else if (argument == "--capture-out" || argument == "--record" ||
-                   argument == "--replay" || argument == "--level") {
+                   argument == "--replay" || argument == "--level" || argument == "--frame-log") {
             auto &destination = argument == "--capture-out" ? options.capture_out
                                 : argument == "--record"    ? options.record
                                 : argument == "--replay"    ? options.replay
-                                                            : options.level;
+                                : argument == "--level"     ? options.level
+                                                            : options.frame_log;
             ++index;
             if (index == arguments.size() || arguments[index].empty() || !destination.empty()) {
                 return std::unexpected(Error{std::string(argument) + " needs one nonempty path"});

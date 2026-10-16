@@ -81,6 +81,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     }
     const auto pad = m_gamepad.sample(gamepad_tuning, focused);
     input.focused = focused;
+    input.mouse_captured = m_mouse_captured;
     input.gamepad_connected = pad.connected;
     input.gamepad_name = pad.name;
     input.gamepad_labels = pad.labels;
@@ -89,6 +90,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
         const bool quit = input.quit;
         input = {};
         input.quit = quit;
+        input.mouse_captured = m_mouse_captured;
         input.gamepad_connected = pad.connected;
         input.gamepad_name = pad.name;
         input.gamepad_labels = pad.labels;
@@ -145,6 +147,11 @@ std::expected<void, Error> Window::resize(int width, int height) {
         return std::unexpected(Error{"Window resize: " + std::string(SDL_GetError())});
     }
     return {};
+}
+
+float Window::refresh_rate() const {
+    const auto *mode = SDL_GetCurrentDisplayMode(SDL_GetDisplayForWindow(m_window));
+    return mode != nullptr && mode->refresh_rate > 0 ? mode->refresh_rate : 0.0F;
 }
 
 std::filesystem::path Window::executable_directory() {

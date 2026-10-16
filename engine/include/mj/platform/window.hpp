@@ -39,6 +39,7 @@ struct InputState {
     bool toggle_free_camera = false;
     bool reset_pressed = false;
     bool focused = false;
+    bool mouse_captured = false; // Relative mouse mode active this poll.
     bool recenter_pressed = false;
     bool gamepad_connected = false;
     std::string gamepad_name;
@@ -67,6 +68,8 @@ class Window {
     [[nodiscard]] PixelSize pixel_size() const;
     [[nodiscard]] std::expected<void, Error> resize(int width, int height);
     [[nodiscard]] static std::filesystem::path executable_directory();
+    // Refresh rate of the display showing the window, in Hz; 0 when unknown.
+    [[nodiscard]] float refresh_rate() const;
     void wait_for_events() const;
 
   private:

@@ -15,7 +15,9 @@
 #include <array>
 #include <chrono>
 #include <cstdio>
+#include <format>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -115,18 +117,78 @@ int run(const LaunchOptions &options) {
         std::uint32_t rendered = 0;
         std::optional<std::uint32_t> scripted_frame;
         SessionStatus status;
+        FramePacing pacing;
+        status.pacing = &pacing;
+        DiagnosticsControls diagnostics;
+        diagnostics.display_pacing_supported = (*renderer)->display_pacing_supported();
+        diagnostics.refresh_hz = (*window)->refresh_rate();
+        log("Display refresh: " + std::format("{:.2f}", diagnostics.refresh_hz) + " Hz");
+        const auto start_frame_log = [&](const std::filesystem::path &path) {
+            if (pacing.open_log(path))
+                log("Frame log: " + path.string());
+            else
+                log("Cannot write frame log: " + path.string());
+            diagnostics.logging = pacing.logging();
+            diagnostics.log_path = pacing.logging() ? path.string() : std::string{};
+        };
+        if (!options.frame_log.empty())
+            start_frame_log(options.frame_log);
+        std::string events; // Pacing-log events since the last rendered frame.
+        const auto note = [&events](std::string_view name) {
+            if (!events.empty())
+                events.push_back(';');
+            events.append(name);
+        };
+        bool was_focused = true;
+        bool was_captured = false;
         auto last = std::chrono::steady_clock::now();
         LightingControls lighting;
         if (options.time_of_day)
             lighting.cycle.hours = *options.time_of_day;
         if (options.shadow_quality)
             lighting.shadows.quality = *options.shadow_quality;
+        // --pacing-test: each phase runs 5 s; the last 4 s (after any rebuild hitch) are
+        // summarized, so a lasting change in pacing shows up as a changed steady state.
+        struct PacingPhase {
+            const char *name;
+            std::function<void()> enter;
+        };
+        const std::array<PacingPhase, 9> pacing_phases{{
+            {"baseline (shadows Medium)", [] {}},
+            {"shadows High", [&] { lighting.shadows.quality = ShadowQuality::high; }},
+            {"shadows Low", [&] { lighting.shadows.quality = ShadowQuality::low; }},
+            {"shadows Medium", [&] { lighting.shadows.quality = ShadowQuality::medium; }},
+            {"GPU idle wait", [&] { (*renderer)->request(RenderAction::wait_idle); }},
+            {"shadow map rebuilt (same quality)",
+             [&] { (*renderer)->request(RenderAction::rebuild_shadow_map); }},
+            {"swapchain recreated", [&] { (*renderer)->request(RenderAction::rebuild_swapchain); }},
+            {"frame time snapped to refresh", [&] { diagnostics.snap_to_refresh = true; }},
+            // Shows what the driver does without display pacing after the original trigger.
+            {"display pacing off, GPU idle wait",
+             [&] {
+                 diagnostics.display_pacing.enabled = false;
+                 (*renderer)->request(RenderAction::wait_idle);
+             }},
+        }};
+        std::size_t pacing_phase = 0;
+        auto phase_started = std::chrono::steady_clock::now();
+        std::vector<FrameSample> phase_samples;
+        if (options.pacing_test) {
+            lighting.shadows.quality = ShadowQuality::medium;
+            log(std::format("Pacing test: {} phases of 5 s; keep the window focused and visible",
+                            pacing_phases.size()));
+        }
         std::vector<DrawInstance> instances;
         log("M4 playground ready: WASD move, Space jump/wall kick, Shift+jump long jump, R "
             "respawn, F1 overlay, F2 "
             "tuning, "
             "F3 free camera.");
         while (true) {
+            // Input and time are sampled once the display has caught up (docs/frame-pacing.md).
+            if (auto paced = (*renderer)->wait_for_display(diagnostics.display_pacing); !paced) {
+                log(paced.error().message);
+                return 1;
+            }
             // Replays ignore live look input, so they never grab the cursor.
             const bool capture_mouse = !tuning_open && !options.camera_test && !replaying;
             // While tuning is open a controller drives the menu, so its gameplay input is
@@ -140,8 +202,18 @@ int run(const LaunchOptions &options) {
                 break;
             if (input.toggle_overlay)
                 show_overlay = !show_overlay;
-            if (input.toggle_tuning)
+            if (input.toggle_tuning) {
                 tuning_open = !tuning_open;
+                note(tuning_open ? "tuning_open" : "tuning_closed");
+            }
+            if (input.mouse_captured != was_captured) {
+                note(input.mouse_captured ? "mouse_captured" : "mouse_released");
+                was_captured = input.mouse_captured;
+            }
+            if (input.focused != was_focused) {
+                note(input.focused ? "focus_gained" : "focus_lost");
+                was_focused = input.focused;
+            }
             if (!gameplay_input)
                 pending_buttons = 0;
             if (input.toggle_free_camera && !options.camera_test) {
@@ -170,8 +242,17 @@ int run(const LaunchOptions &options) {
                 continue;
             }
 
+            if (const float refresh = (*window)->refresh_rate();
+                refresh != diagnostics.refresh_hz) {
+                diagnostics.refresh_hz = refresh;
+                note(std::format("refresh_{:.2f}Hz", refresh));
+            }
             CameraInput camera_input;
-            double simulation_elapsed = elapsed;
+            // Optional experiment: remove timer jitter from a vsynced cadence.
+            double simulation_elapsed =
+                diagnostics.snap_to_refresh
+                    ? snap_to_refresh(elapsed, {.refresh_hz = diagnostics.refresh_hz})
+                    : elapsed;
             TickInput live;
             if (use_free_camera && (gameplay_input || options.camera_test)) {
                 camera_input = input.camera;
@@ -211,6 +292,8 @@ int run(const LaunchOptions &options) {
                 if (input.reset_pressed)
                     pending_buttons |= input_button::reset_pressed;
             }
+            std::uint32_t frame_ticks = 0;
+            const auto simulation_started = std::chrono::steady_clock::now();
             float alpha = fixed.advance(simulation_elapsed, [&](float dt) {
                 // A capture is a simulation snapshot: don't run past its requested tick,
                 // even when a slow rendered frame advances several simulation ticks.
@@ -238,8 +321,12 @@ int run(const LaunchOptions &options) {
                 if (!options.record.empty())
                     recording.push_back(tick);
                 simulation.tick(tick, dt);
+                ++frame_ticks;
                 lighting.cycle.advance(dt); // Visual only; never feeds back into gameplay.
             });
+            const double simulation_ms = std::chrono::duration<double, std::milli>(
+                                             std::chrono::steady_clock::now() - simulation_started)
+                                             .count();
             if (options.capture_tick && simulation.ticks() == *options.capture_tick)
                 alpha = 1; // Show the selected state, independent of the render accumulator.
 
@@ -285,8 +372,25 @@ int run(const LaunchOptions &options) {
                 movement_overlay(simulation, status);
             };
             const std::function<void()> debug_windows = [&] {
-                tuning_window(simulation, lighting, (*window)->gamepad_tuning, tuning_open);
+                tuning_window(simulation, {lighting, (*window)->gamepad_tuning, diagnostics},
+                              tuning_open);
             };
+            if (options.pacing_test) {
+                status.input_mode +=
+                    std::format(" | Pacing test {}/{}: {}", pacing_phase + 1, pacing_phases.size(),
+                                pacing_phases[pacing_phase].name);
+                if (now - phase_started >= std::chrono::seconds(5)) {
+                    log(std::format("Pacing phase {} ({}): {}", pacing_phase + 1,
+                                    pacing_phases[pacing_phase].name,
+                                    describe(summarize(phase_samples))));
+                    phase_samples.clear();
+                    phase_started = now;
+                    if (++pacing_phase == pacing_phases.size())
+                        break;
+                    note(std::format("phase_{}", pacing_phase + 1));
+                    pacing_phases[pacing_phase].enter();
+                }
+            }
             const bool capture =
                 (options.capture_frame && rendered + 1 == *options.capture_frame) ||
                 (options.capture_tick && !captured && simulation.ticks() >= *options.capture_tick);
@@ -311,9 +415,68 @@ int run(const LaunchOptions &options) {
                 log(result.error().message);
                 return 1;
             }
+            const bool snapping = diagnostics.snap_to_refresh;
+            if (diagnostics.wait_idle) {
+                (*renderer)->request(RenderAction::wait_idle);
+                note("action_wait_idle");
+            }
+            if (diagnostics.rebuild_shadow_map) {
+                (*renderer)->request(RenderAction::rebuild_shadow_map);
+                note("action_rebuild_shadow_map");
+            }
+            if (diagnostics.rebuild_swapchain) {
+                (*renderer)->request(RenderAction::rebuild_swapchain);
+                note("action_recreate_swapchain");
+            }
+            if (diagnostics.toggle_log) {
+                if (pacing.logging()) {
+                    pacing.close_log();
+                    diagnostics.logging = false;
+                    log("Frame log closed: " + diagnostics.log_path);
+                } else {
+                    start_frame_log(options.frame_log.empty()
+                                        ? Window::executable_directory() / "frame-log.csv"
+                                        : options.frame_log);
+                }
+            }
+            diagnostics.wait_idle = diagnostics.rebuild_shadow_map = diagnostics.rebuild_swapchain =
+                diagnostics.toggle_log = false;
             if (!*result)
                 continue;
             ++rendered;
+            {
+                const auto &timing = (*renderer)->last_timing();
+                if (timing.shadow_rebuilt)
+                    note("shadow_rebuilt_" + std::string(to_string(lighting.shadows.quality)));
+                if (timing.swapchain_rebuilt)
+                    note("swapchain_rebuilt");
+                if (timing.suboptimal)
+                    note("suboptimal");
+                if (timing.display_timeout)
+                    note("display_wait_timeout");
+                if (snapping)
+                    note("snap");
+                const FrameSample sample{.delta_ms = elapsed * 1000,
+                                         .sim_delta_ms = simulation_elapsed * 1000,
+                                         .ticks = frame_ticks,
+                                         .alpha = alpha,
+                                         .sim_cpu_ms = simulation_ms,
+                                         .display_wait_ms = timing.display_wait_ms,
+                                         .rebuild_ms = timing.rebuild_ms,
+                                         .wait_ms = timing.wait_ms,
+                                         .acquire_ms = timing.acquire_ms,
+                                         .record_ms = timing.record_ms,
+                                         .present_ms = timing.present_ms,
+                                         .gpu_ms = timing.gpu_ms,
+                                         .image = timing.image,
+                                         .mouse_dx = input.look_x,
+                                         .mouse_dy = input.look_y,
+                                         .events = events};
+                pacing.add(sample);
+                if (options.pacing_test && now - phase_started >= std::chrono::seconds(1))
+                    phase_samples.push_back(sample);
+                events.clear();
+            }
             if (capture) {
                 log("Capture state: " + describe(simulation));
                 captured = true;
@@ -371,6 +534,7 @@ int main(int argc, char *argv[]) {
             "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
             "  --hide-overlay  Start with the F1 overlay hidden (clean captures).\n"
             "  --capture-tick N  Capture the exact state at simulation tick N.\n"
+            "  --frame-log PATH  Write per-frame timing (CSV) for frame-pacing diagnostics.\n"
             "  --resize-test / --camera-test  Scripted render correctness checks.\n"
             "  Debug builds require Vulkan validation layers.\n"
             "  WASD move, Space jump/wall kick, Shift+jump long jump, Ctrl walk, mouse look, R "

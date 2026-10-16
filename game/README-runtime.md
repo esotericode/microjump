@@ -61,6 +61,10 @@ Jumping again within a moment of landing (the F1 overlay shows "Clean") keeps it
 Pressing too early, mashing, lingering on the ground, turning sharply or running
 uphill loses it. Chained clean long jumps build up to the speed cap.
 
+If motion stops feeling smooth, run `microjump.exe --pacing-test --frame-log pacing.csv`
+from a terminal and keep the window focused for 45 seconds; it prints per-phase timing and
+writes a per-frame log. F2 > Diagnostics also has a frame-log button.
+
 Levels are editable JSON files in `assets/levels/`. Use `--level PATH` to select one;
 the default is `playground.json` beside the executable. Old M2/M3 recordings use
 `--level assets/levels/movement-yard.json`. Replays require the same level and tuning.

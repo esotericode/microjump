@@ -54,6 +54,7 @@ Runtime flags (all available):
 | `--time-of-day H` / `--shadow-quality low\|medium\|high` | Start time (hours) and sun shadow preset. | M3 |
 | `--capture-tick N` / `--hide-overlay` | Capture the exact state at simulation tick N; start with the overlay hidden. | M3 |
 | `--level PATH` | Load a version-1 JSON level. Default: packaged `assets/levels/playground.json`; legacy replays use `movement-yard.json`. | M4 |
+| `--frame-log PATH` / `--pacing-test` | Per-frame timing CSV; scripted shadow/stall/swapchain sequence with per-phase pacing summaries (`docs/frame-pacing.md`). | Diagnostics |
 
 ### Local development environment
 
@@ -454,6 +455,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-16 / D-042 | Complete the existing SDL-mapped gamepad path with a platform-owned device lifecycle, startup/reconnect/backup selection, ordered shoulder+jump edges, focus guards, controller menu navigation, recenter/walk/overlay controls, device/button prompts and per-session stick dead zones. | Uses the already approved SDL/ImGui infrastructure and unchanged replay format. Actual SDL virtual devices exercise headless input plus the production window/gameplay/tuning UI; physical controller/transport and Windows GPU acceptance remain owner gates. Persistence/remapping/rumble stay outside this increment. |
 | 2026-10-16 / D-043 | Momentum model: speed above run speed is built by long jumps (first launch unchanged, chained launches add a fixed boost) and downhill running, capped at `max_speed`; kept only by takeoffs within `hop_window` of touchdown (buffered/mashed presses keep a fraction); drained by flat/uphill friction, turning, braking and air drag. Speed no longer adds jump height above run speed. Long jumps and wall kicks use fixed arcs. Slopes use face normals. | Owner asked that speed be buildable and maintainable but not accidental, informed by games with good movement. Review showed buffered hops kept long-jump speed forever and raised jumps. Alternatives: no momentum (removes skill expression), uncapped stacking (SM64 BLJ-style runaway), removing the jump buffer (loses forgiveness). Real-input M2 replay unchanged; scripted M4 tour regenerated. Values are F2 tunables pending playtest. Rationale and references: `docs/movement-momentum.md`. |
 | 2026-10-16 / D-044 | Review fixes: (1) while F2 is open only controller gameplay input is withheld (it drives the menu); the keyboard keeps moving the player unless ImGui is taking typed text, and ImGui keyboard navigation is disabled. (2) Replay format 3 adds an optional `level <name>` line; the game refuses a named recording on a different level, and older recordings still load with a note. Level names reject control characters. (3) Controller prompts name buttons by family (Xbox / PlayStation / Nintendo / generic). | Section 6 asks for tuning while playing, but the gamepad increment had frozen all input with F2 open. Old M2/M3 recordings silently replayed on the new default playground. PlayStation and Nintendo pads were shown Xbox names. Alternatives: keyboard menu navigation (it would consume Space/WASD), a level path in recordings (paths differ across machines, names do not). |
+| 2026-10-16 / D-045 | Frames are paced to the display: with optional `VK_KHR_present_id` + `VK_KHR_present_wait`, each loop iteration waits until the frame before last has been shown before polling input and reading the clock (2 frames queued by default, 1 selectable in F2). Without the extensions the loop is paced by swapchain images as before. Shadow-quality changes no longer call `vkDeviceWaitIdle`: each frame slot rebinds the new map after its own previous frame, and the old map is retired by timeline value. | Windows logs (NVIDIA RTX 4070 SUPER) showed that after the shadow change's device-wide wait, or at startup, the driver returned the image just presented and frames ran in pairs: 30 Hz motion at a 60 FPS readout. Our loop paced on GPU completion and read the clock at frame start, so nothing tied frames to the display. Alternatives: detecting the paired pattern and recreating the swapchain (implemented first, then dropped at the owner's request: it treats one driver's symptom with tuned thresholds); 1 queued frame by default (missed refreshes locally at High shadows under GNOME); waiting for the previous frame's GPU work (not tied to the display). Evidence: `docs/frame-pacing.md`. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -501,6 +503,19 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
   - Replay format 3 records the level name and rejects a mismatch before any window opens; the new `cli_rejects_replay_level_mismatch` test covers it.
   - Controller prompts use per-family button names, and level names reject control characters.
   - Windows Sticky Keys note added for the Shift long jump.
+
+- **2026-10-16 — Frame-pacing diagnostics.** The owner reported that on Windows, changing the shadow quality leaves the game no longer smooth at 60 FPS until restart; this does not reproduce on the Linux laptop. Added:
+  - per-frame CPU blocking times and GPU timestamps;
+  - a pacing graph and statistics in the overlay;
+  - a CSV frame log with events, including mouse deltas and capture state;
+  - experiment buttons, an optional refresh-snapped frame clock, and a scripted `--pacing-test`.
+  Locally, steady state is unchanged after every rebuild, with zero validation errors. The cause stays open pending Windows logs; see `docs/frame-pacing.md`.
+
+- **2026-10-16 — Windows stutter diagnosed and fixed (D-045).** Owner logs (RTX 4070 SUPER) showed paired presentation: the driver handed back the image just presented, so frames came two at a time (jitter about 13–15 ms at a 60 FPS readout). A shadow change's `vkDeviceWaitIdle` triggered it, and so did startup; recreating the swapchain cured it.
+  - Frames are now paced to the display with `VK_KHR_present_wait` where available, so frame starts and game time follow shown refreshes rather than the driver's image handling.
+  - Shadow changes avoid device-wide waits (0.1 ms instead of 5–9 ms locally, validation clean).
+  - Local `--pacing-test` (Intel, Debug, validation): 0.12–0.14 ms jitter in every shadow, idle-wait and swapchain phase; with pacing off after an idle wait, intervals spread from 1.8 to 47 ms.
+  - Windows confirmed (owner run, RTX 4070 SUPER): phases 1–8 had 0.85–0.92 ms jitter, no long frames, and exactly 2 ticks every frame. The driver often reacquired the image just shown, without effect. Pairing did not recur in the unpaced phase this run.
 
 ### Known risks and unanswered questions
 

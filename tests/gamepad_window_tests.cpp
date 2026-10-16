@@ -169,7 +169,9 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
                 mj::game::movement_overlay(simulation, status);
             };
             const std::function<void()> ui = [&] {
-                mj::game::tuning_window(simulation, lighting, (*window)->gamepad_tuning, open);
+                mj::game::DiagnosticsControls diagnostics;
+                mj::game::tuning_window(simulation,
+                                        {lighting, (*window)->gamepad_tuning, diagnostics}, open);
             };
             const auto capture =
                 mj::Window::executable_directory() / "../tests/captures/gamepad.png";
