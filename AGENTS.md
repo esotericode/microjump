@@ -389,7 +389,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | --- | --- |
 | Overall status | **IMPLEMENTING** |
 | Current milestone | **M4 — Full playground** (in progress; JSON levels, large layout, designated wall kicks and running long jump implemented; full traversal/playtest remains). M2/M3 owner checks stay open. |
-| Latest working build | 2026-10-15: M4 movement increment; evidence in `docs/m4-moves.md` and `docs/m4-playground.md`. Current PR records Linux/MSVC checks and runtime downloads. |
+| Latest working build | 2026-10-16: completed SDL gamepad input, reconnect handling and controller menu navigation; `docs/gamepad-support.md`. M4 movement evidence remains in `docs/m4-moves.md`; current PR records checks and runtime downloads. |
 | Open owner decisions | None. Owner input needed: M2 playtest, M3 visual review (both PR requests), Windows hardware checks for M0–M3. |
 | Next useful action | Complete the remaining platform/corner traversal checklist and owner movement/camera playtest; owner Windows/gamepad checks remain open. |
 
@@ -453,6 +453,8 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-040 | Add original wall kicks on designated near-vertical triangle faces, with buffered/contact-grace input, fixed outward/upward launch, brief steering recovery and a different-facing-wall requirement before another airborne kick. Purple paired walls end at checkpoint decks. | A contact-based move reuses our capsule sweeps and avoids an invisible proximity/raycast assist. Alternating faces enables climbing; repeated boosts against one face are blocked until landing. Values remain provisional F2 tunables for owner playtest. |
 | 2026-10-15 / D-041 | Add a grounded running long jump with Shift / gamepad left shoulder + jump; lower arc, bounded speed multiplier, retained landing momentum. Write replay version 2 for its modifier bit and continue reading version 1 with the original mask. | Delivers the required expressive momentum verb without a new crouch state or unbounded speed stacking. Keep the existing replay columns and exact tick sampling; old recordings remain regression fixtures. |
 
+| 2026-10-16 / D-042 | Complete the existing SDL-mapped gamepad path with a platform-owned device lifecycle, startup/reconnect/backup selection, ordered shoulder+jump edges, focus guards, controller menu navigation, recenter/walk/overlay controls, device/button prompts and per-session stick dead zones. | Uses the already approved SDL/ImGui infrastructure and unchanged replay format. Actual SDL virtual devices exercise headless input plus the production window/gameplay/tuning UI; physical controller/transport and Windows GPU acceptance remain owner gates. Persistence/remapping/rumble stay outside this increment. |
+
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
 ### Progress log (append entries)
@@ -490,10 +492,12 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 
 - **2026-10-15 — M4 wall/long-jump increment.** Added original designated wall kicks, buffered contact windows and same-wall repeat prevention; a bounded running long jump; F2 tunables and overlay feedback; purple wall pairs with 6 m / 8 m finish decks and two new checkpoints. Replay version 2 adds the modifier while preserving version-1 reading. All 21 local CTests pass on GCC Debug/Release and Clang Debug, and 46 doctest cases / 89,739 assertions pass. A continuous 2,808-tick spawn-to-finish replay and a focused taller-pair fixture cover actual course exits; real SDL Shift+Space input records/replays identically across native and software Vulkan. Native GPU captures inspected; zero validation errors, formatting and clang-tidy pass. Evidence/playtest request: `docs/m4-moves.md`; current PR records MSVC checks and runtime downloads. M4 stays in progress pending the remaining traversal checklist and owner feel/Windows/gamepad acceptance.
 
+- **2026-10-16 — Gamepad completion and verification.** Completed startup detection, unplug/reconnect and already-connected backup takeover (including removal between event polling and sampling); fixed short shoulder+jump taps and focus/menu input leakage. Added independent stick dead zones, actual device/jump-label diagnostics, walk, camera recenter and controller-operated tuning. All 22 local CTests pass on native GCC Debug and Xvfb/software-Vulkan GCC Release/Clang Debug; final hotplug regressions pass separately. The 52-case headless suite has 89,881 assertions, plus a rendered virtual-controller fixture verifying gameplay, menu editing and replay. Zero Vulkan validation errors; ASan/UBSan, formatting and clang-tidy pass. Evidence/playtest request: `docs/gamepad-support.md`. Physical controller feel/transport, Windows GPU acceptance and existing milestone gates remain open.
+
 ### Known risks and unanswered questions
 
 - **Character feel:** Requires iterative playtesting on keyboard/mouse and gamepad by the owner; not solvable from code inspection alone. M2 defaults are first guesses.
-- **Gamepad:** Implemented via SDL3 but never exercised with a physical controller on the agent machine.
+- **Gamepad:** SDL virtual-device and rendered gameplay/menu integration tests pass (`docs/gamepad-support.md`); physical USB/Bluetooth/controller feel remains untested on the agent machine.
 - **Lighting cost:** Not measured by agents (D-004). High shadows (4096², 25 taps) and many overlapping lights in the pavilion are the heaviest cases; the owner should compare presets.
 - **Replay portability:** Replays are bit-identical within one build; across compilers/OSes the last float bits may differ, so committed-replay tests use small tolerances.
 - **Windows drift:** Only Linux is available locally. Keep the Windows CI build green on every PR so portability bugs surface immediately.

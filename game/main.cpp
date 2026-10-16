@@ -128,6 +128,8 @@ int run(const LaunchOptions &options) {
                 show_overlay = !show_overlay;
             if (input.toggle_tuning)
                 tuning_open = !tuning_open;
+            if (!input.focused || tuning_open)
+                pending_buttons = 0;
             if (input.toggle_free_camera && !options.camera_test) {
                 use_free_camera = !use_free_camera;
                 if (use_free_camera)
@@ -157,7 +159,7 @@ int run(const LaunchOptions &options) {
             CameraInput camera_input;
             double simulation_elapsed = elapsed;
             TickInput live;
-            if (use_free_camera) {
+            if (use_free_camera && !tuning_open) {
                 camera_input = input.camera;
                 if (options.camera_test) {
                     simulation_elapsed = 0;
@@ -173,7 +175,10 @@ int run(const LaunchOptions &options) {
                     if (input.reset_pressed)
                         free_camera.reset();
                 }
-            } else if (!replaying) {
+            } else if (!replaying && !tuning_open) {
+                if (input.recenter_pressed)
+                    simulation.camera.set_orientation({simulation.player.current().facing,
+                                                       simulation.camera.tuning.default_pitch});
                 simulation.camera.look({input.look_x, input.look_y, input.look_stick_x,
                                         input.look_stick_y,
                                         static_cast<float>(std::min(elapsed, 0.1))});
@@ -256,7 +261,8 @@ int run(const LaunchOptions &options) {
             status.zone = zone_at(level, pose.position);
             status.day_animating = lighting.cycle.animate;
             status.free_camera = use_free_camera;
-            status.gamepad = input.gamepad_connected;
+            status.gamepad_name = input.gamepad_name;
+            status.jump_label = input.jump_label;
             status.input_mode = replaying ? "Replay " + std::to_string(replay_index) + "/" +
                                                 std::to_string(replay.size())
                                 : !options.record.empty() ? "Recording"
@@ -265,7 +271,7 @@ int run(const LaunchOptions &options) {
                 movement_overlay(simulation, status);
             };
             const std::function<void()> debug_windows = [&] {
-                tuning_window(simulation, lighting, tuning_open);
+                tuning_window(simulation, lighting, (*window)->gamepad_tuning, tuning_open);
             };
             const bool capture =
                 (options.capture_frame && rendered + 1 == *options.capture_frame) ||
@@ -340,22 +346,23 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     if (options->help) {
-        mj::log("Usage: microjump [--frames N] [--capture-frame N --capture-out PATH.png]\n"
-                "                 [--record PATH | --replay PATH]\n"
-                "  --smoke-test  Render 12 frames and exit.\n"
-                "  --record PATH  Save every simulation tick's input on exit.\n"
-                "  --replay PATH  Play recorded input instead of live input, then exit.\n"
-                "  --level PATH  Load a version-1 JSON level; default is the packaged playground.\n"
-                "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
-                "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
-                "  --hide-overlay  Start with the F1 overlay hidden (clean captures).\n"
-                "  --capture-tick N  Capture the exact state at simulation tick N.\n"
-                "  --resize-test / --camera-test  Scripted render correctness checks.\n"
-                "  Debug builds require Vulkan validation layers.\n"
-                "  WASD move, Space jump/wall kick, Shift+jump long jump, Ctrl walk, mouse look, R "
-                "respawn, F1 overlay,\n"
-                "  F2 tuning, F3 free camera, Escape exit. Gamepad: sticks, A jump, LB+A long "
-                "jump, Back respawn.");
+        mj::log(
+            "Usage: microjump [--frames N] [--capture-frame N --capture-out PATH.png]\n"
+            "                 [--record PATH | --replay PATH]\n"
+            "  --smoke-test  Render 12 frames and exit.\n"
+            "  --record PATH  Save every simulation tick's input on exit.\n"
+            "  --replay PATH  Play recorded input instead of live input, then exit.\n"
+            "  --level PATH  Load a version-1 JSON level; default is the packaged playground.\n"
+            "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
+            "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
+            "  --hide-overlay  Start with the F1 overlay hidden (clean captures).\n"
+            "  --capture-tick N  Capture the exact state at simulation tick N.\n"
+            "  --resize-test / --camera-test  Scripted render correctness checks.\n"
+            "  Debug builds require Vulkan validation layers.\n"
+            "  WASD move, Space jump/wall kick, Shift+jump long jump, Ctrl walk, mouse look, R "
+            "respawn, F1 overlay,\n"
+            "  F2 tuning, F3 free camera, Escape exit. Gamepad: sticks, South jump, LB+jump long "
+            "jump, R3 center, Back respawn, Start tuning.");
         return 0;
     }
     return mj::game::run(*options);

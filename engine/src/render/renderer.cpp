@@ -5,6 +5,7 @@
 
 #include "resources.hpp"
 
+#include <SDL3/SDL_video.h>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
@@ -729,6 +730,8 @@ std::expected<void, Error> Renderer::Impl::initialize_overlay() {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         imgui_context = true;
+        ImGui::GetIO().ConfigFlags |=
+            ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_NavEnableGamepad;
         ImGui::GetIO().IniFilename = nullptr;
         ImGui::GetIO().LogFilename = nullptr;
         ImGui::StyleColorsDark();
@@ -867,6 +870,11 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
         return std::unexpected(vulkan_error("vkAcquireNextImageKHR", acquire));
     }
     recreate = acquire == VK_SUBOPTIMAL_KHR;
+    auto &io = ImGui::GetIO();
+    if ((SDL_GetWindowFlags(window->native_handle()) & SDL_WINDOW_INPUT_FOCUS) != 0)
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    else
+        io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();

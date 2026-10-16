@@ -66,15 +66,26 @@ visible to LSan. See [M0 evidence](docs/m0-evidence.md) and [M1 evidence](docs/m
 | Keyboard / mouse | Gamepad | Action |
 | --- | --- | --- |
 | W / A / S / D | Left stick | Move (camera-relative) |
-| Space | A (south) | Jump; hold for height; press again at purple walls to kick |
-| Shift + Space | LB + A | Running long jump |
-| Ctrl | — | Walk |
+| Space | South face button (A / Cross / B) | Jump; hold for height; press again at purple walls to kick |
+| Shift + Space | Left shoulder + jump | Running long jump |
+| Ctrl | Right shoulder | Walk (or partially tilt the left stick) |
 | Mouse | Right stick | Orbit the camera (mouse is captured while focused) |
-| R / Home | Back | Respawn at the last checkpoint |
-| F1 | — | Toggle the diagnostics/movement overlay |
+| — | Right-stick click | Recenter the camera behind the player |
+| R / Home | Back / Select / Create | Respawn at the last checkpoint |
+| F1 | North face button (Y / Triangle / X) | Toggle the diagnostics/movement overlay |
 | F2 | Start | Tuning window: lighting (time of day, day/night, shadow quality, biases), movement, camera (frees the mouse) |
 | F3 | — | Free-flight camera (WASD/QE, Shift fast, Home reset) |
 | Escape / close | — | Exit |
+
+Gamepads supported by SDL's mappings connect at startup or during play. If the
+active controller disconnects, another connected pad takes over. The overlay
+shows its name and detected jump-button label. In the tuning window, use the
+D-pad/left stick to navigate, South to select or edit, and East to back out;
+Start closes it. Gameplay controls are neutral while tuning is open.
+
+F2 → **Gamepad** adjusts independent move/look dead zones. **Camera** adjusts
+stick yaw/pitch speed and inverted Y. These tunables currently reset on restart;
+persistence remains M5. [Controller verification and limitations](docs/gamepad-support.md).
 
 The overlay shows FPS/frame time, pixel resolution, effective VSync and cap state, plus
 movement state, speed, position, ground angle, checkpoint, loaded level and region. VSync is FIFO with no

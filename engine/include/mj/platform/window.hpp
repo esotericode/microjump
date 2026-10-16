@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mj/core/error.hpp>
+#include <mj/platform/gamepad.hpp>
 #include <mj/scene/debug_camera.hpp>
 
 #include <cstdint>
@@ -10,7 +11,6 @@
 #include <memory>
 
 struct SDL_Window;
-struct SDL_Gamepad;
 union SDL_Event;
 
 namespace mj {
@@ -38,12 +38,17 @@ struct InputState {
     bool toggle_tuning = false;
     bool toggle_free_camera = false;
     bool reset_pressed = false;
+    bool focused = false;
+    bool recenter_pressed = false;
     bool gamepad_connected = false;
+    std::string gamepad_name;
+    std::string_view jump_label = "South";
 };
 
 // Owns SDL video initialization and the window. Vulkan resources must die first.
 class Window {
   public:
+    GamepadTuning gamepad_tuning;
     [[nodiscard]] static std::expected<std::unique_ptr<Window>, Error> create();
     ~Window();
     Window(const Window &) = delete;
@@ -61,17 +66,10 @@ class Window {
   private:
     Window() = default;
     SDL_Window *m_window = nullptr;
-    SDL_Gamepad *m_gamepad = nullptr;
+    Gamepad m_gamepad;
     bool m_sdl_initialized = false;
     bool m_mouse_captured = false;
     std::uint64_t m_capture_started_ns = 0;
 };
-
-// Radial dead zone with rescaling, so small stick drift is ignored and full tilt reaches 1.
-struct StickReading {
-    float x = 0;
-    float y = 0;
-};
-[[nodiscard]] StickReading apply_dead_zone(StickReading raw, float dead_zone);
 
 } // namespace mj
