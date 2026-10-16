@@ -154,6 +154,22 @@ simulation together in one object, and replaces it between frames. A travel load
 JSON and builds the geometry, hands the new world mesh to `Renderer::set_meshes`, snaps
 the character, and sets the level's time of day.
 
+## Expedition progress
+
+`game/progress.*` stores authored level names, spark names and checkpoint positions.
+The game reconciles those identities against current level content at startup; the
+simulation receives only valid authored indices and collection flags. No player pose,
+movement tuning, animation or input is serialized. The main loop snapshots after a
+pickup, checkpoint change, gate swap and clean exit, outside the fixed-step callback.
+Gate arrivals keep their authored checkpoint and restore only the destination's finds.
+New expeditions replace the complete world between frames through the same mesh-upload
+path as gates, then clear progress in every world.
+
+`uses_saved_progress` guards profile access before even querying SDL's preference path.
+Automatic and diagnostic modes keep isolated initial conditions. File writes stage
+beside the destination and replace atomically; an unreadable profile blocks automatic
+writes until an explicit reset. See [progress](progress.md) for the schema and limits.
+
 ## Known limits
 
 - One shadow map with 60–90 m coverage, so distant objects are unshadowed. There is no

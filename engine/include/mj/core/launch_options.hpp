@@ -12,6 +12,8 @@
 
 namespace mj {
 
+enum class ProgressTest : std::uint8_t { collect, inspect, reset };
+
 struct LaunchOptions {
     bool help = false;
     bool smoke_test = false;
@@ -30,9 +32,14 @@ struct LaunchOptions {
     std::filesystem::path frame_log;  // Per-frame timing CSV (frame-pacing diagnostics).
     std::optional<float> time_of_day; // Hours, 0..24.
     std::optional<ShadowQuality> shadow_quality;
+    std::filesystem::path save; // Explicit saved-expedition profile, including custom levels.
+    bool no_save = false;
+    std::optional<ProgressTest> progress_test; // Isolated process-level progress checks.
 };
 
 [[nodiscard]] std::expected<LaunchOptions, Error>
 parse_launch_options(std::span<const std::string_view> arguments);
+// Only normal live play or an explicit progress fixture may read or write expedition saves.
+[[nodiscard]] bool uses_saved_progress(const LaunchOptions &options);
 
 } // namespace mj

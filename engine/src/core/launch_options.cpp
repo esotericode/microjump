@@ -23,6 +23,20 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             options.pacing_test = true;
         } else if (argument == "--travel-test") {
             options.travel_test = true;
+        } else if (argument == "--no-save") {
+            if (options.no_save)
+                return std::unexpected(Error{"Duplicate --no-save option"});
+            options.no_save = true;
+        } else if (argument == "--progress-test") {
+            ++index;
+            const auto value = index < arguments.size() ? arguments[index] : std::string_view{};
+            if (options.progress_test ||
+                (value != "collect" && value != "inspect" && value != "reset"))
+                return std::unexpected(
+                    Error{"--progress-test needs one of collect, inspect, reset"});
+            options.progress_test = value == "collect"   ? ProgressTest::collect
+                                    : value == "inspect" ? ProgressTest::inspect
+                                                         : ProgressTest::reset;
         } else if (argument == "--time-of-day") {
             ++index;
             float hours = -1;
@@ -66,14 +80,17 @@ parse_launch_options(std::span<const std::string_view> arguments) {
                 return std::unexpected(Error{"Duplicate frame count option"});
             destination = count;
         } else if (argument == "--capture-out" || argument == "--record" ||
-                   argument == "--replay" || argument == "--level" || argument == "--frame-log") {
+                   argument == "--replay" || argument == "--level" || argument == "--frame-log" ||
+                   argument == "--save") {
             auto &destination = argument == "--capture-out" ? options.capture_out
                                 : argument == "--record"    ? options.record
                                 : argument == "--replay"    ? options.replay
                                 : argument == "--level"     ? options.level
-                                                            : options.frame_log;
+                                : argument == "--frame-log" ? options.frame_log
+                                                            : options.save;
             ++index;
-            if (index == arguments.size() || arguments[index].empty() || !destination.empty()) {
+            if (index == arguments.size() || arguments[index].empty() || !destination.empty() ||
+                (argument == "--save" && arguments[index].starts_with("--"))) {
                 return std::unexpected(Error{std::string(argument) + " needs one nonempty path"});
             }
             std::u8string encoded;
@@ -99,6 +116,19 @@ parse_launch_options(std::span<const std::string_view> arguments) {
     if (options.frames && options.capture_frame && *options.frames < *options.capture_frame) {
         return std::unexpected(Error{"--frames must not end the run before the capture frame"});
     }
+    if (options.progress_test) {
+        if (options.save.empty() || options.no_save)
+            return std::unexpected(
+                Error{"--progress-test needs --save PATH and cannot use --no-save"});
+        if (options.help || options.smoke_test || options.resize_test || options.camera_test ||
+            options.travel_test || options.pacing_test || options.frames || options.capture_frame ||
+            options.capture_tick || !options.capture_out.empty() || !options.record.empty() ||
+            !options.replay.empty() || !options.frame_log.empty())
+            return std::unexpected(Error{"--progress-test cannot be combined with other scripted, "
+                                         "recording, capture or pacing options"});
+        if (options.progress_test == ProgressTest::collect && options.level.empty())
+            return std::unexpected(Error{"--progress-test collect needs --level PATH"});
+    }
     if (!options.frames && !options.capture_frame && !options.capture_tick) {
         if (options.resize_test || options.camera_test)
             options.frames = 36;
@@ -108,6 +138,18 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             options.frames = 12;
     }
     return options;
+}
+
+bool uses_saved_progress(const LaunchOptions &options) {
+    if (options.no_save)
+        return false;
+    if (options.progress_test)
+        return true; // Parsing requires an explicit, isolated save profile for fixtures.
+    return !options.help && !options.smoke_test && !options.resize_test && !options.camera_test &&
+           !options.travel_test && !options.pacing_test && !options.frames &&
+           !options.capture_frame && !options.capture_tick && options.capture_out.empty() &&
+           options.record.empty() && options.replay.empty() && options.frame_log.empty() &&
+           (options.level.empty() || !options.save.empty());
 }
 
 } // namespace mj
