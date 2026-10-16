@@ -145,7 +145,7 @@ void add_lighting_pavilion(YardBuilder &yard) {
     }
     // Metals: gold, copper, steel.
     const std::array<std::pair<unsigned int, float>, 3> metals{
-        {{0xffc35a, 0.25F}, {0xf09a6b, 0.4F}, {0xd0d4d8, 0.12F}}};
+        {{0xffc35aU, 0.25F}, {0xf09a6bU, 0.4F}, {0xd0d4d8U, 0.12F}}};
     for (std::size_t i = 0; i < metals.size(); ++i) {
         yard.override_surface = Surface{metals[i].second, 1};
         yard.cylinder({k_x - 2.5F + static_cast<float>(i) * 2.5F, 0.9F, k_z - 2.5F}, 0.9F, 1.2F,
@@ -279,8 +279,12 @@ Level make_movement_yard() {
     yard.box({-5, 3.2F, 9}, {4, 0.3F, 4}, k_white);
 
     add_lighting_pavilion(yard);
-    for (const auto &[x, z] : std::array<std::pair<float, float>, 6>{
-             {{7, 10}, {-9, 10}, {11, -20}, {13, 8}, {-12, 4}, {24, 22}}})
+    for (const auto &[x, z] : std::array<std::pair<float, float>, 6>{{{7.0F, 10.0F},
+                                                                      {-9.0F, 10.0F},
+                                                                      {11.0F, -20.0F},
+                                                                      {13.0F, 8.0F},
+                                                                      {-12.0F, 4.0F},
+                                                                      {24.0F, 22.0F}}})
         yard.lamp(x, z);
     return yard.level;
 }
