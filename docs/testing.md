@@ -38,6 +38,8 @@ With `MJ_SMOKE_TESTS=ON`, CTest also runs the game itself:
 - **Lighting:** day, night and pavilion captures, decoded and pixel-checked by
   `tests/capture_check.cpp`.
 - **Playground:** a playground capture.
+- **Lantern Isles:** an isles capture, the long-leap replay, and a scripted trip
+  through both gates.
 - **Gamepad:** the full game window driven by a virtual gamepad, including the tuning
   menu.
 
@@ -145,6 +147,60 @@ tests enabled, `render_spark_pickup` captures tick 140 with the counter at 1/16 
 `replay_spark_invitation` checks the completed replay at tick 170. Both require zero
 Vulkan validation errors. F1 can close diagnostics while leaving the hunt HUD visible;
 `--hide-overlay` suppresses both for clean scene captures.
+
+## The Lantern Isles and gates
+
+`lantern_isles_tests.cpp` checks the shipped isles the way a player meets them:
+
+- every checkpoint settles;
+- every spark but the mid-leap one sits over a walkable landing;
+- every gate in both levels leads to a real level and checkpoint, and you never
+  arrive inside the gate back;
+- the Three Steps need exactly one, two and three chained jumps: a search over takeoff
+  points shows each step reachable with that chain and never with one jump fewer;
+- each secret and expert line can be reached with the moves it claims to need: the gap
+  to Echo Plateau with a jump and a dive (a plain jump lands on the catch islet, whose
+  mushroom throws you back), the grotto, the Sky Blossom, Hermit's Rock and the
+  Skipping Stones;
+- nothing below the routes catches a fall.
+
+A small route driver plays the stepping stones, the grove's canopies, both slab bridges,
+the ruins' columns and the cloud steps. It runs and judges each takeoff as a player
+does: it jumps once its speed would carry it to the landing, or at an edge, and lines
+up the touchdown in the air. A wall-kick driver climbs the spire onto its tower. The
+long-leap test shows a long jump clears the pier's gap while a running jump falls
+short. Any respawn fails a route. Setting `k_route_log` to true in the test prints each
+tick of the traced routes, which helps when a new route won't pass.
+
+`jump_chain_tests.cpp` covers the moves themselves:
+- the double and triple jump heights, timing window and speed rule;
+- that double jumps can be cut short and triple jumps can't;
+- the dive's boost and cap, where it can and can't start, belly slides, standing up,
+  rollouts and buffered rollouts;
+- bounce floors.
+
+`replay_sm64_moves` plays `tests/replays/sm64-moves.mjr` through the whole game.
+
+`collision_tests.cpp` checks that a V of two 60° slopes holds a falling capsule, while a
+wall corner does not. `level_tests.cpp` covers the new shapes, `solid`, `title`,
+`atmosphere` and gate parsing. It also checks that stepping into a gate is reported
+once, never on arrival, and that a hunt survives the trip.
+
+With `MJ_SMOKE_TESTS=ON`:
+
+- `render_isles` and `isles_pixels` capture the isles.
+- `travel_gates` runs `--travel-test`, out through the playground's gate and back, so
+  both mesh swaps run under validation.
+- `replay_isles_leap` replays `tests/replays/isles-long-leap.mjr`, from spawn down the
+  pier and over the gap, through the whole game.
+
+## Z-fighting
+
+`surface_tests.cpp` builds every shipped level shape by shape and looks for visible
+z-fighting. That means front faces of two differently coloured shapes in the same plane,
+facing the same way and overlapping, where nothing solid covers the overlap. A small
+fixture checks that the detector finds a real overlap and ignores buried and identical
+faces.
 
 ## Particle rendering
 

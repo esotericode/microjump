@@ -10,7 +10,7 @@
 
 namespace mj {
 namespace {
-constexpr std::string_view k_magic = "microjump-replay 3";
+constexpr std::string_view k_magic = "microjump-replay 4";
 constexpr std::string_view k_level = "level ";
 constexpr std::size_t k_max_level_name = 80;
 constexpr std::string_view k_rate = "tick-rate 120";
@@ -82,7 +82,7 @@ std::expected<ReplayFile, Error> parse_replay_file(std::string_view text) {
     auto &ticks = replay.ticks;
     std::size_t line_number = 0;
     bool header = false;
-    bool versioned_level = false; // Version 3 may name its level once, before any tick.
+    bool versioned_level = false; // Versions 3 and 4 may name their level once, first.
     bool level_allowed = false;
     std::uint32_t allowed_buttons = input_button::all;
     bool rate = false;
@@ -94,12 +94,18 @@ std::expected<ReplayFile, Error> parse_replay_file(std::string_view text) {
         if (!line.empty() && line.back() == '\r')
             line.remove_suffix(1);
         if (!header) {
-            if (line == "microjump-replay 1")
+            if (line == "microjump-replay 1") {
                 allowed_buttons = input_button::v1;
-            else if (line == k_magic)
+            } else if (line == "microjump-replay 2") {
+                allowed_buttons = input_button::v3;
+            } else if (line == "microjump-replay 3") {
+                allowed_buttons = input_button::v3;
                 versioned_level = true;
-            else if (line != "microjump-replay 2")
-                return std::unexpected(Error{"Not a microjump replay (version 1, 2 or 3)"});
+            } else if (line == k_magic) {
+                versioned_level = true;
+            } else {
+                return std::unexpected(Error{"Not a microjump replay (version 1 to 4)"});
+            }
             header = true;
             continue;
         }

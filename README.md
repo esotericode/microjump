@@ -12,10 +12,15 @@ AI agents build it together: [AGENTS.md](AGENTS.md) guides them, and
   towers, a summit stair course, a lighting pavilion and 12 checkpoints.
 - **16 golden sparks to find:** an invitation near spawn, then little rewards for
   exploring the platform routes, wall decks, summit, sprint lane and pavilion.
+- **The Lantern Isles:** a gate on the plaza leads to floating islands above a sea of
+  clouds at golden hour, with a blossom grove to climb, a crystal wall-kick spire,
+  old ruins, a long pier with a gap only a long jump clears, Echo Plateau's Three Steps
+  for the triple jump, bounce mushrooms, and four secrets. Sixteen more sparks are
+  hidden there.
 - **A little character:** a procedurally animated creature with squash and stretch, a
   run cycle, a long-jump dive, wall-kick twirls, dust, and a flash for clean hops.
-- **Movement:** running, skids, variable jumps, wall kicks, long jumps, and momentum
-  you build on purpose.
+- **Movement:** running, skids, variable jumps, Super Mario 64-style double and triple
+  jumps, dives with rollouts, wall kicks, long jumps, and momentum you build on purpose.
 - **A renderer:** HDR forward rendering with sun shadows, 16 local lights, GGX
   materials, fading dust and spark particles, and a day/night cycle.
 - **Input:** keyboard/mouse or gamepad, with live tuning of every movement, camera
@@ -65,6 +70,8 @@ notices. A Vulkan 1.3 GPU driver is all a player needs.
 | W A S D | Left stick | Move (camera-relative); a partial tilt walks |
 | Space | South button | Jump (hold for height); press again at a purple wall to kick |
 | Shift + Space | Left shoulder + jump | Long jump while running |
+| Space as you land | South as you land | Double jump, then triple jump while moving |
+| E / left click | West button (X, Square, Y) | Dive from a run or a jump; jump on the belly slide to roll out |
 | Ctrl | Right shoulder | Walk |
 | Mouse | Right stick | Orbit the camera |
 | — | Right-stick click | Recenter the camera |
@@ -77,8 +84,9 @@ notices. A Vulkan 1.3 GPU driver is all a player needs.
 While F2 is open, a controller drives the menu and the keyboard still plays.
 Tuning values reset when the game restarts.
 
-Walk or jump into golden sparks to collect them. The **SPARKS** counter shows your
-progress and each find's name; finding all 16 completes the hunt. Finds stay collected
+Walk into a glowing gate to travel between the playground and the Lantern Isles; each
+place keeps its own sparks until you quit. Walk or jump into golden sparks to collect them. The **SPARKS** counter shows your
+progress and each find's name; finding them all completes a place's hunt. Finds stay collected
 when you return to a checkpoint and reset when you restart the game. F1 toggles the
 diagnostics while keeping spark progress visible; `--hide-overlay` hides both for
 clean captures.
@@ -95,7 +103,7 @@ clean captures.
 | `--hide-overlay` | Start with the overlay hidden. |
 | `--frames N` / `--smoke-test` | Render N frames (or 12) and exit. |
 | `--frame-log PATH` / `--pacing-test` | Per-frame timing CSV; scripted frame-pacing test. |
-| `--camera-test` / `--resize-test` | Scripted rendering fixtures used by the tests. |
+| `--camera-test` / `--resize-test` / `--travel-test` | Scripted rendering fixtures used by the tests (`--travel-test` goes through the first gate and back). |
 
 ## Checks
 
@@ -114,7 +122,7 @@ find engine/src game -name '*.cpp' -print0 | xargs -0 -n 1 clang-tidy -p build/l
 | `shaders/` | GLSL, compiled to SPIR-V at build time |
 | `assets/levels/` | JSON levels |
 | `tests/` | Unit, simulation, replay and GPU tests, plus committed recordings |
-| `tools/` | Local toolchain setup and test helpers |
+| `tools/` | Local toolchain setup, test helpers and level generators |
 | `docs/` | [Engine](docs/engine.md), [movement](docs/movement.md), [character](docs/character.md), [levels](docs/levels.md), [testing](docs/testing.md), [history](docs/history/) |
 
 Third-party libraries and their licences are listed in

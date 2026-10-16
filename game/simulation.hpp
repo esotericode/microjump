@@ -13,7 +13,8 @@ namespace mj::game {
 // sequence it produces bit-identical results; render rate never enters it.
 class Simulation {
   public:
-    Simulation(const Level &level, const CollisionWorld &world);
+    // Starts at `checkpoint` (clamped to the level's), which also becomes the respawn point.
+    Simulation(const Level &level, const CollisionWorld &world, std::size_t checkpoint = 0);
 
     void tick(const TickInput &input, float dt);
     void respawn();
@@ -44,9 +45,21 @@ class Simulation {
     [[nodiscard]] std::uint64_t last_collection_tick() const {
         return m_last_collection_tick;
     }
+    // Which sparks are found, to carry a hunt across a trip to another level and back.
+    [[nodiscard]] const std::vector<bool> &collected() const {
+        return m_collected;
+    }
+    void restore_collected(const std::vector<bool> &collected);
+    // The portal the player stepped into on the last tick, if any. Only the step in counts,
+    // so arriving inside a gate never sends you straight back. Gameplay ignores it: travel
+    // is the game's decision (live play only), so replays keep their bits.
+    [[nodiscard]] std::optional<std::size_t> portal_entered() const {
+        return m_portal_entered;
+    }
 
   private:
     void collect_sparks(const Capsule &before);
+    void enter_portals(const Capsule &before);
 
     const Level &m_level;
     const CollisionWorld &m_world;
@@ -57,6 +70,7 @@ class Simulation {
     std::size_t m_collected_count = 0;
     std::optional<std::size_t> m_last_collected;
     std::uint64_t m_last_collection_tick = 0;
+    std::optional<std::size_t> m_portal_entered;
 };
 
 } // namespace mj::game

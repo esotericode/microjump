@@ -19,6 +19,7 @@ struct LaunchOptions {
     bool camera_test = false;
     bool hide_overlay = false;
     bool pacing_test = false; // Scripted shadow/stall/swapchain sequence with timing summaries.
+    bool travel_test = false; // Through the level's first gate and back, swapping meshes.
     std::optional<std::uint32_t> frames;
     std::optional<std::uint32_t> capture_frame;
     std::optional<std::uint32_t> capture_tick; // Exact simulation state, without interpolation.

@@ -1,5 +1,7 @@
 #include "simulation.hpp"
 
+#include <algorithm>
+
 namespace mj::game {
 namespace {
 bool visible(const CollisionWorld &world, Vec3 from, Vec3 to) {
@@ -36,13 +38,30 @@ bool swept_touch(const CollisionWorld &world, const Capsule &before, const Capsu
     // on the straight chord through solid geometry; endpoint overlaps above stay valid.
     return !world.sweep({before, on_path - body.start, 0});
 }
+
+bool inside(const Capsule &capsule, const Portal &portal) {
+    const Vec3 closest = closest_point_on_segment(portal.position, capsule.segment());
+    const float reach = capsule.radius + portal.radius;
+    return length_squared(portal.position - closest) <= reach * reach;
+}
 } // namespace
 
-Simulation::Simulation(const Level &level, const CollisionWorld &world)
-    : m_level(level), m_world(world), m_collected(level.collectibles.size(), false) {
-    const auto spawn = level.checkpoints.empty() ? Checkpoint{} : level.checkpoints.front();
+Simulation::Simulation(const Level &level, const CollisionWorld &world, std::size_t checkpoint)
+    : m_level(level), m_world(world),
+      m_checkpoint(level.checkpoints.empty() ? 0
+                                             : std::min(checkpoint, level.checkpoints.size() - 1)),
+      m_collected(level.collectibles.size(), false) {
+    const auto spawn = level.checkpoints.empty() ? Checkpoint{} : level.checkpoints[m_checkpoint];
     player.place(spawn.position, spawn.yaw);
     camera.snap(player.current(), spawn.yaw);
+}
+
+void Simulation::restore_collected(const std::vector<bool> &collected) {
+    if (collected.size() != m_collected.size())
+        return; // A different version of the level: start its hunt fresh.
+    m_collected = collected;
+    m_collected_count =
+        static_cast<std::size_t>(std::count(m_collected.begin(), m_collected.end(), true));
 }
 
 void Simulation::respawn() {
@@ -55,6 +74,7 @@ void Simulation::respawn() {
 
 void Simulation::tick(const TickInput &input, float dt) {
     ++m_ticks;
+    m_portal_entered.reset();
     camera.set_orientation({input.camera_yaw, input.camera_pitch});
     if (input.held(input_button::reset_pressed)) {
         respawn();
@@ -75,7 +95,18 @@ void Simulation::tick(const TickInput &input, float dt) {
         }
     }
     collect_sparks(before);
+    enter_portals(before);
     camera.tick(state, m_world, dt);
+}
+
+void Simulation::enter_portals(const Capsule &before) {
+    const auto after = player.capsule();
+    for (std::size_t i = 0; i < m_level.portals.size(); ++i) {
+        if (inside(after, m_level.portals[i]) && !inside(before, m_level.portals[i])) {
+            m_portal_entered = i;
+            return;
+        }
+    }
 }
 
 void Simulation::collect_sparks(const Capsule &before) {

@@ -21,6 +21,8 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             options.hide_overlay = true;
         } else if (argument == "--pacing-test") {
             options.pacing_test = true;
+        } else if (argument == "--travel-test") {
+            options.travel_test = true;
         } else if (argument == "--time-of-day") {
             ++index;
             float hours = -1;
@@ -91,7 +93,7 @@ parse_launch_options(std::span<const std::string_view> arguments) {
     }
     if (!options.record.empty() && !options.replay.empty())
         return std::unexpected(Error{"--record and --replay cannot be combined"});
-    if ((options.camera_test || options.resize_test) &&
+    if ((options.camera_test || options.resize_test || options.travel_test) &&
         (!options.record.empty() || !options.replay.empty()))
         return std::unexpected(Error{"Scripted render tests do not use recorded input"});
     if (options.frames && options.capture_frame && *options.frames < *options.capture_frame) {
@@ -100,6 +102,8 @@ parse_launch_options(std::span<const std::string_view> arguments) {
     if (!options.frames && !options.capture_frame && !options.capture_tick) {
         if (options.resize_test || options.camera_test)
             options.frames = 36;
+        else if (options.travel_test)
+            options.frames = 16;
         else if (options.smoke_test)
             options.frames = 12;
     }

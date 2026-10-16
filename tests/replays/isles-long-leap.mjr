@@ -1,0 +1,9 @@
+microjump-replay 3
+tick-rate 120
+level lantern-isles
+# count move_x move_y camera_yaw camera_pitch buttons
+30 0 0 3.1415927 -0.32 0
+447 0 1 3.1415927 -0.32 1
+1 0 1 3.1415927 -0.32 11
+90 0 1 3.1415927 -0.32 1
+60 0 0 3.1415927 -0.32 0

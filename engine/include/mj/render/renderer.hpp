@@ -94,6 +94,9 @@ class Renderer {
     [[nodiscard]] bool ui_wants_keyboard() const;
     // false means minimized/out-of-date: no rendered frame is counted.
     [[nodiscard]] std::expected<bool, Error> draw(const FrameView &view);
+    // Replaces every mesh (handle i becomes meshes[i]), e.g. to travel to another level. It
+    // waits for the frames in flight first, so it is a loading hitch, not a per-frame tool.
+    [[nodiscard]] std::expected<void, Error> set_meshes(std::span<const SceneMesh> meshes);
     [[nodiscard]] const FrameTiming &last_timing() const;
     void request(RenderAction action);
     // Blocks until the display has shown the earlier frame `pacing` allows to be queued.

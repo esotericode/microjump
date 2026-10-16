@@ -31,6 +31,8 @@ Vec3 linear_color(unsigned int srgb) {
 LevelGeometry build_geometry(const Level &level) {
     LevelGeometry geometry;
     std::vector<bool> wall_flags;
+    std::vector<bool> solid_flags;
+    std::vector<float> bounces;
     for (const auto &shape : level.shapes) {
         geometry.mesh.surface = shape.surface;
         switch (shape.kind) {
@@ -44,12 +46,27 @@ LevelGeometry build_geometry(const Level &level) {
             geometry.mesh.add_cylinder(shape.center, shape.size.x * 0.5F, shape.size.y,
                                        shape.color);
             break;
+        case ShapeKind::ellipsoid:
+            geometry.mesh.add_ellipsoid({shape.center, shape.size, shape.color, shape.yaw});
+            break;
+        case ShapeKind::cone:
+            geometry.mesh.add_cone(
+                {shape.center, shape.size, shape.color, shape.yaw, shape.taper, shape.tip_down});
+            break;
         }
         wall_flags.resize(geometry.mesh.vertices.size() / 3, shape.wall_jump);
+        solid_flags.resize(geometry.mesh.vertices.size() / 3, shape.solid);
+        bounces.resize(geometry.mesh.vertices.size() / 3, shape.bounce);
     }
-    auto triangles = geometry.mesh.triangles();
-    for (std::size_t i = 0; i < triangles.size(); ++i)
-        triangles[i].wall_jump = wall_flags[i];
+    std::vector<Triangle> triangles;
+    const auto drawn = geometry.mesh.triangles();
+    for (std::size_t i = 0; i < drawn.size(); ++i) {
+        if (!solid_flags[i])
+            continue;
+        triangles.push_back(drawn[i]);
+        triangles.back().wall_jump = wall_flags[i];
+        triangles.back().bounce = bounces[i];
+    }
     geometry.collision = CollisionWorld(triangles);
     return geometry;
 }
@@ -291,8 +308,9 @@ Level make_movement_yard() {
     for (int i = 0; i < 5; ++i)
         yard.cylinder({-6 + static_cast<float>(i) * 3, 1.5F, 20}, 1.2F, 3, k_white);
     // Low ceiling: 2.0 m clearance for a 1.6 m body, so jumping inside bumps the roof.
-    yard.box({4.5F, 1.3F, 15}, {0.6F, 2.6F, 6}, k_teal);
-    yard.box({8.5F, 1.3F, 15}, {0.6F, 2.6F, 6}, k_teal);
+    // The pillars stop under the slab, so their faces never share its plane (z-fighting).
+    yard.box({4.5F, 1, 15}, {0.6F, 2, 6}, k_teal);
+    yard.box({8.5F, 1, 15}, {0.6F, 2, 6}, k_teal);
     yard.box({6.5F, 2.3F, 15}, {4.6F, 0.6F, 6}, k_white);
     // A floating slab with an underside to hit.
     yard.box({-5, 3.2F, 9}, {4, 0.3F, 4}, k_white);

@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+
 namespace mj::game {
 
 void collectible_hud(const Simulation &simulation, const Level &level) {
@@ -35,6 +37,30 @@ void collectible_hud(const Simulation &simulation, const Level &level) {
     ImGui::End();
 }
 
+void travel_hud(const TravelNote &note) {
+    if (note.title.empty() || (note.arrival && note.age >= 3.5F))
+        return;
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav;
+    const auto display = ImGui::GetIO().DisplaySize;
+    // Arrival cards fade in and out; the gate hint stays while you stand near the gate.
+    const float fade =
+        note.arrival ? std::clamp(std::min(note.age * 3, (3.5F - note.age) * 2), 0.0F, 1.0F) : 1.0F;
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fade);
+    ImGui::SetNextWindowPos(ImVec2(display.x * 0.5F, display.y * (note.arrival ? 0.2F : 0.78F)),
+                            ImGuiCond_Always, ImVec2(0.5F, 0.5F));
+    ImGui::SetNextWindowBgAlpha(0.82F);
+    ImGui::Begin("Travel", nullptr, flags);
+    ImGui::SetWindowFontScale(note.arrival ? 1.8F : 1.2F);
+    ImGui::TextColored(ImVec4(0.72F, 0.9F, 1, 1), "%s", note.title.c_str());
+    ImGui::SetWindowFontScale(1);
+    if (!note.subtitle.empty())
+        ImGui::TextUnformatted(note.subtitle.c_str());
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
 void movement_overlay(const Simulation &simulation, const SessionStatus &status) {
     const auto &s = simulation.player.current();
     const float speed = length(horizontal(s.velocity));
@@ -53,7 +79,8 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
         ImGui::Text("Gamepad: %s", status.gamepad_name.c_str());
         const auto &b = status.gamepad_labels;
         const std::string actions = std::string(b.jump) + " jump  |  " + std::string(b.long_jump) +
-                                    " + jump: long jump  |  " + std::string(b.walk) + " walk";
+                                    " + jump: long jump  |  " + std::string(b.dive) + " dive  |  " +
+                                    std::string(b.walk) + " walk";
         const std::string menus = std::string(b.recenter) + ": center camera  |  " +
                                   std::string(b.respawn) + " respawn  |  " + std::string(b.menu) +
                                   " tuning";
@@ -75,7 +102,8 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
         ImGui::TextUnformatted("FREE CAMERA  WASD/QE fly  Shift fast  Home reset");
     } else {
         ImGui::TextUnformatted("WASD move  |  Space jump / wall kick  |  Ctrl walk");
-        ImGui::TextUnformatted("Shift + jump: long jump  |  R respawn  |  Mouse look");
+        ImGui::TextUnformatted("Shift + jump: long jump  |  E / click: dive  |  R respawn");
+        ImGui::TextUnformatted("Jump again as you land: double, then triple jump");
     }
     ImGui::TextUnformatted("F1 overlay  F2 tuning  F3 free camera  Esc quit");
     if (status.pacing != nullptr && status.pacing->stats().count > 0) {
@@ -196,6 +224,19 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
         slider("Wall kick up speed", t.wall_jump_up_speed, 2, 18);
         slider("Wall contact grace", t.wall_contact_grace, 0, 0.3F, "%.3f s");
         slider("Wall recovery", t.wall_recovery_time, 0, 0.4F, "%.3f s");
+    }
+    if (ImGui::CollapsingHeader("Triple jump / dive", ImGuiTreeNodeFlags_DefaultOpen)) {
+        slider("Chain window", t.jump_chain_window, 0, 0.4F, "%.3f s");
+        slider("Double jump x", t.double_jump_scale, 1, 2);
+        slider("Triple jump x", t.triple_jump_scale, 1, 2.5F);
+        slider("Triple min speed", t.triple_jump_min_speed, 0, 15);
+        slider("Dive min speed", t.dive_min_speed, 0, 15);
+        slider("Dive boost", t.dive_boost, 0, 10);
+        slider("Dive max speed", t.dive_max_speed, 5, 30);
+        slider("Dive lift (ground)", t.dive_up_speed, 0, 8);
+        slider("Dive air control", t.dive_air_control, 0, 1);
+        slider("Slide friction", t.dive_slide_friction, 1, 40);
+        slider("Rollout up speed", t.rollout_up_speed, 2, 14);
     }
     if (ImGui::CollapsingHeader("Collision")) {
         angle_slider("Max slope", t.collision.max_slope, 10, 80);

@@ -94,6 +94,15 @@ TEST_CASE("SDL gamepad preserves a full shoulder+jump tap between polls") {
     CHECK(state.jump_held);
 }
 
+TEST_CASE("SDL gamepad latches a West-button tap as one dive press") {
+    Rig rig;
+    rig.pad.button(SDL_GAMEPAD_BUTTON_WEST, true);
+    rig.pump();
+    rig.pad.button(SDL_GAMEPAD_BUTTON_WEST, false);
+    CHECK(rig.sample().dive_pressed);
+    CHECK_FALSE(rig.sample().dive_pressed);
+}
+
 TEST_CASE("SDL gamepad supports walk, recenter, respawn, tuning and overlay") {
     Rig rig;
     rig.pad.button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, true);
@@ -169,17 +178,21 @@ TEST_CASE("prompts name controller buttons by family") {
     const auto xbox = mj::gamepad_labels(mj::GamepadFamily::xbox, "A");
     CHECK(xbox.jump == "A");
     CHECK(xbox.long_jump == "LB");
+    CHECK(xbox.dive == "X");
     CHECK(xbox.recenter == "RS (click)");
     const auto playstation = mj::gamepad_labels(mj::GamepadFamily::playstation, "Cross");
     CHECK(playstation.long_jump == "L1");
     CHECK(playstation.walk == "R1");
+    CHECK(playstation.dive == "Square");
     CHECK(playstation.menu == "Options");
     const auto nintendo = mj::gamepad_labels(mj::GamepadFamily::nintendo, "B");
     CHECK(nintendo.long_jump == "L");
     CHECK(nintendo.menu == "+");
+    CHECK(nintendo.dive == "Y");
     const auto generic = mj::gamepad_labels(mj::GamepadFamily::generic, "South");
     CHECK(generic.long_jump == "Left shoulder");
     CHECK(generic.respawn == "Back");
+    CHECK(generic.dive == "West");
 }
 
 TEST_CASE("radial stick tuning remains finite at invalid and extreme values") {

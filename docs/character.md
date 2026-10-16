@@ -35,13 +35,19 @@ transforms this is the same rotation as before.
 | Move | Animation |
 | --- | --- |
 | Idle | Breathing and a blink every 3.7 s. |
-| Run | Boots swing and lift, gloves counter-swing, the body bobs and twists. The lean grows with speed, more past a run, and with acceleration. It banks into turns. |
+| Run | Boots swing and lift, gloves counter-swing, the body bobs and twists. The lean grows with speed, more past a run, and with acceleration. It banks a little into turns, at most about 7°. |
 | Fast running | Footfall dust above 10.5 m/s. |
 | Jump | A stretch on takeoff, tucked boots, raised arms. |
 | Landing | A squash on a bouncy spring, deeper for harder impacts (0.83 after a 2.5 m drop, never below 0.62). The eyes squeeze shut on hard landings, which also kick up a ring of dust. |
 | Skid | Leans back with braced boots, arms out, spraying dust ahead. |
 | Long jump | A superman dive about the body's middle, with a dust burst at takeoff. |
 | Wall kick | A twirl from facing the wall to the new facing plus one full turn, and dust off the wall. |
+| Double jump | A puff of dust at takeoff. |
+| Triple jump | A forward somersault with knees tucked, and gold sparkles at takeoff. |
+| Dive | The long jump's superman pose, with dust when it leaves the ground. |
+| Belly slide | Flat on the belly, boots in the air, ploughing dust. |
+| Rollout | A quick tucked forward roll back onto the feet. |
+| Bounce | A slower somersault on the way up from a mushroom or spring pad. |
 | Clean hop | The antenna flashes and gold motes burst at the feet, so kept momentum is visible without F1. |
 | Spark found | The antenna flashes, the arms go up, and the body bounces. |
 

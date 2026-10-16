@@ -18,6 +18,18 @@ const char *to_string(MoveState state) {
         return "Long jump";
     case MoveState::fall:
         return "Fall";
+    case MoveState::double_jump:
+        return "Double jump";
+    case MoveState::triple_jump:
+        return "Triple jump";
+    case MoveState::dive:
+        return "Dive";
+    case MoveState::dive_slide:
+        return "Belly slide";
+    case MoveState::rollout:
+        return "Rollout";
+    case MoveState::bounce:
+        return "Bounce";
     }
     return "?";
 }
@@ -53,6 +65,19 @@ PlayerPose Player::interpolated(float alpha) const {
 void Player::ground_motion(Steering steering, float dt) {
     const auto [direction, amount] = steering;
     auto &s = m_current;
+    if (s.state == MoveState::dive_slide) {
+        // Sliding on the belly: friction slows it, the stick only nudges the heading, and
+        // once slow enough the character stands up. A jump or dive press rolls out instead.
+        s.ground_speed = approach(s.ground_speed, 0, tuning.dive_slide_friction * dt);
+        if (amount > 0) {
+            const float turn = angle_difference(s.facing, yaw_of(direction));
+            const float step = tuning.dive_slide_turn_rate * dt;
+            s.facing = std::remainder(s.facing + std::clamp(turn, -step, step), k_tau);
+        }
+        if (s.ground_speed <= tuning.dive_getup_speed && s.ground_time >= tuning.dive_getup_time)
+            s.state = s.ground_speed > 0.05F ? MoveState::run : MoveState::idle;
+        return;
+    }
     if (s.state == MoveState::skid) {
         s.ground_speed = approach(s.ground_speed, 0, tuning.skid_deceleration * dt);
         if (s.ground_speed > 0.3F)
@@ -117,9 +142,13 @@ void Player::air_motion(Steering steering, bool jump_held, float dt) {
     auto &s = m_current;
     float scale = 1;
     const bool rising_jump = s.state == MoveState::jump || s.state == MoveState::wall_jump ||
-                             s.state == MoveState::long_jump;
-    // Only ordinary jumps are variable; long jumps and wall kicks keep fixed, readable arcs.
-    if (s.velocity.y > 0 && s.state == MoveState::jump && !jump_held)
+                             s.state == MoveState::long_jump || s.state == MoveState::double_jump ||
+                             s.state == MoveState::triple_jump || s.state == MoveState::rollout ||
+                             s.state == MoveState::bounce;
+    const bool variable = s.state == MoveState::jump || s.state == MoveState::double_jump;
+    // Only ordinary and double jumps are variable; long jumps, wall kicks, triple jumps and
+    // rollouts keep fixed, readable arcs. A dive stays a dive until it lands.
+    if (s.velocity.y > 0 && variable && !jump_held)
         scale = tuning.release_gravity_scale;
     else if (s.velocity.y <= 0)
         scale = tuning.fall_gravity_scale;
@@ -134,18 +163,59 @@ void Player::air_motion(Steering steering, bool jump_held, float dt) {
     }
     if (amount <= 0 || s.recovery_timer > 0)
         return;
+    const float control = s.state == MoveState::dive ? tuning.dive_air_control : 1.0F;
     // Steering adds acceleration along the input but never raises speed beyond what the
     // jump started with (or air_speed), so momentum matters and control stays limited.
     const Vec3 before = horizontal(s.velocity);
     const float limit = std::max(length(before), tuning.air_speed);
-    Vec3 after = before + direction * (amount * tuning.air_acceleration * dt);
+    Vec3 after = before + direction * (amount * control * tuning.air_acceleration * dt);
     if (length(after) > limit)
         after = normalized(after) * limit;
     s.velocity.x = after.x;
     s.velocity.z = after.z;
     const float turn = angle_difference(s.facing, yaw_of(direction));
-    s.facing = std::remainder(
-        s.facing + std::clamp(turn, -tuning.air_turn_rate * dt, tuning.air_turn_rate * dt), k_tau);
+    const float turn_rate = tuning.air_turn_rate * control;
+    s.facing = std::remainder(s.facing + std::clamp(turn, -turn_rate * dt, turn_rate * dt), k_tau);
+}
+
+bool Player::can_dive() const {
+    const auto &s = m_current;
+    if (s.grounded)
+        return s.state != MoveState::skid && s.state != MoveState::dive_slide &&
+               s.ground_speed >= tuning.dive_min_speed;
+    // Out of a jump, a fall or a kick; long jumps are committed, and one dive per airtime.
+    return !s.dive_used && (s.state == MoveState::jump || s.state == MoveState::double_jump ||
+                            s.state == MoveState::triple_jump || s.state == MoveState::fall ||
+                            s.state == MoveState::wall_jump || s.state == MoveState::bounce);
+}
+
+void Player::dive() {
+    auto &s = m_current;
+    const float current = s.grounded ? s.ground_speed : length(horizontal(s.velocity));
+    // A boost toward the dive's top speed, but never a loss of momentum already built.
+    const float speed = std::max(
+        current, std::min(current + tuning.dive_boost, std::max(tuning.dive_max_speed, current)));
+    const float up = s.grounded ? tuning.dive_up_speed : s.velocity.y;
+    s.velocity = yaw_forward(s.facing) * speed + Vec3{0, up, 0};
+    s.grounded = false;
+    s.state = MoveState::dive;
+    s.dive_used = true;
+    s.jump_chain = 0;
+    s.buffer_timer = 0;
+    s.coyote_timer = 0;
+    s.recovery_timer = 0;
+}
+
+void Player::rollout() {
+    // Keeps the slide's speed: diving and rolling out straight away is how the dive pays off.
+    auto &s = m_current;
+    s.velocity = yaw_forward(s.facing) * s.ground_speed + Vec3{0, tuning.rollout_up_speed, 0};
+    s.grounded = false;
+    s.state = MoveState::rollout;
+    s.dive_used = true; // SM64: no diving out of a rollout.
+    s.jump_chain = 0;
+    s.buffer_timer = 0;
+    s.coyote_timer = 0;
 }
 
 void Player::hop_timing() {
@@ -166,7 +236,8 @@ void Player::hop_timing() {
 
 bool Player::wall_jump(bool requested, bool touching) {
     auto &s = m_current;
-    if (!requested || s.grounded || (!touching && s.wall_timer <= 0) ||
+    if (!requested || s.grounded || s.state == MoveState::dive ||
+        (!touching && s.wall_timer <= 0) ||
         (s.wall_used && dot(s.wall_normal, s.last_kick_normal) > 0.5F))
         return false;
     // A repeatable outward angle; normal air steering resumes after a short separation.
@@ -179,6 +250,7 @@ bool Player::wall_jump(bool requested, bool touching) {
     s.wall_timer = 0;
     s.buffer_timer = 0;
     s.coyote_timer = 0;
+    s.jump_chain = 0;
     return true;
 }
 
@@ -204,9 +276,20 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
     s.coyote_timer = s.grounded ? tuning.coyote_time : std::max(s.coyote_timer - dt, 0.0F);
 
     const bool wants_jump = input.held(input_button::jump_pressed) || s.buffer_timer > 0;
+    const bool wants_dive = input.held(input_button::dive_pressed);
     const bool can_jump = s.grounded || s.coyote_timer > 0;
+    const bool rising = s.state == MoveState::jump || s.state == MoveState::double_jump ||
+                        s.state == MoveState::triple_jump || s.state == MoveState::rollout ||
+                        s.state == MoveState::dive || s.state == MoveState::bounce;
     bool consumed_jump = false;
-    if (wants_jump && can_jump && s.state != MoveState::jump) {
+    bool dove = false;
+    if (s.grounded && s.state == MoveState::dive_slide) {
+        if (wants_jump || wants_dive) {
+            rollout();
+            consumed_jump = true;
+            dove = true; // The press is spent on the rollout.
+        }
+    } else if (wants_jump && can_jump && !rising) {
         consumed_jump = true;
         if (s.grounded)
             hop_timing();
@@ -216,6 +299,13 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
         const bool long_jump = s.grounded && s.state != MoveState::skid &&
                                input.held(input_button::long_jump_held) &&
                                s.ground_speed >= tuning.long_jump_min_speed;
+        // The jump chain counts only quick takeoffs from the ground after a landing.
+        const bool chained = s.grounded && s.ground_time <= tuning.jump_chain_window;
+        std::uint8_t stage = 1;
+        if (chained && s.jump_chain == 1)
+            stage = 2;
+        else if (chained && s.jump_chain == 2 && speed >= tuning.triple_jump_min_speed)
+            stage = 3;
         if (long_jump) {
             // A fixed boost from running speed, or more when chained from carried momentum,
             // so speed builds over several clean long jumps up to max_speed.
@@ -226,19 +316,33 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
                          Vec3{0, tuning.long_jump_up_speed, 0};
         } else {
             // Height gained from speed stops at run speed: momentum buys distance, not height.
+            const float scale = stage == 3   ? tuning.triple_jump_scale
+                                : stage == 2 ? tuning.double_jump_scale
+                                             : 1.0F;
             s.velocity =
                 launch + Vec3{0,
-                              tuning.jump_velocity() +
-                                  tuning.jump_speed_bonus * std::min(speed, tuning.run_speed),
+                              (tuning.jump_velocity() +
+                               tuning.jump_speed_bonus * std::min(speed, tuning.run_speed)) *
+                                  scale,
                               0};
         }
         s.grounded = false;
-        s.state = long_jump ? MoveState::long_jump : MoveState::jump;
+        s.state = long_jump    ? MoveState::long_jump
+                  : stage == 3 ? MoveState::triple_jump
+                  : stage == 2 ? MoveState::double_jump
+                               : MoveState::jump;
+        // The committed long-jump arc remains closed to dives after its state becomes fall,
+        // including an early descent caused by a ceiling. Landing opens diving again.
+        if (long_jump)
+            s.dive_used = true;
+        s.jump_chain = long_jump ? 0 : stage;
         s.buffer_timer = 0;
         s.coyote_timer = 0;
     }
 
     consumed_jump = wall_jump(wants_jump && !consumed_jump) || consumed_jump;
+    if (wants_dive && !dove && !consumed_jump && can_dive())
+        dive();
 
     if (s.grounded) {
         ground_motion({direction, effective}, dt);
@@ -272,7 +376,16 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
         }
     }
     if (moved.grounded) {
-        if (!s.grounded) {
+        if (!s.grounded && s.state == MoveState::dive) {
+            // A dive lands on its belly and slides on along the way it was flying.
+            s.landed = true;
+            s.ground_time = 0;
+            const Vec3 flat = horizontal(s.velocity);
+            if (length(flat) > 0.5F)
+                s.facing = yaw_of(flat);
+            s.ground_speed = std::min(length(flat), tuning.top_speed());
+            s.state = MoveState::dive_slide;
+        } else if (!s.grounded) {
             s.landed = true;
             s.ground_time = 0;
             const Vec3 flat = horizontal(s.velocity);
@@ -297,16 +410,28 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
         s.velocity.y = 0;
     } else {
         if (s.grounded) {
-            // Walked off a ledge or onto a steep slope: keep moving, start falling.
+            // Walked off a ledge or onto a steep slope: keep moving, start falling. A belly
+            // slide off an edge stays a dive, and lands as a slide again.
             s.velocity = yaw_forward(s.facing) * s.ground_speed;
-            s.state = MoveState::fall;
+            s.dive_used = s.state == MoveState::dive_slide;
+            s.state = s.state == MoveState::dive_slide ? MoveState::dive : MoveState::fall;
+            s.jump_chain = 0;
         }
         s.grounded = false;
+    }
+    if (s.grounded && moved.ground_bounce > 0) {
+        // A springy floor throws you up on a fixed arc, keeping your way and speed.
+        s.velocity = yaw_forward(s.facing) * s.ground_speed + Vec3{0, moved.ground_bounce, 0};
+        s.grounded = false;
+        s.state = MoveState::bounce;
+        s.jump_chain = 0;
+        s.coyote_timer = 0;
     }
     if (s.grounded) {
         s.wall_timer = 0;
         s.recovery_timer = 0;
         s.wall_used = false;
+        s.dive_used = false;
     } else if (length_squared(moved.jump_wall_normal) > 0) {
         s.wall_normal = moved.jump_wall_normal;
         s.wall_timer = tuning.wall_contact_grace;

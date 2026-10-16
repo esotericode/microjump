@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <charconv>
 #include <fstream>
 #include <initializer_list>
@@ -89,6 +90,31 @@ class Reader {
         fail(path, "expected a name of 1 to 80 UTF-8 bytes without control characters");
         return {};
     }
+    bool boolean(const Json &object, std::string_view key, const std::string &path, bool fallback) {
+        const auto found = object.find(key);
+        if (found == object.end())
+            return fallback;
+        if (!found->is_boolean()) {
+            fail(path + "." + std::string(key), "expected a boolean");
+            return fallback;
+        }
+        return found->get<bool>();
+    }
+    // A level beside this one: a plain file name, so a level can't reach outside its folder.
+    std::string level_file(const Json &value, const std::string &path) {
+        if (value.is_string()) {
+            const auto &text = value.get_ref<const std::string &>();
+            const bool plain = std::all_of(text.begin(), text.end(), [](char c) {
+                return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '-' || c == '_' ||
+                       c == '.';
+            });
+            if (plain && text.size() > 5 && text.size() <= 64 && text.front() != '.' &&
+                text.ends_with(".json"))
+                return text;
+        }
+        fail(path, "expected a level file name such as lantern-isles.json");
+        return {};
+    }
     bool array(const Json &value, const std::string &path, std::size_t low, std::size_t high) {
         if (value.is_array() && value.size() >= low && value.size() <= high)
             return true;
@@ -158,13 +184,14 @@ std::expected<Level, Error> parse_level(std::string_view text) {
     Reader read;
     if (!read.object(root, "level",
                      {"version", "name", "kill_height", "shapes", "checkpoints", "lights", "zones",
-                      "collectibles"}))
+                      "collectibles", "portals", "atmosphere", "title"}))
         return std::unexpected(Error{read.error});
     const auto &version = read.member(root, "version", "level");
     if (!version.is_number_integer() || version != 1)
         read.fail("level.version", "expected format version 1");
     Level level;
     level.name = read.name(read.member(root, "name", "level"), "level.name");
+    level.title = root.contains("title") ? read.name(root["title"], "level.title") : level.name;
     level.kill_height = read.scalar(root, "kill_height", "level", -4096, 4096, -25);
     const auto &shapes = read.member(root, "shapes", "level");
     if (read.array(shapes, "level.shapes", 1, 2048)) {
@@ -172,7 +199,8 @@ std::expected<Level, Error> parse_level(std::string_view text) {
             const auto &item = shapes[i];
             const auto path = "level.shapes[" + std::to_string(i) + "]";
             if (!read.object(item, path,
-                             {"kind", "center", "size", "color", "yaw", "material", "wall_jump"}))
+                             {"kind", "center", "size", "color", "yaw", "material", "wall_jump",
+                              "solid", "taper", "tip", "bounce"}))
                 break;
             Shape shape;
             const auto &kind = read.member(item, "kind", path);
@@ -182,8 +210,12 @@ std::expected<Level, Error> parse_level(std::string_view text) {
                 shape.kind = ShapeKind::ramp;
             else if (kind == "cylinder")
                 shape.kind = ShapeKind::cylinder;
+            else if (kind == "ellipsoid")
+                shape.kind = ShapeKind::ellipsoid;
+            else if (kind == "cone")
+                shape.kind = ShapeKind::cone;
             else
-                read.fail(path + ".kind", "expected box, ramp or cylinder");
+                read.fail(path + ".kind", "expected box, ramp, cylinder, ellipsoid or cone");
             shape.center =
                 read.vector(read.member(item, "center", path), path + ".center", -4096, 4096);
             shape.size = read.vector(read.member(item, "size", path), path + ".size", 0.01F, 512);
@@ -200,15 +232,29 @@ std::expected<Level, Error> parse_level(std::string_view text) {
                         read.scalar(material, "metallic", path + ".material", 0, 1, 0);
                 }
             }
-            if (item.contains("wall_jump")) {
-                if (!item["wall_jump"].is_boolean())
-                    read.fail(path + ".wall_jump", "expected a boolean");
-                else
-                    shape.wall_jump = item["wall_jump"].get<bool>();
+            shape.wall_jump = read.boolean(item, "wall_jump", path, false);
+            shape.solid = read.boolean(item, "solid", path, true);
+            if (shape.kind != ShapeKind::cone && (item.contains("taper") || item.contains("tip")))
+                read.fail(path, "only cones have a taper or tip");
+            shape.taper = read.scalar(item, "taper", path, 0, 1, 0);
+            if (item.contains("tip")) {
+                const auto &tip = item["tip"];
+                if (tip == "down")
+                    shape.tip_down = true;
+                else if (tip != "up")
+                    read.fail(path + ".tip", "expected up or down");
             }
+            if (shape.wall_jump && !shape.solid)
+                read.fail(path + ".wall_jump", "a wall-jump shape must be solid");
+            shape.bounce = read.scalar(item, "bounce", path, 0, 40, 0);
+            if (shape.bounce > 0 && !shape.solid)
+                read.fail(path + ".bounce", "a bounce shape must be solid");
             level.shapes.push_back(shape);
         }
     }
+    if (read.error.empty() && std::none_of(level.shapes.begin(), level.shapes.end(),
+                                           [](const Shape &shape) { return shape.solid; }))
+        read.fail("level.shapes", "at least one shape must be solid");
     const auto &checkpoints = read.member(root, "checkpoints", "level");
     if (read.array(checkpoints, "level.checkpoints", 1, 64)) {
         for (std::size_t i = 0; i < checkpoints.size(); ++i) {
@@ -294,6 +340,44 @@ std::expected<Level, Error> parse_level(std::string_view text) {
             if (collectible.position.y <= level.kill_height)
                 read.fail(path + ".position", "collectible must be above the kill plane");
             level.collectibles.push_back(collectible);
+        }
+    }
+    const auto &portals = read.member(root, "portals", "level", false);
+    if (root.contains("portals") && read.array(portals, "level.portals", 0, 16)) {
+        for (std::size_t i = 0; i < portals.size(); ++i) {
+            const auto &item = portals[i];
+            const auto path = "level.portals[" + std::to_string(i) + "]";
+            if (!read.object(item, path,
+                             {"name", "position", "radius", "yaw", "level", "checkpoint"}))
+                break;
+            Portal portal;
+            portal.name = read.name(read.member(item, "name", path), path + ".name");
+            portal.position =
+                read.vector(read.member(item, "position", path), path + ".position", -4096, 4096);
+            portal.radius = read.scalar(item, "radius", path, 0.3, 4, 1.2F);
+            portal.yaw = read.scalar(item, "yaw", path, -10000, 10000, 0);
+            portal.level = read.level_file(read.member(item, "level", path), path + ".level");
+            if (item.contains("checkpoint")) {
+                const auto &checkpoint = item["checkpoint"];
+                if (checkpoint.is_number_unsigned() && checkpoint.get<std::uint64_t>() < 64)
+                    portal.checkpoint = checkpoint.get<std::size_t>();
+                else
+                    read.fail(path + ".checkpoint", "expected a checkpoint index from 0 to 63");
+            }
+            if (portal.position.y <= level.kill_height)
+                read.fail(path + ".position", "portal must be above the kill plane");
+            level.portals.push_back(portal);
+        }
+    }
+    if (root.contains("atmosphere")) {
+        const auto &item = root["atmosphere"];
+        if (read.object(item, "level.atmosphere", {"time_of_day", "fog", "grid", "sky_below"})) {
+            auto &atmosphere = level.atmosphere;
+            atmosphere.time_of_day =
+                read.scalar(item, "time_of_day", "level.atmosphere", 0, 24, 14.5F);
+            atmosphere.fog = read.scalar(item, "fog", "level.atmosphere", 0, 8, 1);
+            atmosphere.grid = read.boolean(item, "grid", "level.atmosphere", true);
+            atmosphere.sky_below = read.boolean(item, "sky_below", "level.atmosphere", false);
         }
     }
     if (!read.error.empty())

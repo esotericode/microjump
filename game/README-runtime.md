@@ -12,6 +12,8 @@ Vulkan 1.3; nothing else to install.
 | Space | South button | Jump (hold for height) |
 | Space again at a purple wall | South button | Wall kick; alternate walls to climb |
 | Shift + Space while running | Left shoulder + jump | Long jump |
+| Space again as you land | South again as you land | Double jump; once more while moving: triple jump |
+| E or left click | West button (X, Square, Y) | Dive; jump while sliding to roll out |
 | Ctrl | Right shoulder | Walk |
 | Mouse | Right stick | Camera; click the right stick to recenter |
 | R | Back | Back to the last checkpoint (teal pads) |
@@ -33,6 +35,15 @@ From the plaza:
 - **South-east:** the summit stairs and the lighting pavilion.
 
 Street lamps come on at dusk. F2 lets you change the time of day.
+
+**Somewhere else:** the glowing ring just right of spawn is a gate to **the Lantern
+Isles**, floating islands above the clouds at golden hour. Hop the stepping stones to
+the blossom grove and climb its canopies, kick up the crystal spire, climb the ruins'
+columns, or run the long pier and long-jump the gap at its end. Echo Plateau's Three
+Steps teach the triple jump, pink mushrooms throw you skyward, and four secrets hide
+around the isles: look under edges, behind trees and out from high places. Sixteen
+sparks wait there. The gate on the first island brings you home, and each place keeps its sparks
+until you quit.
 
 **Follow the golden sparks.** There are 16 to find. The first waits just ahead of
 spawn; others reward the plaza crown, small stairs and ramp, the winding platform

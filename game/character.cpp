@@ -84,6 +84,9 @@ CharacterAnimator::Pose blend(const CharacterAnimator::Pose &a, const CharacterA
             .blink = mix(a.blink, b.blink),
             .breath = mix(a.breath, b.breath),
             .glow = mix(a.glow, b.glow),
+            .flip = mix(a.flip, b.flip),
+            .tuck = mix(a.tuck, b.tuck),
+            .slide = mix(a.slide, b.slide),
             .antenna = lerp(a.antenna, b.antenna, t)};
 }
 
@@ -139,6 +142,8 @@ void CharacterAnimator::snap(const PlayerState &player) {
     m_kick_normal = player.last_kick_normal;
     m_squash_rate = 0;
     m_antenna_rate = {};
+    m_flip_target = 0;
+    m_flip_rate = 0;
     m_clock = 0;
     m_ticks = 0;
     m_dt = 0;
@@ -176,6 +181,12 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
         snap(player);
         return;
     }
+    // A finished somersault starts over from zero; wrapped before the copy, so the blend
+    // between the last two ticks never spins the wrong way round.
+    if (m_current.flip >= k_tau && m_flip_target >= k_tau) {
+        m_current.flip -= k_tau;
+        m_flip_target -= k_tau;
+    }
     m_previous = m_current;
     m_dt = dt;
     ++m_ticks;
@@ -212,10 +223,30 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
     s.air = grounded ? 0 : smooth(s.air, 1, 9, dt);
     s.rise = smooth(s.rise, std::clamp(player.velocity.y / 10, -1.0F, 1.0F), 20, dt);
 
-    if (player.state == MoveState::long_jump)
+    const bool sliding = player.state == MoveState::dive_slide;
+    if (player.state == MoveState::long_jump || player.state == MoveState::dive || sliding)
         m_diving = true;
-    if (grounded || kicked)
+    if ((grounded && !sliding) || kicked)
         m_diving = false;
+    s.slide = smooth(s.slide, sliding ? 1.0F : 0.0F, sliding ? 16.0F : 10.0F, dt);
+    // A triple jump somersaults once on the way up; a rollout tumbles over quickly.
+    const bool started = player.state != m_state;
+    if (started && player.state == MoveState::triple_jump) {
+        m_flip_target = s.flip + k_tau;
+        m_flip_rate = k_tau / 0.75F;
+    }
+    if (started && player.state == MoveState::bounce) { // A bounce flips, more slowly.
+        m_flip_target = s.flip + k_tau;
+        m_flip_rate = k_tau / 0.9F;
+    }
+    if (started && player.state == MoveState::rollout) {
+        m_flip_target = s.flip + k_tau;
+        m_flip_rate = k_tau / 0.4F;
+    }
+    if (grounded && !sliding)
+        s.flip = m_flip_target; // A landing finishes the turn rather than freezing it.
+    s.flip = approach(s.flip, m_flip_target, m_flip_rate * dt);
+    s.tuck = smooth(s.tuck, s.flip < m_flip_target - 0.4F ? 1.0F : 0.0F, 18, dt);
     s.dive = smooth(s.dive, m_diving ? 1.0F : 0.0F, m_diving ? 18.0F : 14.0F, dt);
     s.skid = smooth(s.skid, player.state == MoveState::skid ? 1.0F : 0.0F, 16, dt);
 
@@ -225,14 +256,15 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
         const float accel = m_grounded ? (speed - length(horizontal(m_motion))) / dt : 0;
         lean = 0.12F * std::min(speed / k_run_speed, 1.0F) +
                0.2F * std::clamp((speed - k_run_speed) / 13, 0.0F, 1.0F) +
-               std::clamp(accel * 0.006F, -0.12F, 0.12F);
+               std::clamp(accel * 0.004F, -0.06F, 0.06F);
     }
     s.lean = smooth(s.lean, lean, 10, dt);
-    // Bank into ground turns; large single-tick turns (kicks, skid ends) are not turning.
+    // A hint of bank into ground turns (about 7 degrees at most): more reads as toppling.
+    // Large single-tick turns (kicks, skid ends) are not turning.
     const float turn = angle_difference(m_facing, player.facing);
     const float yaw_rate = std::abs(turn) < 0.5F ? turn / dt : 0;
-    const float bank = grounded ? std::clamp(yaw_rate * speed * 0.01F, -0.35F, 0.35F) : 0.0F;
-    s.bank = smooth(s.bank, bank, 8, dt);
+    const float bank = grounded ? std::clamp(yaw_rate * speed * 0.003F, -0.12F, 0.12F) : 0.0F;
+    s.bank = smooth(s.bank, bank, 6, dt);
 
     // A kick turns the body from the wall to its new facing, plus one full twirl.
     if (kicked) {
@@ -257,8 +289,12 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
     }
     if (took_off) {
         m_squash_rate += 2.0F;
-        if (player.state == MoveState::long_jump)
+        if (player.state == MoveState::long_jump || player.state == MoveState::dive)
             burst({player.position + Vec3{0, 0.05F, 0} - forward * 0.2F, 6, 2.4F, false});
+        if (player.state == MoveState::double_jump)
+            burst({player.position + Vec3{0, 0.05F, 0}, 6, 1.6F, false});
+        if (player.state == MoveState::triple_jump)
+            burst({player.position + Vec3{0, 0.3F, 0}, 12, 2.6F, true});
         if (player.last_hop == HopTiming::clean) {
             s.glow = 1; // Momentum kept: say so where the player is looking.
             burst({player.position + Vec3{0, 0.15F, 0}, 10, 2.2F, true});
@@ -270,6 +306,11 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
     s.squash = std::clamp(s.squash + m_squash_rate * dt, 0.62F, 1.3F);
 
     // Ground dust: braced skids, and each footfall once momentum carries past a run.
+    if (sliding && speed > 2 && m_ticks % 3 == 0) // A belly slide ploughs a little dust.
+        emit({.origin = player.position + forward * 0.5F + right * (std::sin(m_clock * 40) * 0.2F),
+              .velocity = forward * 0.6F + Vec3{0, 0.6F, 0},
+              .life = 0.45F,
+              .size = 0.11F});
     if (player.state == MoveState::skid && speed > 2 && m_ticks % 3 == 0) {
         const float side = (m_ticks / 3) % 2 == 0 ? -1.0F : 1.0F;
         emit({.origin = player.position + forward * 0.25F + right * (side * 0.13F),
@@ -329,12 +370,14 @@ void CharacterAnimator::build(const PlayerPose &pose, float alpha,
     const float bob = run * 0.055F * std::abs(std::cos(theta));
     // Grounded poses pivot at the feet; airborne ones and the dive turn about the middle of
     // the body (a chained long jump dives again before the air pose has blended back in).
-    const float pivot = 0.72F * std::max(s.air, s.dive);
-    const float lean = s.lean + s.dive * 1.25F - s.skid * 0.38F;
+    const float pivot = 0.72F * std::max({s.air, s.dive, s.tuck});
+    // On the belly the body lies flat and drops to the ground it slides on.
+    const float lean = s.lean + s.dive * 1.25F - s.skid * 0.38F + s.slide * 0.3F;
     const float width = 1 / std::sqrt(s.squash);
     const Mat4 frame = yaw_translation(pose.facing + s.spin, pose.position) *
-                       translation({0, pivot, 0}) * rotation_z(-s.bank) * rotation_x(-lean) *
-                       scaling({width, s.squash, width}) * translation({0, -pivot, 0});
+                       translation({0, pivot - 0.4F * s.slide, 0}) * rotation_z(-s.bank) *
+                       rotation_x(-lean - s.flip) * scaling({width, s.squash, width}) *
+                       translation({0, -pivot, 0});
     const auto add = [&](const Mat4 &place, Vec3 radii, Vec3 tint,
                          PartMesh mesh = PartMesh::matte) {
         parts.push_back({.mesh = mesh, .model = frame * place * scaling(radii), .tint = tint});
@@ -373,7 +416,7 @@ void CharacterAnimator::build(const PlayerPose &pose, float alpha,
         const float phase = theta + (side > 0 ? k_pi : 0.0F);
         const float swing = std::sin(phase);
         const float lift = std::max(std::cos(phase), 0.0F);
-        const float tuck = s.air * (1 - s.dive);
+        const float tuck = std::max(s.air * (1 - s.dive), s.tuck * 1.6F);
         const Vec3 foot{side * (0.13F - 0.04F * s.dive),
                         0.07F + 0.17F * run * lift + 0.16F * tuck + 0.02F * s.skid,
                         -0.3F * run * swing + tuck * (side < 0 ? -0.1F : 0.12F) + 0.12F * s.dive -
@@ -383,8 +426,8 @@ void CharacterAnimator::build(const PlayerPose &pose, float alpha,
 
         const Vec3 hand{side * (0.37F + 0.1F * s.air - 0.15F * s.dive + 0.08F * s.skid),
                         0.56F + bob + 0.05F * run * std::abs(swing) +
-                            s.air * (0.18F + 0.12F * std::abs(s.rise)) + 0.55F * s.dive +
-                            0.18F * s.skid + 0.3F * s.glow,
+                            s.air * (0.18F + 0.12F * std::abs(s.rise)) +
+                            (0.55F - 0.18F * s.slide) * s.dive + 0.18F * s.skid + 0.3F * s.glow,
                         0.22F * run * swing - 0.1F * s.dive + 0.12F * s.skid};
         add(translation(hand), {0.09F, 0.09F, 0.09F}, colors.cream);
     }
