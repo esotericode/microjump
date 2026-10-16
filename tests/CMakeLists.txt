@@ -114,7 +114,7 @@ if(MJ_SMOKE_TESTS)
         "-DGAME=$<TARGET_FILE:microjump>"
         "-DLEVEL=${PROJECT_SOURCE_DIR}/assets/levels/lantern-isles.json"
         "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/isles-long-leap.mjr"
-        "-DEXPECTED=Replay finished: tick 628, feet [(][^,]*, -3[.]99[0-9]*, [^)]*[)], state Run, grounded, checkpoint 5, sparks 1/10"
+        "-DEXPECTED=Replay finished: tick 628, feet [(][^,]*, -3[.]99[0-9]*, [^)]*[)], state Run, grounded, checkpoint 5, sparks 1/16"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
     add_test(NAME render_spark_pickup COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>"

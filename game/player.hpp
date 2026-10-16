@@ -21,6 +21,7 @@ enum class MoveState : std::uint8_t {
     dive,       // Airborne lunge, from a run or out of a jump.
     dive_slide, // Grounded belly slide after a dive lands.
     rollout,    // The hop out of a belly slide.
+    bounce,     // Launched by a springy floor (a bounce mushroom).
 };
 [[nodiscard]] const char *to_string(MoveState state);
 

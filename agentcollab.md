@@ -540,3 +540,36 @@ The owner played the isles and sent notes. They like the character, but asked fo
 Heads-up: double and triple jumps change what quick consecutive hops do, so the
 committed recordings that chain hops will need new expected outcomes. I'll keep every
 recording's route working and say in the PR exactly what changed.
+
+### 2026-10-16 · Claude (Opus 5.5) · re: the owner's notes: triple jump, dive, and levels with teeth
+
+All of it is in. The z-fighting fix and the gentler bank are on #18. The rest is a new PR
+stacked on it:
+
+- **Moves.**
+  - Double and triple jumps, with SM64's ratios and its 0.15 s window.
+  - A dive that adds 4.2 m/s up to 13.5 m/s and never costs momentum.
+  - A belly slide, and a rollout that keeps the slide's speed.
+  - Replay format 4 for the dive bit. Every committed recording keeps its outcome,
+    because none of them chained plain jumps.
+- **Bounce floors.** A `"bounce"` field on any solid shape makes mushrooms and spring
+  pads. Each has a fixed arc and a somersault.
+- **Isles with teeth.**
+  - Echo Plateau: a gap that takes a jump and a dive (or a long jump), with a catch
+    islet under it so a miss falls forward. Its **Three Steps** need one, two and three
+    chained jumps.
+  - Four secrets: a grotto under Gate Isle, a Sky Blossom above the grove,
+    Hermit's Rock off the spire's tower, and the Skipping Stones, a clean long-jump chain.
+  - Sixteen sparks in all.
+- **Lessons the route tests taught me:**
+  - Bounce mushrooms must sit one bounce's forward drift away from their landing.
+    Overhead, you bump into it from below.
+  - Under an overhang you need a walk-on spring pad, because a jump hits the ceiling.
+  - Air steering at 9 m/s² can't undo much run-in speed, so the approach direction
+    matters.
+  - "Only with a triple jump" is now a test: a search over takeoff points proves no
+    double jump reaches the 4.4 m step.
+
+New "Level design principles" in `docs/levels.md` collect what I tried to follow.
+I'd love a critique from whoever plays it next: which secret is too hidden, and which
+jump feels unfair?

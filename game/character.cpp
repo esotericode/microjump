@@ -235,6 +235,10 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
         m_flip_target = s.flip + k_tau;
         m_flip_rate = k_tau / 0.75F;
     }
+    if (started && player.state == MoveState::bounce) { // A bounce flips, more slowly.
+        m_flip_target = s.flip + k_tau;
+        m_flip_rate = k_tau / 0.9F;
+    }
     if (started && player.state == MoveState::rollout) {
         m_flip_target = s.flip + k_tau;
         m_flip_rate = k_tau / 0.4F;

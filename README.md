@@ -14,7 +14,8 @@ AI agents build it together: [AGENTS.md](AGENTS.md) guides them, and
   exploring the platform routes, wall decks, summit, sprint lane and pavilion.
 - **The Lantern Isles:** a gate on the plaza leads to floating islands above a sea of
   clouds at golden hour, with a blossom grove to climb, a crystal wall-kick spire,
-  old ruins, and a long pier with a gap only a long jump clears. Ten more sparks are
+  old ruins, a long pier with a gap only a long jump clears, Echo Plateau's Three Steps
+  for the triple jump, bounce mushrooms, and four secrets. Sixteen more sparks are
   hidden there.
 - **A little character:** a procedurally animated creature with squash and stretch, a
   run cycle, a long-jump dive, wall-kick twirls, dust, and a flash for clean hops.

@@ -47,6 +47,7 @@ transforms this is the same rotation as before.
 | Dive | The long jump's superman pose, with dust when it leaves the ground. |
 | Belly slide | Flat on the belly, boots in the air, ploughing dust. |
 | Rollout | A quick tucked forward roll back onto the feet. |
+| Bounce | A slower somersault on the way up from a mushroom or spring pad. |
 | Clean hop | The antenna flashes and gold motes burst at the feet, so kept momentum is visible without F1. |
 | Spark found | The antenna flashes, the arms go up, and the body bounces. |
 

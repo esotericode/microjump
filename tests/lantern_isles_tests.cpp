@@ -5,6 +5,8 @@
 
 #include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <initializer_list>
 #include <string_view>
 
@@ -12,6 +14,16 @@ using mj::Vec3;
 
 namespace {
 constexpr float k_dt = 1.0F / 120;
+void trace(const char *tag, const mj::game::Simulation &simulation) {
+    if (std::getenv("ROUTELOG") == nullptr)
+        return;
+    const auto &s = simulation.player.current();
+    std::printf("%s t%llu %.2f %.2f %.2f v %.2f %.2f %.2f %s %s r%u\n", tag,
+                static_cast<unsigned long long>(simulation.ticks()), double(s.position.x),
+                double(s.position.y), double(s.position.z), double(s.velocity.x),
+                double(s.velocity.y), double(s.velocity.z), s.grounded ? "G" : "A",
+                mj::game::to_string(s.state), simulation.respawns());
+}
 
 mj::game::Level load(std::string_view name) {
     auto level = mj::game::load_level(std::filesystem::path(MJ_TEST_LEVELS) / name);
@@ -150,7 +162,7 @@ TEST_CASE("the Lantern Isles load as a floating, drawn-and-solid place") {
     CHECK(level.title == "The Lantern Isles");
     CHECK(level.atmosphere.sky_below);
     CHECK_FALSE(level.atmosphere.grid);
-    CHECK(level.collectibles.size() == 10);
+    CHECK(level.collectibles.size() == 16);
     const auto geometry = mj::game::build_geometry(level);
     // Clouds and far islands are scenery: nothing below the routes catches a fall.
     CHECK_FALSE(geometry.collision.raycast({{0, level.kill_height + 0.5F, 70}, {0, -1, 0}, 100}));
@@ -207,8 +219,8 @@ TEST_CASE("Lantern Isles sparks sit over walkable landings, except the one you l
     for (std::size_t i = 0; i < level.collectibles.size(); ++i) {
         const auto &spark = level.collectibles[i];
         CAPTURE(spark.name);
-        if (spark.name == "Leap of faith")
-            continue; // Hangs over the gap; the long-leap route test collects it.
+        if (spark.name == "Leap of faith" || spark.name == "Over the gap")
+            continue; // Hang over gaps; the route tests collect them mid-leap.
         const auto support = geometry.collision.raycast({spark.position, {0, -1, 0}, 2});
         REQUIRE(support);
         CHECK(mj::is_walkable(support->normal, tuning.collision));
@@ -373,5 +385,278 @@ TEST_CASE("the Crystal Spire climbs by alternating wall kicks onto its lookout t
     CHECK(simulation.collectible_collected(spark_index(level, "Crystal lookout")));
     walk(simulation, {-44.4F, k_deck_top, -15.8F}, 0.4F);
     CHECK(simulation.active_checkpoint() == 3);
+    CHECK(simulation.respawns() == 0);
+}
+
+namespace {
+// Runs from `start` toward `top` (a ledge's top center) and jumps `stages` times in a row,
+// each the moment it lands, the first `first` metres from the ledge. Lines up the final
+// leap in the air. Returns whether it ends standing on the ledge.
+bool chain_onto(const mj::game::Level &level, const mj::CollisionWorld &world, Vec3 start, Vec3 top,
+                int stages, float first) {
+    mj::game::Simulation simulation(level, world);
+    simulation.player.place(start, mj::yaw_of(top - start));
+    int jumps = 0;
+    for (int tick = 0; tick < 900; ++tick) {
+        const auto &state = simulation.player.current();
+        const float distance = mj::length(mj::horizontal(top - state.position));
+        std::uint32_t buttons = mj::input_button::jump_held;
+        if (state.grounded && jumps > 0 && jumps < stages && state.position.y < top.y - 1) {
+            buttons |= mj::input_button::jump_pressed; // Again, as it lands.
+            ++jumps;
+        } else if (state.grounded && jumps == 0 && distance <= first) {
+            buttons |= mj::input_button::jump_pressed;
+            ++jumps;
+        }
+        const bool last = jumps == stages && !state.grounded;
+        simulation.tick(last ? aim(simulation, top, buttons) : toward(simulation, top, 1, buttons),
+                        k_dt);
+        const auto &after = simulation.player.current();
+        if (after.grounded && std::abs(after.position.y - top.y) < 0.15F)
+            return true;
+        if (jumps == stages && after.grounded && after.position.y < top.y - 1)
+            return false; // Fell short and landed below.
+        if (simulation.respawns() > 0)
+            return false;
+    }
+    return false;
+}
+
+// Whether any takeoff distance lets a chain of `stages` jumps land on the ledge.
+bool reachable(const mj::game::Level &level, const mj::CollisionWorld &world, Vec3 start, Vec3 top,
+               int stages) {
+    for (float first = 2; first <= 22; first += 0.5F) {
+        if (chain_onto(level, world, start, top, stages, first))
+            return true;
+    }
+    return false;
+}
+} // namespace
+
+TEST_CASE("Echo Plateau's three steps need one, two and three chained jumps") {
+    const auto level = load("lantern-isles.json");
+    const auto geometry = mj::game::build_geometry(level);
+    const Vec3 plateau{29, 0.07F, -35.9F};
+    const std::array<Vec3, 3> steps{
+        {{22.5F, 2.0F, -44.4F}, {29, 3.2F, -45.9F}, {35.5F, 4.4F, -44.4F}}};
+    for (int jumps = 1; jumps <= 3; ++jumps) {
+        CAPTURE(jumps);
+        const Vec3 step = steps[static_cast<std::size_t>(jumps - 1)];
+        const Vec3 start{step.x, plateau.y, plateau.z + 11.5F};
+        CHECK(reachable(level, geometry.collision, start, step, jumps));
+        if (jumps > 1) // One jump fewer never makes it.
+            CHECK_FALSE(reachable(level, geometry.collision, start, step, jumps - 1));
+    }
+    // The triple step holds the spark.
+    mj::game::Simulation simulation(level, geometry.collision);
+    simulation.player.place(steps[2] + Vec3{0, 0.02F, 0}, 0);
+    for (int tick = 0; tick < 30; ++tick)
+        simulation.tick({}, k_dt);
+    CHECK(simulation.collectible_collected(spark_index(level, "Third step")));
+}
+
+TEST_CASE("the gap to Echo Plateau takes a jump and a dive; a miss falls forward") {
+    const auto level = load("lantern-isles.json");
+    const auto geometry = mj::game::build_geometry(level);
+    const float dx = 29.0F / std::hypot(29.0F, 35.9F), dz = -35.9F / std::hypot(29.0F, 35.9F);
+    const auto along = [&](float d, float y) { return Vec3{dx * d, y, dz * d}; };
+    // Across Gate Isle and the two stones, then leap for the plateau.
+    const auto cross = [&](bool dive) {
+        mj::game::Simulation simulation(level, geometry.collision);
+        hop(simulation, geometry.collision, {{along(16.5F, 0.6F)}, {along(23, 1.2F)}});
+        const Vec3 landing = along(36, 0.0F);
+        bool jumped = false, dove = false;
+        for (int tick = 0; tick < 300; ++tick) {
+            const auto &state = simulation.player.current();
+            std::uint32_t buttons = mj::input_button::jump_held;
+            const float out = mj::dot(mj::horizontal(state.position), {dx, 0, dz});
+            if (!jumped && state.grounded && out > 24.2F) {
+                buttons |= mj::input_button::jump_pressed;
+                jumped = true;
+            } else if (dive && jumped && !dove && !state.grounded && state.velocity.y < 3) {
+                buttons |= mj::input_button::dive_pressed;
+                dove = true;
+            }
+            simulation.tick(toward(simulation, landing, 1, buttons), k_dt);
+            if (jumped && simulation.player.current().grounded && tick > 30)
+                break;
+        }
+        return simulation;
+    };
+    const auto made = cross(true);
+    CHECK(made.respawns() == 0);
+    CHECK(made.player.current().position.y == doctest::Approx(0).epsilon(0.05));
+    CHECK(made.collectible_collected(spark_index(level, "Over the gap")));
+    auto missed = cross(false);
+    CHECK(missed.respawns() == 0);
+    CHECK(missed.player.current().position.y < -3.5F); // On the catch islet below.
+    for (int tick = 0; tick < 60; ++tick)              // Come to a stop first.
+        missed.tick({0, 0, 0, -0.32F, 0}, k_dt);
+    // Its mushroom throws you back up to the last stone.
+    const Vec3 mushroom = along(26.2F, -2.1F);
+    const Vec3 stone = along(23, 1.2F);
+    bool bounced = false;
+    for (int tick = 0; tick < 600; ++tick) {
+        const auto &state = missed.player.current();
+        bounced = bounced || state.state == mj::game::MoveState::bounce;
+        std::uint32_t buttons = mj::input_button::jump_held;
+        if (!bounced && state.grounded &&
+            mj::length(mj::horizontal(mushroom - state.position)) < 3.0F)
+            buttons |= mj::input_button::jump_pressed;
+        missed.tick(bounced          ? aim(missed, stone, buttons)
+                    : state.grounded ? toward(missed, mushroom, 0.5F, buttons)
+                                     : aim(missed, mushroom, buttons),
+                    k_dt);
+        trace("gap", missed);
+        if (bounced && missed.player.current().grounded)
+            break;
+    }
+    CHECK(bounced);
+    CHECK(missed.respawns() == 0);
+    CHECK(missed.player.current().position.y == doctest::Approx(1.2F).epsilon(0.05));
+}
+
+TEST_CASE("the grotto under Gate Isle is a drop off the rim, with a mushroom back up") {
+    const auto level = load("lantern-isles.json");
+    const auto geometry = mj::game::build_geometry(level);
+    const Vec3 out{std::cos(mj::k_pi / 6), 0, std::sin(mj::k_pi / 6)};
+    mj::game::Simulation simulation(level, geometry.collision);
+    simulation.player.place(out * 7 + Vec3{0, 0.01F, 0}, mj::yaw_of(out));
+    for (int tick = 0; tick < 240 && simulation.player.current().position.y > -4.5F; ++tick) {
+        simulation.tick(toward(simulation, out * 14, 0.4F), k_dt);
+        trace("grotto", simulation);
+    }
+    for (int tick = 0; tick < 60; ++tick)
+        simulation.tick({}, k_dt);
+    REQUIRE(simulation.respawns() == 0);
+    REQUIRE(simulation.player.current().grounded);
+    CHECK(simulation.player.current().position.y == doctest::Approx(-5).epsilon(0.02));
+    walk(simulation, out * 9.0F + Vec3{0, -5, 1.2F});
+    CHECK(simulation.collectible_collected(spark_index(level, "Grotto glow")));
+    // Walk along the shelf, sideways to the rim, onto the spring pad; steer home once above.
+    const Vec3 rim{-std::sin(mj::k_pi / 6), 0, std::cos(mj::k_pi / 6)};
+    walk(simulation, out * 11.4F + rim * 0.7F + Vec3{0, -5, 0}, 0.4F);
+    const Vec3 mushroom = out * 11.4F - rim * 1.6F + Vec3{0, -4.78F, 0};
+    bool bounced = false;
+    for (int tick = 0; tick < 600; ++tick) {
+        const auto &state = simulation.player.current();
+        bounced = bounced || state.state == mj::game::MoveState::bounce;
+        std::uint32_t buttons = mj::input_button::jump_held;
+        const bool clear = bounced && state.position.y > 0.6F; // Above the rim: steer home.
+        simulation.tick(clear            ? aim(simulation, out * 6, buttons)
+                        : bounced        ? mj::TickInput{0, 0, 0, -0.32F, buttons}
+                        : state.grounded ? toward(simulation, mushroom, 0.35F, buttons)
+                                         : aim(simulation, mushroom, buttons),
+                        k_dt);
+        trace("back", simulation);
+        if (bounced && simulation.player.current().grounded &&
+            simulation.player.current().position.y > -1)
+            break;
+    }
+    CHECK(bounced);
+    CHECK(simulation.respawns() == 0);
+    CHECK(simulation.player.current().position.y == doctest::Approx(0).epsilon(0.05));
+}
+
+TEST_CASE("a grove mushroom throws you up to the Sky Blossom") {
+    const auto level = load("lantern-isles.json");
+    const auto geometry = mj::game::build_geometry(level);
+    mj::game::Simulation simulation(level, geometry.collision);
+    simulation.player.place({-9, 3.01F, -50.5F}, mj::k_pi);
+    const Vec3 mushroom{-9, 4.3F, -55};
+    const Vec3 canopy{-9, 11.7F, -60};
+    bool bounced = false;
+    for (int tick = 0; tick < 600; ++tick) {
+        const auto &state = simulation.player.current();
+        bounced = bounced || state.state == mj::game::MoveState::bounce;
+        std::uint32_t buttons = mj::input_button::jump_held;
+        if (!bounced && state.grounded &&
+            mj::length(mj::horizontal(mushroom - state.position)) < 2.6F)
+            buttons |= mj::input_button::jump_pressed;
+        // Bounce up beside the canopy, carried on by the run-in, and settle onto it.
+        const bool rising = bounced && state.velocity.y > 0;
+        simulation.tick(rising           ? toward(simulation, canopy, 0.6F, buttons)
+                        : bounced        ? aim(simulation, canopy, buttons)
+                        : state.grounded ? toward(simulation, mushroom, 0.6F, buttons)
+                                         : aim(simulation, mushroom, buttons),
+                        k_dt);
+        trace("sky", simulation);
+        if (bounced && simulation.player.current().grounded)
+            break;
+    }
+    REQUIRE(bounced);
+    CHECK(simulation.respawns() == 0);
+    CHECK(simulation.player.current().position.y > 11.0F);
+    walk(simulation, canopy, 0.3F);
+    CHECK(simulation.collectible_collected(spark_index(level, "Sky blossom")));
+}
+
+TEST_CASE("Hermit's Rock is a long jump off the spire's tower, out of reach of a jump") {
+    const auto level = load("lantern-isles.json");
+    const auto geometry = mj::game::build_geometry(level);
+    const auto leap = [&](bool long_jump) {
+        mj::game::Simulation simulation(level, geometry.collision);
+        simulation.player.place({-44.4F, 9.01F, -14.4F}, 0);
+        bool jumped = false;
+        for (int tick = 0; tick < 600; ++tick) {
+            const auto &state = simulation.player.current();
+            std::uint32_t buttons = mj::input_button::jump_held;
+            if (!jumped && state.grounded && state.position.z < -21.6F) {
+                buttons |= mj::input_button::jump_pressed;
+                if (long_jump)
+                    buttons |= mj::input_button::long_jump_held;
+                jumped = true;
+            }
+            simulation.tick({0, 1, 0, -0.32F, buttons}, k_dt);
+            if (simulation.respawns() > 0 || (jumped && simulation.player.current().grounded))
+                break;
+        }
+        return simulation;
+    };
+    const auto made = leap(true);
+    CHECK(made.respawns() == 0);
+    CHECK(made.player.current().position.y == doctest::Approx(1).epsilon(0.05));
+    CHECK(leap(false).respawns() == 1);
+    // On the rock: its spark, and a gate home.
+    mj::game::Simulation simulation(level, geometry.collision);
+    simulation.player.place({-45.6F, 1.01F, -38.7F}, 0);
+    for (int tick = 0; tick < 30; ++tick)
+        simulation.tick({}, k_dt);
+    CHECK(simulation.collectible_collected(spark_index(level, "Hermit's lantern")));
+}
+
+TEST_CASE("clean long-jump chains skip across the stones east of Lantern Isle") {
+    const auto level = load("lantern-isles.json");
+    const auto geometry = mj::game::build_geometry(level);
+    mj::game::Simulation simulation(level, geometry.collision, 5);
+    simulation.player.place({1, -3.99F, 54.5F}, mj::k_pi * 0.5F);
+    int jumps = 0;
+    for (int tick = 0; tick < 900 && jumps < 5; ++tick) {
+        const auto &state = simulation.player.current();
+        if (jumps == 4 && state.grounded)
+            break; // Landed on the far rock: stop chaining.
+        std::uint32_t buttons = mj::input_button::jump_held;
+        if (state.grounded && (jumps > 0 || state.position.x > 9.1F)) {
+            buttons |= mj::input_button::jump_pressed | mj::input_button::long_jump_held;
+            ++jumps; // Each landing chains straight into the next long jump.
+        }
+        simulation.tick({0, 1, mj::k_pi * 0.5F, -0.32F, buttons}, k_dt);
+        trace("skip", simulation);
+        REQUIRE(simulation.respawns() == 0);
+    }
+    for (int tick = 0; tick < 120; ++tick)
+        simulation.tick({0, 0, 0, -0.32F, 0}, k_dt);
+    CHECK(simulation.respawns() == 0);
+    CHECK(simulation.player.current().position.x > 48.0F);
+    walk(simulation, {50, -4, 53});
+    CHECK(simulation.collectible_collected(spark_index(level, "Skipping stones")));
+}
+
+TEST_CASE("Echo Plateau leads on to the Old Ruins") {
+    const auto level = load("lantern-isles.json");
+    const auto geometry = mj::game::build_geometry(level);
+    mj::game::Simulation simulation(level, geometry.collision, 6);
+    hop(simulation, geometry.collision,
+        {{{32, 0, -24}, 1.0F}, {{34.4F, 0.8F, -17.5F}}, {{36, 1.5F, -8.5F}, 1.5F}});
     CHECK(simulation.respawns() == 0);
 }

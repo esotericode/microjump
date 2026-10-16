@@ -156,6 +156,12 @@ Vulkan validation errors. F1 can close diagnostics while leaving the hunt HUD vi
 - every spark but the mid-leap one sits over a walkable landing;
 - every gate in both levels leads to a real level and checkpoint, and you never
   arrive inside the gate back;
+- the Three Steps need exactly one, two and three chained jumps: a search over takeoff
+  points shows each step reachable with that chain and never with one jump fewer;
+- each secret and expert line can be reached with the moves it claims to need: the gap
+  to Echo Plateau with a jump and a dive (a plain jump lands on the catch islet, whose
+  mushroom throws you back), the grotto, the Sky Blossom, Hermit's Rock and the
+  Skipping Stones;
 - nothing below the routes catches a fall.
 
 A small route driver plays the stepping stones, the grove's canopies, both slab bridges,
@@ -163,7 +169,17 @@ the ruins' columns and the cloud steps. It runs and judges each takeoff as a pla
 does: it jumps once its speed would carry it to the landing, or at an edge, and lines
 up the touchdown in the air. A wall-kick driver climbs the spire onto its tower. The
 long-leap test shows a long jump clears the pier's gap while a running jump falls
-short. Any respawn fails a route.
+short. Any respawn fails a route. `ROUTELOG=1` prints each tick of the traced routes,
+which helps when a new route won't pass.
+
+`jump_chain_tests.cpp` covers the moves themselves:
+- the double and triple jump heights, timing window and speed rule;
+- that double jumps can be cut short and triple jumps can't;
+- the dive's boost and cap, where it can and can't start, belly slides, standing up,
+  rollouts and buffered rollouts;
+- bounce floors.
+
+`replay_sm64_moves` plays `tests/replays/sm64-moves.mjr` through the whole game.
 
 `collision_tests.cpp` checks that a V of two 60° slopes holds a falling capsule, while a
 wall corner does not. `level_tests.cpp` covers the new shapes, `solid`, `title`,

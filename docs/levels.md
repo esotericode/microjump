@@ -54,7 +54,7 @@ A gate, **To the Lantern Isles**, stands on the plaza to the right of spawn.
 ## The Lantern Isles (`lantern-isles.json`)
 
 A small archipelago of grassy floating islands over a sea of clouds, at five in the
-evening. There are 6 checkpoints, 10 sparks and 13 lanterns. Falling below −18 m returns
+evening. There are 8 checkpoints, 16 sparks and 16 lanterns. Falling below −18 m returns
 you to your last checkpoint. The day starts at 17:00 (`--time-of-day` still overrides it),
 the graybox grid is off, and the haze carries on below the horizon.
 
@@ -70,6 +70,18 @@ the graybox grid is off, and the haze carries on below the horizon.
 | The Long Pier | 0, 22 | A runway south. Its end is a 10 m gap and 4 m drop that only a long jump clears; a spark hangs mid-leap. |
 | Lantern Isle | 0, 54.5 | Rock steps up a golden lantern tree. |
 | Cloud Steps | −13, 36 | Stones back up to the pier, with a nook off to the side. |
+| Echo Plateau | 29, −36 | Two stones from Gate Isle, then an 8.3 m gap that takes a jump and a dive (or a long jump). A spark hangs over it, and a miss lands on a catch islet whose mushroom throws you back up. The **Three Steps** stand at 2 m (any jump), 3.2 m (a double jump) and 4.4 m (only a triple jump). A slab leads on to the ruins. |
+
+![Echo Plateau and its Three Steps, the gap from the last stone with the catch islet below, and the Skipping Stones](captures/isles-challenges.png)
+
+**Secrets.** Each rewards looking around and is never required:
+
+| Secret | How to find it |
+| --- | --- |
+| The Grotto | A lantern glows under Gate Isle's south-east rim. Step off the rim there onto a hidden shelf; a spring pad throws you home. |
+| Sky Blossom | A mushroom hides behind the grove's climbing trees. Run onto it and the bounce carries you up beside a canopy floating past the island's edge. |
+| Hermit's Rock | Seen only from the north end of the spire's tower. A long jump (or a jump and a dive) off the tower reaches it; a small gate takes you home. |
+| Skipping Stones | East of Lantern Isle, pads a chained long jump apart. Long-jump again the moment you land, three times, to reach the far rock and its gate home. |
 
 The level is laid out by `tools/levels/lantern_isles.py`, which writes the JSON; run
 `python3 tools/levels/lantern_isles.py` after editing it. Small touches can go straight
@@ -86,6 +98,14 @@ Distances are horizontal, from takeoff to where the feet fall back through each 
 | Running jump (apex 2.6 m) | 8.6 m | 7.9 m | 6.8 m | 6.2 m | 5.7 m | 5.2 m |
 | Long jump (apex 1.2 m) | 12.2 m | 10.5 m | 8.2 m | 5.9 m | — | — |
 
+Other reaches:
+- **Heights.** A double jump peaks at 3.8 m and a triple at 5.0 m, so a 3.2 m ledge needs
+  a double and a 4.4 m one a triple.
+- **Dive.** Diving soon after a jump's takeoff carries the whole flight at 13.2 m/s,
+  about 2 m further than the jump alone.
+- **Long-jump chains.** Clean chains fly about 7.9, 9.6, 10.3 and 11.1 m.
+- **Bounces.** A bounce of v m/s rises v² / 61 m and keeps the speed you ran on with.
+
 - A chain of hops at full speed flies about 6.5 m. Space small platforms about that far
   apart, center to center, so players can keep their speed. Closer, smaller landings
   ask them to slow down and hop carefully, which suits a climb, not a run.
@@ -93,8 +113,35 @@ Distances are horizontal, from takeoff to where the feet fall back through each 
   asks for 10 m with a 4 m drop, where a running jump reaches 8.6 m.
 - Two slopes too steep to stand on hold you where they meet, so a V between canopies or
   rocks is a place to stand, not a trap.
+- A bounce rises straight up beside whatever it launches you to, so put a floating
+  landing one bounce's forward drift away (about 5 m along the run-in), never overhead,
+  or you'll bump into it from below. Under an overhang, use a spring pad you walk onto,
+  since there's no headroom to jump.
 - `tests/lantern_isles_tests.cpp` plays each route with a small driver that hops like a
   player. Reuse it to check a new route before you call it done.
+
+## Level design principles
+
+What makes the platforming here mean something:
+
+- **Teach, test, combine.** Introduce a move where failure costs little: the Three Steps
+  sit on a broad plateau. Then ask for it where it matters: the gap to the plateau.
+  Then mix it with others: a long jump off the spire's tower to a secret.
+- **Show the goal.** Every challenge ends at a spark you can see before you try. Lanterns
+  and sparks lead the eye to the next place.
+- **Fail forward.** A missed jump should land somewhere with a way back, like the catch
+  islet and its mushroom, rather than in the sea. Falls that respawn are fine for
+  optional expert lines like the Skipping Stones.
+- **Several answers.** The Echo Plateau gap takes a jump and a dive, or a long jump.
+  Hermit's Rock takes a long jump, or a jump and a dive. Let players choose.
+- **Secrets reward curiosity.** Hide them where looking over an edge, behind a tree or
+  out from a high point pays off, and hint at them: a glow under an island, or a rock
+  only visible from the tower. Give every dead end a way home.
+- **Loops and rest.** Routes lead on to other islands (the plateau to the ruins), and
+  every island has a checkpoint.
+- **Test it with real jumps.** The route driver in `tests/lantern_isles_tests.cpp`
+  checks that every route works and every "only with" claim holds: the Three Steps
+  test proves no chain of fewer jumps reaches each step.
 
 `movement-yard.json` is the original compact test yard. It is kept because older
 recordings and the lighting tests use it.
@@ -144,6 +191,7 @@ recordings and the lighting tests use it.
 | `shapes` | Required, 1–2048 entries, at least one of them solid. Each needs `kind`, `center`, `size` and `color`. |
 | `kind` | `box`, `ramp`, `cylinder`, `ellipsoid` or `cone`. For a cylinder, size X and Z are the diameter and must match; Y is the height. An ellipsoid fills its box, smoothly shaded. A cone is faceted: size X and Z are its wide end's diameters. |
 | `taper`, `tip` | Cones only. `taper` (0–1, default 0) is the narrow end's diameter as a fraction of the wide end; 0 makes a point. `tip` is `"up"` (default) or `"down"`, which end is narrow. |
+| `bounce` | Optional, 0–40 m/s, default 0. Standing on the shape's walkable top throws you up at this speed on a fixed arc, keeping your run-in speed (the isles' mushrooms and spring pads). Solid shapes only. |
 | `solid` | Optional, default true. `false` draws the shape but leaves it out of collision: clouds, grass, distant scenery. Wall-jump shapes must be solid. |
 | `center`, `size` | Three numbers. Coordinates must be within ±4096 m; sizes 0.01–512 m. |
 | `yaw` | Optional, default 0. |

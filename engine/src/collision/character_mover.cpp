@@ -58,6 +58,7 @@ struct Slider {
                 result.grounded = true;
                 result.ground_normal = normal;
                 result.ground_face_normal = hit->face_normal;
+                result.ground_bounce = world.triangles()[hit->triangle].bounce;
                 const Vec3 along = respect_walls(horizontal(remaining));
                 delta = along + Vec3{0, -(normal.x * along.x + normal.z * along.z) / normal.y, 0};
             } else {
@@ -136,6 +137,7 @@ struct Slider {
         result.grounded = true;
         result.ground_normal = hit->normal;
         result.ground_face_normal = hit->face_normal;
+        result.ground_bounce = world.triangles()[hit->triangle].bounce;
         return true;
     }
 };

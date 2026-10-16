@@ -28,6 +28,8 @@ const char *to_string(MoveState state) {
         return "Belly slide";
     case MoveState::rollout:
         return "Rollout";
+    case MoveState::bounce:
+        return "Bounce";
     }
     return "?";
 }
@@ -141,7 +143,8 @@ void Player::air_motion(Steering steering, bool jump_held, float dt) {
     float scale = 1;
     const bool rising_jump = s.state == MoveState::jump || s.state == MoveState::wall_jump ||
                              s.state == MoveState::long_jump || s.state == MoveState::double_jump ||
-                             s.state == MoveState::triple_jump || s.state == MoveState::rollout;
+                             s.state == MoveState::triple_jump || s.state == MoveState::rollout ||
+                             s.state == MoveState::bounce;
     const bool variable = s.state == MoveState::jump || s.state == MoveState::double_jump;
     // Only ordinary and double jumps are variable; long jumps, wall kicks, triple jumps and
     // rollouts keep fixed, readable arcs. A dive stays a dive until it lands.
@@ -183,7 +186,7 @@ bool Player::can_dive() const {
     // Out of a jump, a fall or a kick; long jumps are committed, and one dive per airtime.
     return !s.dive_used && (s.state == MoveState::jump || s.state == MoveState::double_jump ||
                             s.state == MoveState::triple_jump || s.state == MoveState::fall ||
-                            s.state == MoveState::wall_jump);
+                            s.state == MoveState::wall_jump || s.state == MoveState::bounce);
 }
 
 void Player::dive() {
@@ -277,7 +280,7 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
     const bool can_jump = s.grounded || s.coyote_timer > 0;
     const bool rising = s.state == MoveState::jump || s.state == MoveState::double_jump ||
                         s.state == MoveState::triple_jump || s.state == MoveState::rollout ||
-                        s.state == MoveState::dive;
+                        s.state == MoveState::dive || s.state == MoveState::bounce;
     bool consumed_jump = false;
     bool dove = false;
     if (s.grounded && s.state == MoveState::dive_slide) {
@@ -411,6 +414,14 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
             s.jump_chain = 0;
         }
         s.grounded = false;
+    }
+    if (s.grounded && moved.ground_bounce > 0) {
+        // A springy floor throws you up on a fixed arc, keeping your way and speed.
+        s.velocity = yaw_forward(s.facing) * s.ground_speed + Vec3{0, moved.ground_bounce, 0};
+        s.grounded = false;
+        s.state = MoveState::bounce;
+        s.jump_chain = 0;
+        s.coyote_timer = 0;
     }
     if (s.grounded) {
         s.wall_timer = 0;

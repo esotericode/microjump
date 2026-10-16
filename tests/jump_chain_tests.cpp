@@ -1,9 +1,11 @@
 #include "test_framework.hpp"
 
+#include <level_io.hpp>
 #include <player.hpp>
 
 #include <mj/scene/mesh.hpp>
 
+#include <algorithm>
 #include <vector>
 
 namespace {
@@ -217,4 +219,49 @@ TEST_CASE("a jump pressed during a dive rolls out the moment it lands") {
         d.run(1, button::jump_held);
     CHECK(d.player.current().state == MoveState::rollout);
     CHECK(d.speed() > 12.5F);
+}
+
+TEST_CASE("bounce floors throw you up on a fixed arc, and you can dive out of it") {
+    const auto level = mj::game::parse_level(R"({
+      "version": 1, "name": "Mushrooms",
+      "shapes": [{"kind":"box", "center":[0,-0.5,0], "size":[60,1,60], "color":"#808080"},
+                 {"kind":"box", "center":[0,0.5,-10], "size":[4,1,4], "color":"#ff6080",
+                  "bounce":15}],
+      "checkpoints": [{"position":[0,0.01,0]}]})");
+    REQUIRE(level);
+    CHECK(level->shapes[1].bounce == doctest::Approx(15));
+    const auto geometry = mj::game::build_geometry(*level);
+    mj::game::Player player;
+    player.place({0, 4, -10}, 0);
+    float apex = 0;
+    bool bounced = false;
+    for (int i = 0; i < 240; ++i) {
+        player.tick({}, geometry.collision, k_dt);
+        bounced = bounced || player.current().state == MoveState::bounce;
+        if (bounced)
+            apex = std::max(apex, player.current().position.y);
+    }
+    REQUIRE(bounced);
+    // 15 m/s straight up from the top at 1 m: about 3.7 m higher, released or not.
+    CHECK(apex == doctest::Approx(1 + 15.0F * 15.0F / (2 * player.tuning.gravity())).epsilon(0.03));
+
+    // A bounce can be dived out of, near the top of its arc.
+    mj::game::Player runner;
+    runner.place({0, 3, -10}, 0);
+    bool dove = false;
+    for (int i = 0; i < 240 && !dove; ++i) {
+        const bool up =
+            runner.current().state == MoveState::bounce && runner.current().velocity.y < 2;
+        runner.tick({0, 0, 0, 0, up ? button::dive_pressed : 0U}, geometry.collision, k_dt);
+        dove = runner.current().state == MoveState::dive;
+    }
+    CHECK(dove);
+    CHECK_FALSE(mj::game::parse_level(R"({"version":1,"name":"x",
+      "shapes":[{"kind":"box","center":[0,-0.5,0],"size":[9,1,9],"color":"#808080"},
+                {"kind":"box","center":[0,1,0],"size":[1,1,1],"color":"#808080","bounce":9,
+                 "solid":false}],
+      "checkpoints":[{"position":[0,0.01,0]}]})"));
+    CHECK_FALSE(mj::game::parse_level(R"({"version":1,"name":"x",
+      "shapes":[{"kind":"box","center":[0,-0.5,0],"size":[9,1,9],"color":"#808080","bounce":50}],
+      "checkpoints":[{"position":[0,0.01,0]}]})"));
 }

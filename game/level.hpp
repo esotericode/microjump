@@ -27,6 +27,7 @@ struct Shape {
     bool solid = true;      // False: drawn only (clouds, foliage), never collided with.
     float taper = 0;        // Cones: the narrow end's diameter as a fraction of the wide end.
     bool tip_down = false;  // Cones: the narrow end points down.
+    float bounce = 0;       // Launch speed of a springy top (m/s); 0 for ordinary ground.
 };
 
 struct Checkpoint {

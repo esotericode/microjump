@@ -200,7 +200,7 @@ std::expected<Level, Error> parse_level(std::string_view text) {
             const auto path = "level.shapes[" + std::to_string(i) + "]";
             if (!read.object(item, path,
                              {"kind", "center", "size", "color", "yaw", "material", "wall_jump",
-                              "solid", "taper", "tip"}))
+                              "solid", "taper", "tip", "bounce"}))
                 break;
             Shape shape;
             const auto &kind = read.member(item, "kind", path);
@@ -246,6 +246,9 @@ std::expected<Level, Error> parse_level(std::string_view text) {
             }
             if (shape.wall_jump && !shape.solid)
                 read.fail(path + ".wall_jump", "a wall-jump shape must be solid");
+            shape.bounce = read.scalar(item, "bounce", path, 0, 40, 0);
+            if (shape.bounce > 0 && !shape.solid)
+                read.fail(path + ".bounce", "a bounce shape must be solid");
             level.shapes.push_back(shape);
         }
     }

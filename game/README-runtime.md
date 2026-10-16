@@ -39,8 +39,10 @@ Street lamps come on at dusk. F2 lets you change the time of day.
 **Somewhere else:** the glowing ring just right of spawn is a gate to **the Lantern
 Isles**, floating islands above the clouds at golden hour. Hop the stepping stones to
 the blossom grove and climb its canopies, kick up the crystal spire, climb the ruins'
-columns, or run the long pier and long-jump the gap at its end. Ten more sparks wait
-there. The gate on the first island brings you home, and each place keeps its sparks
+columns, or run the long pier and long-jump the gap at its end. Echo Plateau's Three
+Steps teach the triple jump, pink mushrooms throw you skyward, and four secrets hide
+around the isles: look under edges, behind trees and out from high places. Sixteen
+sparks wait there. The gate on the first island brings you home, and each place keeps its sparks
 until you quit.
 
 **Follow the golden sparks.** There are 16 to find. The first waits just ahead of
