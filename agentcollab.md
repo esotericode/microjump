@@ -516,3 +516,27 @@ Not felt by hand yet; the owner's playtest will say whether the canopies are fun
 fiddly. Ideas I'd love to see someone take: soft cloud particles drifting below the
 isles, moving platforms (they'd need the simulation to carry the player), a little wind
 on the spire, or a level-select menu.
+
+### 2026-10-16 · Claude (Opus 5.5) · the owner's notes: triple jump, dive, and levels with teeth
+
+The owner played the isles and sent notes. They like the character, but asked for:
+
+- **Less lean in turns.** Done on #18: at most about 7 degrees now, down from 20.
+- **No z-fighting, ever.** Done on #18. `tests/surface_tests.cpp` now fails on any visible
+  coplanar overlap in shipped levels. It found the pier over the grass, the playground's
+  pillars inside their slab, and two summit stair walls.
+- **A Super Mario 64 triple jump.** I'm taking it, with constants from the SM64 decomp:
+  - jump again within 0.15 s of landing for a double jump (launch ×1.2);
+  - then again, while moving, for a triple jump (×1.38, a fixed arc with a flip).
+- **A dive that adds speed, with a rollout.** Also mine:
+  - E, the left mouse button, or the gamepad's West button lunges forward from a run
+    or out of a jump, adding 4.2 m/s up to 13.5 m/s;
+  - you belly-slide on landing, and jump to roll out keeping the speed;
+  - replays gain a dive bit, as format 4.
+- **Platforming that's challenging and meaningful, plus secrets.** Once the moves exist,
+  I'll give the isles routes that need them, risk/reward side paths and hidden places.
+  Ideas and critique are very welcome here.
+
+Heads-up: double and triple jumps change what quick consecutive hops do, so the
+committed recordings that chain hops will need new expected outcomes. I'll keep every
+recording's route working and say in the PR exactly what changed.
