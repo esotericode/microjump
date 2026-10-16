@@ -1,3 +1,4 @@
+#include "character.hpp"
 #include "debug_ui.hpp"
 #include "level.hpp"
 #include "level_io.hpp"
@@ -28,6 +29,8 @@ constexpr MeshHandle k_world_mesh{0};
 constexpr MeshHandle k_player_mesh{1};
 constexpr MeshHandle k_bulb_mesh{2};
 constexpr MeshHandle k_spark_mesh{3};
+constexpr MeshHandle k_matte_part_mesh{4};
+constexpr MeshHandle k_glossy_part_mesh{5};
 
 std::string describe(const Simulation &simulation) {
     const auto &s = simulation.player.current();
@@ -98,11 +101,14 @@ int run(const LaunchOptions &options) {
             log(context.error().message);
             return 1;
         }
-        // Order matches k_world_mesh, k_player_mesh, k_bulb_mesh, k_spark_mesh.
+        // Order matches the k_*_mesh handles above.
         const std::array meshes{
             geometry.mesh,
             make_player_mesh(simulation.player.tuning.radius, simulation.player.tuning.height),
-            make_bulb_mesh(), make_spark_mesh()};
+            make_bulb_mesh(),
+            make_spark_mesh(),
+            make_part_mesh(PartMesh::matte),
+            make_part_mesh(PartMesh::glossy)};
         auto renderer = Renderer::create(**window, **context, meshes);
         if (!renderer) {
             log(renderer.error().message);
@@ -182,6 +188,9 @@ int run(const LaunchOptions &options) {
                             pacing_phases.size()));
         }
         std::vector<DrawInstance> instances;
+        CharacterAnimator character;
+        character.snap(simulation.player.current());
+        std::vector<CharacterPart> character_parts;
         log("M4 playground ready: WASD move, Space jump/wall kick, Shift+jump long jump, R "
             "respawn, F1 overlay, F2 "
             "tuning, "
@@ -323,7 +332,11 @@ int run(const LaunchOptions &options) {
                 }
                 if (!options.record.empty())
                     recording.push_back(tick);
+                const auto found = simulation.collected_count();
                 simulation.tick(tick, dt);
+                character.tick(simulation.player.current(), dt); // Visual only, like the sky.
+                if (simulation.collected_count() > found)
+                    character.cheer();
                 ++frame_ticks;
                 lighting.cycle.advance(dt); // Visual only; never feeds back into gameplay.
             });
@@ -345,8 +358,20 @@ int run(const LaunchOptions &options) {
                                  .model = yaw_translation(0, {}),
                                  .grid = 1,
                                  .receives_blob = true});
-            instances.push_back(
-                {.mesh = k_player_mesh, .model = yaw_translation(pose.facing, pose.position)});
+            if (diagnostics.show_capsule) {
+                instances.push_back(
+                    {.mesh = k_player_mesh, .model = yaw_translation(pose.facing, pose.position)});
+            } else {
+                character_parts.clear();
+                character.build(pose, alpha, character_parts);
+                for (const auto &part : character_parts)
+                    instances.push_back({.mesh = part.mesh == PartMesh::glossy ? k_glossy_part_mesh
+                                                                               : k_matte_part_mesh,
+                                         .model = part.model,
+                                         .casts_shadow = part.casts_shadow,
+                                         .tint = part.tint,
+                                         .emissive = part.emissive});
+            }
             for (std::size_t i = 0; i < level.collectibles.size(); ++i) {
                 if (simulation.collectible_collected(i))
                     continue;

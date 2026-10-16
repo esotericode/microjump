@@ -45,7 +45,9 @@ forward renderer, and each frame has four passes:
 
 Per-frame data goes in a uniform buffer: camera, sun, sky, fog, the shadow matrix and
 up to 16 lights. Each draw sends its transform, material flags, tint and emissive
-strength as 80-byte push constants. There are two CPU frame slots. Their completion is
+strength as 80-byte push constants. A transform may scale each axis (the animated
+character squashes spheres), so normals go through the cofactor matrix. For rigid
+transforms that is the rotation itself. There are two CPU frame slots. Their completion is
 tracked on one timeline semaphore, and each swapchain image has its own present
 semaphore. A replaced resource, such as an old shadow map, is retired until the timeline
 shows that no in-flight frame still uses it. Only resizes and swapchain rebuilds wait

@@ -25,7 +25,7 @@ struct MeshHandle {
 
 struct DrawInstance {
     MeshHandle mesh;
-    Mat4 model;                 // Rigid transform (rotation + translation only).
+    Mat4 model;                 // Affine: rotation, per-axis scale and translation.
     float grid = 0;             // Strength of the 1 m world-space grid lines (0..1).
     bool receives_blob = false; // Darkened by the blob shadow below the caster.
     bool casts_shadow = true;

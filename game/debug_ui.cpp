@@ -201,6 +201,7 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
         angle_slider("Max slope", t.collision.max_slope, 10, 80);
         slider("Step height", t.collision.step_height, 0, 1);
         slider("Ground snap", t.collision.ground_snap, 0, 1);
+        ImGui::Checkbox("Show collision capsule", &panels.diagnostics.show_capsule);
     }
     if (ImGui::CollapsingHeader("Gamepad", ImGuiTreeNodeFlags_DefaultOpen)) {
         slider("Move dead zone", gamepad.move_dead_zone, 0, 0.5F);

@@ -21,7 +21,7 @@ layout(set = 0, binding = 0) uniform Frame {
     Light lights[16];
 } frame;
 layout(push_constant) uniform Draw {
-    vec4 model_rows[3]; // rigid model transform rows
+    vec4 model_rows[3]; // affine model transform rows (rotation, scale, translation)
     vec4 material;      // x grid strength, y receives blob shadow, z emissive
     vec4 tint;
 } draw;
@@ -30,9 +30,14 @@ vec3 to_world(vec3 local) {
     vec4 p = vec4(local, 1.0);
     return vec3(dot(draw.model_rows[0], p), dot(draw.model_rows[1], p), dot(draw.model_rows[2], p));
 }
-vec3 rotate_to_world(vec3 local) {
-    return vec3(dot(draw.model_rows[0].xyz, local), dot(draw.model_rows[1].xyz, local),
-                dot(draw.model_rows[2].xyz, local));
+// Normals go through the cofactor matrix (the inverse transpose times the determinant), so
+// scaled and squashed parts shade correctly; for a rigid transform it is the rotation itself.
+// Callers renormalize.
+vec3 normal_to_world(vec3 local) {
+    vec3 x = vec3(draw.model_rows[0].x, draw.model_rows[1].x, draw.model_rows[2].x);
+    vec3 y = vec3(draw.model_rows[0].y, draw.model_rows[1].y, draw.model_rows[2].y);
+    vec3 z = vec3(draw.model_rows[0].z, draw.model_rows[1].z, draw.model_rows[2].z);
+    return mat3(cross(y, z), cross(z, x), cross(x, y)) * local;
 }
 
 // Sky radiance in direction `dir`, shared by the sky pass and fog so they match.

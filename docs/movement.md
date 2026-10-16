@@ -4,7 +4,8 @@ The player is a kinematic capsule, 0.35 m in radius and 1.6 m tall, simulated on
 fixed 120 Hz tick. Every value below lives in `PlayerTuning` (`game/player.hpp`),
 `FollowCameraTuning` (`game/follow_camera.hpp`) or `MoveSettings`
 (`engine/include/mj/collision/character_mover.hpp`), and every value has an F2
-slider. Units are meters, seconds and radians.
+slider. Units are meters, seconds and radians. What the player sees is an animated
+character drawn over the capsule; see [character](character.md).
 
 | Long jump | Wall kick | Chained long jumps at 22 m/s |
 | --- | --- | --- |

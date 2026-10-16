@@ -11,7 +11,7 @@ layout(location = 2) out vec3 world_position;
 layout(location = 3) out vec2 surface;
 void main() {
     world_position = to_world(in_position);
-    normal = rotate_to_world(in_normal);
+    normal = normal_to_world(in_normal);
     color = in_color * draw.tint.rgb;
     surface = in_surface;
     gl_Position = frame.view_projection * vec4(world_position, 1.0);

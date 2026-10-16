@@ -12,6 +12,8 @@ AI agents build it together: [AGENTS.md](AGENTS.md) guides them, and
   towers, a summit stair course, a lighting pavilion and 12 checkpoints.
 - **16 golden sparks to find:** an invitation near spawn, then little rewards for
   exploring the platform routes, wall decks, summit, sprint lane and pavilion.
+- **A little character:** a procedurally animated creature with squash and stretch, a
+  run cycle, a long-jump dive, wall-kick twirls, dust, and a flash for clean hops.
 - **Movement:** running, skids, variable jumps, wall kicks, long jumps, and momentum
   you build on purpose.
 - **A renderer:** HDR forward rendering with sun shadows, 16 local lights, GGX
@@ -113,7 +115,7 @@ find engine/src game -name '*.cpp' -print0 | xargs -0 -n 1 clang-tidy -p build/l
 | `assets/levels/` | JSON levels |
 | `tests/` | Unit, simulation, replay and GPU tests, plus committed recordings |
 | `tools/` | Local toolchain setup and test helpers |
-| `docs/` | [Engine](docs/engine.md), [movement](docs/movement.md), [levels](docs/levels.md), [testing](docs/testing.md), [history](docs/history/) |
+| `docs/` | [Engine](docs/engine.md), [movement](docs/movement.md), [character](docs/character.md), [levels](docs/levels.md), [testing](docs/testing.md), [history](docs/history/) |
 
 Third-party libraries and their licences are listed in
 [third_party/README.md](third_party/README.md). microjump is [MIT licensed](LICENSE).
