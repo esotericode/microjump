@@ -2,6 +2,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <charconv>
 #include <fstream>
 #include <initializer_list>
@@ -77,10 +78,15 @@ class Reader {
     std::string name(const Json &value, const std::string &path) {
         if (value.is_string()) {
             const auto &text = value.get_ref<const std::string &>();
-            if (!text.empty() && text.size() <= 80 && text.find('\0') == std::string::npos)
+            // Control characters would break one-line uses such as replay headers.
+            const bool printable = std::none_of(text.begin(), text.end(), [](char c) {
+                const auto byte = static_cast<unsigned char>(c);
+                return byte < 0x20 || byte == 0x7F;
+            });
+            if (!text.empty() && text.size() <= 80 && printable)
                 return text;
         }
-        fail(path, "expected a name of 1 to 80 UTF-8 bytes");
+        fail(path, "expected a name of 1 to 80 UTF-8 bytes without control characters");
         return {};
     }
     bool array(const Json &value, const std::string &path, std::size_t low, std::size_t high) {

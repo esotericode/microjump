@@ -66,6 +66,8 @@ class Renderer {
     void process_event(const SDL_Event &event);
     // ImGui wants the mouse (an interactive debug window is hovered or active).
     [[nodiscard]] bool ui_wants_mouse() const;
+    // ImGui is taking typed text (e.g. Ctrl+click numeric entry); gameplay keys must wait.
+    [[nodiscard]] bool ui_wants_keyboard() const;
     // false means minimized/out-of-date: no rendered frame is counted.
     [[nodiscard]] std::expected<bool, Error> draw(const FrameView &view);
 

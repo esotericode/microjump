@@ -65,7 +65,8 @@ A separate display/Vulkan test drives a virtual pad through the production
 `Window::poll_events`, gameplay/camera and the actual ImGui tuning window. It
 runs, long jumps, recenters, respawns, opens the menu, selects and changes the
 time-of-day slider, closes it and jumps again. It checks that the player stays
-still while tuning is open and replays its recorded stream to the identical
+still while tuning is open (the window withholds controller gameplay input while the
+menu has it; keyboard movement stays available) and replays its recorded stream to the identical
 final position. The engine captures the menu from the GPU. The fixture presents
 the Wayland window before waiting for real focus; it never synthesizes focus or
 bypasses the background-input guard.
