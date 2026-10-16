@@ -50,11 +50,21 @@ struct TravelNote {
     bool arrival = false;
 };
 void travel_hud(const TravelNote &note);
+struct ProgressControls {
+    bool enabled = false;
+    bool error = false;
+    bool reset_requested = false;
+    bool confirm_reset = false;
+    std::string message;
+};
+// Brief save/resume feedback; main decides when the message expires.
+void progress_hud(const ProgressControls &progress);
 // Live tuning window (F2). Movement edits apply from the next tick, lighting immediately.
 struct TuningPanels {
     LightingControls &lighting;
     GamepadTuning &gamepad;
     DiagnosticsControls &diagnostics;
+    ProgressControls *progress = nullptr;
 };
 void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &open);
 

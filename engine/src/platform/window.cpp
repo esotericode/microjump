@@ -171,6 +171,25 @@ std::filesystem::path Window::executable_directory() {
     return std::filesystem::path(encoded);
 }
 
+std::expected<std::filesystem::path, Error> Window::preference_directory() {
+    const std::unique_ptr<char, decltype(&SDL_free)> directory(
+        SDL_GetPrefPath("microjump", "microjump"), SDL_free);
+    if (!directory)
+        return std::unexpected(
+            Error{"Cannot locate saved expedition directory: " + std::string(SDL_GetError())});
+    if (*directory == '\0')
+        return std::unexpected(Error{"SDL_GetPrefPath returned an empty preference directory"});
+    std::u8string encoded;
+    for (const char c : std::string_view(directory.get()))
+        encoded.push_back(static_cast<char8_t>(static_cast<unsigned char>(c)));
+    try {
+        return std::filesystem::path(encoded);
+    } catch (const std::filesystem::filesystem_error &error) {
+        return std::unexpected(
+            Error{"Cannot read saved expedition directory: " + std::string(error.what())});
+    }
+}
+
 void Window::wait_for_events() const {
     // Minimized windows wait without consuming the next event.
     SDL_WaitEventTimeout(nullptr, 16);

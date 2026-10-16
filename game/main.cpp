@@ -3,6 +3,7 @@
 #include "level.hpp"
 #include "level_io.hpp"
 #include "portal_visuals.hpp"
+#include "progress.hpp"
 #include "simulation.hpp"
 #include "spark_visuals.hpp"
 
@@ -19,7 +20,6 @@
 #include <chrono>
 #include <cstdio>
 #include <format>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -46,6 +46,100 @@ struct LoadedLevel {
     Level level;
     LevelGeometry geometry;
     Simulation simulation;
+};
+
+// Live progress is independent of input recordings and simulation ticks. Even with
+// persistence disabled it retains each world's finds while traveling this session.
+struct Expedition {
+    Progress saved;
+    ProgressControls controls;
+    std::filesystem::path path;
+    bool writable = true;
+    bool dirty = false;
+    std::chrono::steady_clock::time_point noted;
+
+    void message(std::string text, bool error = false) {
+        controls.message = std::move(text);
+        controls.error = error;
+        noted = std::chrono::steady_clock::now();
+    }
+
+    void open(const LaunchOptions &options) {
+        if (!uses_saved_progress(options))
+            return;
+        controls.enabled = true;
+        path = options.save;
+        if (path.empty()) {
+            auto directory = Window::preference_directory();
+            if (!directory) {
+                log("Progress could not be loaded: " + directory.error().message);
+                message("Saving is unavailable. Your expedition lasts until you close the game.",
+                        true);
+                controls.enabled = false;
+                writable = false;
+                return;
+            }
+            path = *directory / "progress.json";
+        }
+        auto loaded = load_progress(path);
+        if (!loaded) {
+            log("Progress could not be loaded: " + loaded.error().message);
+            message("Saved progress could not be read. The file is preserved; start a new "
+                    "expedition in F2 to replace it.",
+                    true);
+            writable = false;
+            return;
+        }
+        saved = std::move(*loaded);
+        message(saved.levels.empty() ? "A new expedition. Progress saves automatically."
+                                     : "Expedition resumed. Progress saves automatically.");
+    }
+
+    bool remember(const LoadedLevel &world) {
+        std::string file;
+        try {
+            for (const char8_t byte : world.path.filename().u8string())
+                file.push_back(static_cast<char>(byte));
+        } catch (const std::filesystem::filesystem_error &) {
+            file.clear(); // Keep named progress even if a native filename cannot be encoded.
+        }
+        if (!valid_level_file(file))
+            file.clear(); // An explicitly selected custom file need not be a gate filename.
+        const auto result =
+            remember_progress(saved, file, world.level, world.simulation.active_checkpoint(),
+                              world.simulation.collected());
+        if (!result) {
+            if (controls.enabled) {
+                log("Progress could not be saved: " + result.error().message);
+                message("Progress could not be saved. Your previous save is preserved.", true);
+            }
+            return false;
+        }
+        dirty = true;
+        return true;
+    }
+
+    void flush() {
+        if (!controls.enabled || !writable || !dirty || path.empty())
+            return;
+        const auto result = save_progress(path, saved);
+        if (!result) {
+            log("Progress could not be saved: " + result.error().message);
+            message("Progress could not be saved. Your previous save is preserved.", true);
+            return;
+        }
+        dirty = false;
+        log("Progress saved");
+        message("Progress saved");
+    }
+
+    void describe(std::string_view phase, const LoadedLevel &world) const {
+        if (controls.enabled)
+            log(std::format("Expedition {}: level {}, checkpoint {}, sparks {}/{}", phase,
+                            world.level.name, world.simulation.active_checkpoint(),
+                            world.simulation.collected_count(),
+                            world.simulation.collectible_count()));
+    }
 };
 
 std::string describe(const Simulation &simulation) {
@@ -82,10 +176,21 @@ int run(const LaunchOptions &options) {
         log("Replaying " + std::to_string(replay.size()) + " ticks from " +
             options.replay.string());
     }
-    const auto level_path = options.level.empty()
-                                ? Window::executable_directory() / "assets/levels/playground.json"
-                                : options.level;
+    Expedition expedition;
+    expedition.open(options);
+    const auto starting_path =
+        options.level.empty() ? Window::executable_directory() / "assets/levels/playground.json"
+                              : options.level;
+    auto level_path = starting_path;
+    if (options.level.empty() && !expedition.saved.last_level.empty())
+        level_path = starting_path.parent_path() / expedition.saved.last_level;
     auto loaded_level = load_level(level_path);
+    if (!loaded_level && level_path != starting_path) {
+        log("Saved world unavailable; returning to the playground: " +
+            loaded_level.error().message);
+        level_path = starting_path;
+        loaded_level = load_level(level_path);
+    }
     if (!loaded_level) {
         log(loaded_level.error().message);
         return 1;
@@ -103,10 +208,13 @@ int run(const LaunchOptions &options) {
     if (replaying && replay_level.empty())
         log("Replay predates level names (format 1/2); it assumes the loaded level '" +
             loaded_level->name + "'");
-    auto world = std::make_unique<LoadedLevel>(level_path, std::move(*loaded_level));
+    const auto restored = restore_progress(expedition.saved, *loaded_level);
+    auto world =
+        std::make_unique<LoadedLevel>(level_path, std::move(*loaded_level), restored.checkpoint);
+    world->simulation.restore_collected(restored.collected);
+    expedition.describe("start", *world);
     // Gates only work in live play: a recording or replay belongs to one level.
     const bool travel_allowed = !replaying && options.record.empty() && !options.camera_test;
-    std::map<std::string, std::vector<bool>> hunts; // Spark progress per level, this session.
     std::vector<TickInput> recording;
     std::size_t replay_index = 0;
     // Window outlives Vulkan surface; validation log outlives both.
@@ -215,6 +323,20 @@ int run(const LaunchOptions &options) {
         std::vector<ParticleInstance> particles;
         std::optional<std::size_t> pending_travel; // A gate entered during the last frame.
         std::optional<std::chrono::steady_clock::time_point> arrived;
+        std::uint32_t progress_test_ticks = 0; // Counts across gate-induced simulation swaps.
+        const auto replace_world =
+            [&](std::unique_ptr<LoadedLevel> next) -> std::expected<void, Error> {
+            meshes[k_world_mesh.index] = next->geometry.mesh;
+            if (auto uploaded = (*renderer)->set_meshes(meshes); !uploaded)
+                return uploaded;
+            world = std::move(next);
+            fixed = {};
+            pending_buttons = 0;
+            character.snap(world->simulation.player.current());
+            if (!options.time_of_day)
+                lighting.cycle.hours = world->level.atmosphere.time_of_day;
+            return {};
+        };
         // Swaps in the gate's level at its arrival checkpoint. A level that fails to load
         // keeps you where you are; only a renderer failure ends the game.
         const auto travel = [&](std::size_t gate) -> std::expected<void, Error> {
@@ -229,17 +351,15 @@ int run(const LaunchOptions &options) {
                 return {};
             }
             describe_level(*loaded);
-            hunts[world->level.name] = world->simulation.collected();
+            expedition.remember(*world);
             auto next = std::make_unique<LoadedLevel>(path, std::move(*loaded), portal.checkpoint);
-            if (const auto hunt = hunts.find(next->level.name); hunt != hunts.end())
-                next->simulation.restore_collected(hunt->second);
-            meshes[k_world_mesh.index] = next->geometry.mesh;
-            if (auto uploaded = (*renderer)->set_meshes(meshes); !uploaded)
-                return uploaded;
-            world = std::move(next);
-            character.snap(world->simulation.player.current());
-            if (!options.time_of_day)
-                lighting.cycle.hours = world->level.atmosphere.time_of_day;
+            // The gate owns the arrival point. A saved checkpoint is used only at startup.
+            next->simulation.restore_collected(
+                restore_progress(expedition.saved, next->level).collected);
+            if (auto replaced = replace_world(std::move(next)); !replaced)
+                return replaced;
+            if (expedition.remember(*world))
+                expedition.flush();
             arrived = std::chrono::steady_clock::now();
             log("Traveled through '" + portal.name + "' to " + world->level.name);
             return {};
@@ -247,7 +367,32 @@ int run(const LaunchOptions &options) {
         log("Ready: WASD move, Space jump (again on landing: double, triple)/wall kick, "
             "Shift+jump long jump, E or click dive (jump to roll out), R respawn, F1 overlay, "
             "F2 tuning, F3 free camera.");
+        expedition.controls.reset_requested = options.progress_test == ProgressTest::reset;
         while (true) {
+            if (expedition.controls.reset_requested) {
+                expedition.controls.reset_requested = expedition.controls.confirm_reset = false;
+                auto fresh = load_level(starting_path);
+                if (!fresh) {
+                    log("New expedition could not start: " + fresh.error().message);
+                    expedition.message(
+                        "The starting level could not be opened. Your expedition is preserved.",
+                        true);
+                } else {
+                    auto next = std::make_unique<LoadedLevel>(starting_path, std::move(*fresh));
+                    if (auto replaced = replace_world(std::move(next)); !replaced) {
+                        log(replaced.error().message);
+                        return 1;
+                    }
+                    expedition.saved = {};
+                    expedition.writable = !expedition.path.empty();
+                    pending_travel.reset();
+                    arrived.reset();
+                    use_free_camera = false;
+                    expedition.message("A new expedition. Your hunt starts here.");
+                    if (expedition.remember(*world))
+                        expedition.flush();
+                }
+            }
             if (pending_travel) {
                 if (auto traveled = travel(*pending_travel); !traveled) {
                     log(traveled.error().message);
@@ -265,7 +410,8 @@ int run(const LaunchOptions &options) {
                 return 1;
             }
             // Replays ignore live look input, so they never grab the cursor.
-            const bool capture_mouse = !tuning_open && !options.camera_test && !replaying;
+            const bool capture_mouse =
+                !tuning_open && !options.camera_test && !replaying && !options.progress_test;
             // While tuning is open a controller drives the menu, so its gameplay input is
             // withheld; the keyboard keeps moving the player unless ImGui is taking text.
             const auto input = (*window)->poll_events(
@@ -329,7 +475,11 @@ int run(const LaunchOptions &options) {
                     ? snap_to_refresh(elapsed, {.refresh_hz = diagnostics.refresh_hz})
                     : elapsed;
             TickInput live;
-            if (use_free_camera && (gameplay_input || options.camera_test)) {
+            if (options.progress_test) {
+                simulation_elapsed =
+                    options.progress_test == ProgressTest::collect ? FixedStep::k_tick : 0;
+                live = {0, 1, 0, -0.32F, 0};
+            } else if (use_free_camera && (gameplay_input || options.camera_test)) {
                 camera_input = input.camera;
                 if (options.camera_test) {
                     simulation_elapsed = 0;
@@ -370,6 +520,7 @@ int run(const LaunchOptions &options) {
                     pending_buttons |= input_button::dive_pressed;
             }
             std::uint32_t frame_ticks = 0;
+            bool progress_changed = false;
             const auto simulation_started = std::chrono::steady_clock::now();
             float alpha = fixed.advance(simulation_elapsed, [&](float dt) {
                 // A capture is a simulation snapshot: don't run past its requested tick,
@@ -394,13 +545,20 @@ int run(const LaunchOptions &options) {
                         pending_buttons = 0;
                     }
                     // Live ticks use the orientation the player is looking with right now.
-                    tick.camera_yaw = simulation.camera.yaw();
-                    tick.camera_pitch = simulation.camera.pitch();
+                    if (!options.progress_test) {
+                        tick.camera_yaw = simulation.camera.yaw();
+                        tick.camera_pitch = simulation.camera.pitch();
+                    }
                 }
                 if (!options.record.empty())
                     recording.push_back(tick);
                 const auto found = simulation.collected_count();
+                const auto checkpoint = simulation.active_checkpoint();
                 simulation.tick(tick, dt);
+                progress_changed = progress_changed || found != simulation.collected_count() ||
+                                   checkpoint != simulation.active_checkpoint();
+                if (options.progress_test)
+                    ++progress_test_ticks;
                 character.tick(simulation.player.current(), dt); // Visual only, like the sky.
                 if (simulation.collected_count() > found)
                     character.cheer();
@@ -409,6 +567,8 @@ int run(const LaunchOptions &options) {
                 ++frame_ticks;
                 lighting.cycle.advance(dt); // Visual only; never feeds back into gameplay.
             });
+            if (progress_changed && expedition.remember(*world))
+                expedition.flush();
             const double simulation_ms = std::chrono::duration<double, std::milli>(
                                              std::chrono::steady_clock::now() - simulation_started)
                                              .count();
@@ -535,9 +695,14 @@ int run(const LaunchOptions &options) {
                 if (!options.hide_overlay && !tuning_open) {
                     collectible_hud(simulation, level);
                     travel_hud(travel_note);
+                    if (expedition.controls.error ||
+                        now - expedition.noted < std::chrono::seconds(3))
+                        progress_hud(expedition.controls);
                 }
-                tuning_window(simulation, {lighting, (*window)->gamepad_tuning, diagnostics},
-                              tuning_open);
+                tuning_window(
+                    simulation,
+                    {lighting, (*window)->gamepad_tuning, diagnostics, &expedition.controls},
+                    tuning_open);
             };
             if (options.pacing_test) {
                 status.input_mode +=
@@ -662,7 +827,13 @@ int run(const LaunchOptions &options) {
                 break;
             if (replay_finished)
                 break;
+            if (options.progress_test &&
+                (options.progress_test != ProgressTest::collect || progress_test_ticks >= 240))
+                break;
         }
+        if (expedition.remember(*world))
+            expedition.flush();
+        expedition.describe("end", *world);
         if (options.frames || options.capture_frame || options.capture_tick)
             log("Rendered frames: " + std::to_string(rendered));
         if ((options.capture_frame || options.capture_tick) && !captured) {
@@ -706,6 +877,8 @@ int main(int argc, char *argv[]) {
             "  --record PATH  Save every simulation tick's input on exit.\n"
             "  --replay PATH  Play recorded input instead of live input, then exit.\n"
             "  --level PATH  Load a version-1 JSON level; default is the packaged playground.\n"
+            "  --save PATH  Use a separate expedition profile (also enables custom-level saves).\n"
+            "  --no-save  Keep this expedition in memory only.\n"
             "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
             "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
             "  --hide-overlay  Hide diagnostics and the spark HUD (clean captures).\n"

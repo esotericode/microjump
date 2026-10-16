@@ -61,6 +61,25 @@ void travel_hud(const TravelNote &note) {
     ImGui::PopStyleVar();
 }
 
+void progress_hud(const ProgressControls &progress) {
+    if (progress.message.empty())
+        return;
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav;
+    const auto display = ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowPos(ImVec2(18, display.y - 18), ImGuiCond_Always, ImVec2(0, 1));
+    ImGui::SetNextWindowBgAlpha(0.88F);
+    ImGui::Begin("Expedition progress", nullptr, flags);
+    ImGui::PushStyleColor(ImGuiCol_Text,
+                          progress.error ? ImVec4(1, 0.65F, 0.5F, 1) : ImVec4(0.8F, 0.9F, 1, 1));
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + std::min(440.0F, display.x - 60.0F));
+    ImGui::TextUnformatted(progress.message.c_str());
+    ImGui::PopTextWrapPos();
+    ImGui::PopStyleColor();
+    ImGui::End();
+}
+
 void movement_overlay(const Simulation &simulation, const SessionStatus &status) {
     const auto &s = simulation.player.current();
     const float speed = length(horizontal(s.velocity));
@@ -291,6 +310,29 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
         if (!d.log_path.empty()) {
             ImGui::SameLine();
             ImGui::TextUnformatted(d.log_path.c_str());
+        }
+    }
+    if (panels.progress != nullptr && ImGui::CollapsingHeader("Expedition")) {
+        auto &progress = *panels.progress;
+        if (!progress.message.empty())
+            ImGui::TextWrapped("%s", progress.message.c_str());
+        if (!progress.enabled) {
+            ImGui::TextWrapped("Saving is disabled for this run. Sparks and checkpoints last "
+                               "until the game closes.");
+        } else {
+            if (!progress.error)
+                ImGui::TextWrapped("Sparks and safe checkpoints are saved automatically.");
+            if (progress.confirm_reset) {
+                ImGui::TextWrapped("Clear all found sparks and checkpoints and return to the "
+                                   "starting level? This starts a new expedition.");
+                if (ImGui::Button("New expedition"))
+                    progress.reset_requested = true;
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                    progress.confirm_reset = false;
+            } else if (ImGui::Button("Start new expedition...")) {
+                progress.confirm_reset = true;
+            }
         }
     }
     ImGui::End();

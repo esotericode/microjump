@@ -104,12 +104,7 @@ class Reader {
     std::string level_file(const Json &value, const std::string &path) {
         if (value.is_string()) {
             const auto &text = value.get_ref<const std::string &>();
-            const bool plain = std::all_of(text.begin(), text.end(), [](char c) {
-                return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '-' || c == '_' ||
-                       c == '.';
-            });
-            if (plain && text.size() > 5 && text.size() <= 64 && text.front() != '.' &&
-                text.ends_with(".json"))
+            if (valid_level_file(text))
                 return text;
         }
         fail(path, "expected a level file name such as lantern-isles.json");
@@ -160,6 +155,14 @@ bool bounded_depth(std::string_view text) {
     return true;
 }
 } // namespace
+
+bool valid_level_file(std::string_view text) {
+    const bool plain = std::all_of(text.begin(), text.end(), [](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) != 0 || c == '-' || c == '_' || c == '.';
+    });
+    return plain && text.size() > 5 && text.size() <= 64 && text.front() != '.' &&
+           text.ends_with(".json");
+}
 
 std::expected<Level, Error> parse_level(std::string_view text) {
     if (text.size() > k_max_level_bytes || !bounded_depth(text))

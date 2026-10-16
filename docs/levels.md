@@ -26,8 +26,8 @@ hold the rest. Sparks hover about one metre above a walkable landing, within rea
 of the standing player capsule.
 
 The **SPARKS** HUD displays progress, the latest find's name and completion. Collected
-sparks stay gone across checkpoint respawns within the current session; restarting
-starts a fresh hunt. F1 toggles diagnostics while leaving progress visible, and
+sparks stay gone across checkpoint respawns and normal live restarts. F2 offers a
+confirmed new expedition; automated captures and replays always start a fresh hunt. F1 toggles diagnostics while leaving progress visible, and
 `--hide-overlay` hides both for captures. Collectibles do not change collision or
 movement, so existing recordings retain their paths.
 
@@ -221,8 +221,9 @@ invitation, sprint, stair and platform routes.
 **Gates.** Stepping into a gate in live play loads its level beside the current file and
 puts you on its arrival checkpoint, which becomes your respawn point. A bright breath
 of light covers the swap, and a card names the place and the zone you arrived in.
-Standing near a gate shows its name. Sparks found on each level are remembered until the
-game closes, so a round trip keeps both hunts. The target checkpoint is only checked
+Standing near a gate shows its name. Sparks found on each level are remembered across
+gates and, in normal live play, restarts. A gate uses its authored arrival checkpoint;
+the saved checkpoint is used when resuming a session. See [saved progress](progress.md). The target checkpoint is only checked
 when you travel. A level that fails to load, or lacks that checkpoint, logs why and
 keeps you where you are, so tests load every shipped gate's target. Gates rest while
 recording or replaying, because a recording belongs to one level. The simulation only

@@ -211,3 +211,25 @@ inputs are reversed, coincident layers without depth writes, and opaque PNG alph
 Shutdown validation errors fail the fixture too. CPU tests cover camera-depth sorting,
 invalid values, the submission budget, and the character emitter's interpolated birth
 and death intervals. See [particles](particles.md) for renderer and timing details.
+
+## Saved expeditions
+
+`progress_tests.cpp` covers strict bounded JSON, duplicate/unknown fields, invalid
+snapshots, reordered and removed checkpoint/spark identities, multiple places, missing
+and corrupt files, Unicode paths, atomic overwrite and failed-replacement preservation.
+`progress_options_tests.cpp` checks explicit profiles, no-save precedence and isolation
+for recordings, replays, captures, bounded runs and diagnostic scripts.
+
+With smoke tests enabled, `progress_runtime` launches the actual game repeatedly with a
+disposable explicit profile. A fixed-step driver collects a light and visits a checkpoint
+in two tiny connected places, crosses a gate naturally and quits. Zero-tick inspections
+then prove restoration before anything can be recollected, including after reordering
+authored arrays. It also checks packaged last-world resume, missing-world fallback,
+byte-for-byte profile isolation, the shared F2 reset handler and corrupt-file recovery.
+Every process checks a clean Vulkan shutdown. The fixture never opens the user's profile.
+
+The internal `--progress-test collect|inspect|reset` driver requires `--save PATH`;
+collect additionally requires `--level PATH`. It rejects other scripted or bounded
+modes, and runs independently of window focus. `collect` advances exactly one 120 Hz
+tick per frame for 240 total ticks across travel. Inspect/reset render without advancing
+gameplay. The fixture logs both the initial restored state and the final state.
