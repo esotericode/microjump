@@ -3,7 +3,10 @@
 #include <frame_pacing.hpp>
 
 #include <mj/core/launch_options.hpp>
+#include <mj/render/pacing.hpp>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -98,4 +101,62 @@ TEST_CASE("frame pacing command line options are validated") {
     CHECK(parse({"--pacing-test"})->pacing_test);
     CHECK_FALSE(parse({"--frame-log"}));
     CHECK_FALSE(parse({"--frame-log", "a.csv", "--frame-log", "b.csv"}));
+}
+
+namespace {
+// 32-frame windows from frame logs (docs/frame-pacing.md): an NVIDIA Windows driver before and
+// after recreating the swapchain, and the Linux development machine.
+struct LoggedWindow {
+    std::vector<double> intervals;
+    std::vector<bool> repeats;
+};
+std::vector<bool> alternating(bool first) {
+    std::vector<bool> repeats;
+    for (int i = 0; i < 32; ++i)
+        repeats.push_back((i % 2 == 0) == first);
+    return repeats;
+}
+} // namespace
+
+TEST_CASE("paired presentation is recognised from logged frames and healthy cadences are not") {
+    auto paired = [](const LoggedWindow &window) {
+        std::array<bool, 32> repeats{};
+        std::copy(window.repeats.begin(), window.repeats.end(), repeats.begin());
+        return mj::paired_presentation({window.intervals, repeats});
+    };
+    const LoggedWindow windows_test{
+        {1.68,  32.43, 2.04,  30.42, 39.09, 0.1,   12.16, 3.02,  15.45, 2.91, 29.75,
+         3.09,  46.42, 3.22,  29.98, 3.1,   30.22, 3.04,  30.28, 3.04,  30.3, 3.1,
+         30.33, 3.36,  29.96, 3.25,  30.16, 3.19,  30.3,  3.1,   30.05, 3.15},
+        {true,  false, true,  true,  false, false, false, false, false, true,  false,
+         true,  false, true,  false, true,  false, true,  false, true,  false, true,
+         false, true,  false, true,  false, true,  false, true,  false, true}};
+    const LoggedWindow windows_manual{{3.52, 29.97, 3.6,  29.5,  3.76, 29.72, 3.64, 29.86,
+                                       3.73, 29.43, 3.72, 29.67, 3.73, 29.61, 3.8,  29.49,
+                                       3.77, 29.56, 3.71, 29.84, 3.63, 29.39, 3.7,  29.69,
+                                       3.69, 29.67, 3.72, 29.56, 3.76, 29.6,  3.59, 29.78},
+                                      alternating(true)};
+    const LoggedWindow windows_recovered{{16.8,  16.35, 17.7,  15.94, 16.72, 16.46, 16.79, 16.41,
+                                          17.54, 16.08, 17.05, 16.54, 16.34, 16.57, 17.38, 16.14,
+                                          16.64, 16.56, 16.46, 16.75, 17.57, 15.96, 16.69, 16.74,
+                                          16.59, 16.46, 17.42, 16.16, 16.71, 16.56, 16.45, 16.68},
+                                         std::vector<bool>(32, false)};
+    const LoggedWindow windows_start{{14.83, 16.74, 16.5,  16.84, 16.54, 18.9,  14.65, 16.56,
+                                      16.42, 16.68, 16.84, 19.46, 13.8,  16.89, 16.56, 16.79,
+                                      16.43, 19.13, 14.2,  16.81, 16.41, 17.06, 16.35, 18.66,
+                                      14.92, 16.62, 16.53, 16.82, 16.39, 18.88, 14.6,  16.68},
+                                     std::vector<bool>(32, false)};
+    CHECK(paired(windows_test));
+    CHECK(paired(windows_manual));
+    CHECK_FALSE(paired(windows_recovered));
+    CHECK_FALSE(paired(windows_start));
+    // Either symptom alone is not enough: image reuse with an even cadence (e.g. a copying
+    // presenter that keeps pace), or a bimodal cadence without reuse (missed refreshes).
+    auto even_reuse = windows_recovered;
+    even_reuse.repeats = alternating(true);
+    CHECK_FALSE(paired(even_reuse));
+    auto bimodal_only = windows_manual;
+    bimodal_only.repeats = std::vector<bool>(32, false);
+    CHECK_FALSE(paired(bimodal_only));
+    CHECK_FALSE(mj::paired_presentation({}));
 }

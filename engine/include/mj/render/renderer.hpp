@@ -69,6 +69,7 @@ struct FrameTiming {
     bool shadow_rebuilt = false;
     bool swapchain_rebuilt = false;
     bool suboptimal = false; // Acquire or present asked for a swapchain rebuild.
+    bool recovered = false;  // Paired presentation detected; the swapchain will be rebuilt.
 };
 
 // One-shot diagnostic actions, applied at the start of the next draw.
@@ -91,6 +92,8 @@ class Renderer {
     [[nodiscard]] std::expected<bool, Error> draw(const FrameView &view);
     [[nodiscard]] const FrameTiming &last_timing() const;
     void request(RenderAction action);
+    // Recreate the swapchain when presentation falls into paired frames (default on).
+    void set_pacing_recovery(bool enabled);
 
   private:
     struct Impl;

@@ -1,5 +1,6 @@
 #include <mj/core/png.hpp>
 #include <mj/platform/window.hpp>
+#include <mj/render/pacing.hpp>
 #include <mj/render/renderer.hpp>
 #include <mj/render/vulkan_context.hpp>
 
@@ -280,6 +281,24 @@ struct Renderer::Impl {
         VkDescriptorSet frame_set = VK_NULL_HANDLE; // Uniforms + shadow map.
         VkDescriptorSet post_set = VK_NULL_HANDLE;  // HDR image for tone mapping.
         bool timestamps_written = false;
+        std::uint32_t shadow_generation = 0; // Which shadow map its descriptor set samples.
+    };
+    // A replaced resource stays alive until the GPU finishes the last frame that used it.
+    struct Retired {
+        Image image;
+        std::uint64_t release = 0; // Timeline value after which it is unused.
+    };
+    // Recent acquire/present behavior, to detect paired presentation (see docs/frame-pacing.md).
+    struct PacingWatch {
+        static constexpr std::size_t k_window = 32;
+        std::array<double, k_window> intervals{};
+        std::array<bool, k_window> repeats{};
+        std::size_t count = 0;
+        std::uint32_t last_presented = std::numeric_limits<std::uint32_t>::max();
+        std::chrono::steady_clock::time_point previous{};
+        std::vector<std::chrono::steady_clock::time_point> recoveries;
+        bool enabled = true;
+        bool gave_up = false;
     };
     struct MeshRange {
         std::uint32_t first = 0;
@@ -324,6 +343,9 @@ struct Renderer::Impl {
     double timestamp_period_ns = 0;
     std::uint64_t timestamp_mask = 0;
     FrameTiming timing;
+    std::uint32_t shadow_generation = 0;
+    std::vector<Retired> retired;
+    PacingWatch pacing;
     bool action_wait_idle = false;
     bool action_rebuild_shadow = false;
 
@@ -332,6 +354,9 @@ struct Renderer::Impl {
     std::expected<void, Error> create_descriptors();
     std::expected<void, Error> create_pipelines();
     std::expected<void, Error> create_shadow_map(ShadowQuality quality);
+    void bind_shadow_map(Frame &frame) const;
+    void release_retired();
+    bool watch_pacing(std::uint32_t image_index);
     std::expected<void, Error> create_swapchain(PixelSize size);
     std::expected<void, Error> initialize_overlay();
     std::expected<void, Error> wait(std::uint64_t value) const;
@@ -595,7 +620,9 @@ std::expected<void, Error> Renderer::Impl::create_pipelines() {
     return {};
 }
 
-// Callers wait for the device to be idle: both frame descriptor sets reference the map.
+// No device-wide wait: the old map is retired until in-flight frames finish, and each frame
+// slot rebinds the new map once its own previous submission has completed. (On an NVIDIA
+// Windows driver, vkDeviceWaitIdle here switched presentation into paired frames.)
 std::expected<void, Error> Renderer::Impl::create_shadow_map(ShadowQuality quality) {
     const auto resolution = shadow_preset(quality).resolution;
     auto image = Image::create(
@@ -606,24 +633,71 @@ std::expected<void, Error> Renderer::Impl::create_shadow_map(ShadowQuality quali
          .aspect = VK_IMAGE_ASPECT_DEPTH_BIT});
     if (!image)
         return std::unexpected(image.error());
+    if (shadow_map.handle != VK_NULL_HANDLE)
+        retired.push_back({std::move(shadow_map), submission});
     shadow_map = std::move(*image);
     shadow_quality = quality;
     shadow_resolution = resolution;
-    for (const auto &frame : frames) {
-        VkDescriptorImageInfo image_info{shadow_sampler, shadow_map.view,
-                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = frame.frame_set;
-        write.dstBinding = 1;
-        write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        write.pImageInfo = &image_info;
-        vkUpdateDescriptorSets(vk.device, 1, &write, 0, nullptr);
-    }
+    ++shadow_generation;
     log("Shadow map: " + std::string(to_string(quality)) + " " + std::to_string(resolution) + "x" +
         std::to_string(resolution) + (shadow_linear ? ", bilinear PCF" : ", nearest PCF"));
     return {};
+}
+
+void Renderer::Impl::bind_shadow_map(Frame &frame) const {
+    VkDescriptorImageInfo image_info{shadow_sampler, shadow_map.view,
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = frame.frame_set;
+    write.dstBinding = 1;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = &image_info;
+    vkUpdateDescriptorSets(vk.device, 1, &write, 0, nullptr);
+    frame.shadow_generation = shadow_generation;
+}
+
+void Renderer::Impl::release_retired() {
+    if (retired.empty())
+        return;
+    std::uint64_t completed = 0;
+    if (vkGetSemaphoreCounterValue(vk.device, timeline, &completed) != VK_SUCCESS)
+        return;
+    std::erase_if(retired, [completed](const Retired &item) { return item.release <= completed; });
+}
+
+// Watches for paired presentation (mj/render/pacing.hpp) over windows of 32 frames and
+// requests a swapchain rebuild, at most 3 times in 30 s. Returns true when one is requested.
+bool Renderer::Impl::watch_pacing(std::uint32_t image_index) {
+    auto &watch = pacing;
+    const auto now = std::chrono::steady_clock::now();
+    const bool first = watch.previous == std::chrono::steady_clock::time_point{};
+    const double interval = std::chrono::duration<double, std::milli>(now - watch.previous).count();
+    watch.previous = now;
+    const bool repeat = image_index == watch.last_presented;
+    watch.last_presented = image_index;
+    if (first || !watch.enabled || watch.gave_up)
+        return false;
+    watch.intervals[watch.count % PacingWatch::k_window] = interval;
+    watch.repeats[watch.count % PacingWatch::k_window] = repeat;
+    if (++watch.count < PacingWatch::k_window)
+        return false;
+    if (!paired_presentation({watch.intervals, watch.repeats}))
+        return false;
+    const auto repeats = std::count(watch.repeats.begin(), watch.repeats.end(), true);
+    watch.count = 0;
+    std::erase_if(watch.recoveries,
+                  [now](auto time) { return now - time > std::chrono::seconds(30); });
+    if (watch.recoveries.size() >= 3) {
+        watch.gave_up = true;
+        log("Paired presentation persists after 3 swapchain recreations; leaving it");
+        return false;
+    }
+    watch.recoveries.push_back(now);
+    log("Paired presentation detected (" + std::to_string(repeats) +
+        "/32 frames reacquired the image just presented); recreating the swapchain");
+    return true;
 }
 
 void Renderer::Impl::destroy_swapchain() {
@@ -866,17 +940,22 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     // The shadow map is created on first use, at the requested quality.
     const bool shadow_changed = shadow_map.handle == VK_NULL_HANDLE ||
                                 view.shadows.quality != shadow_quality || action_rebuild_shadow;
-    if (resized || shadow_changed || action_wait_idle) {
+    if (shadow_changed) {
+        action_rebuild_shadow = false;
+        timing.shadow_rebuilt = true;
+        if (auto result = create_shadow_map(view.shadows.quality); !result)
+            return std::unexpected(result.error());
+    }
+    if (resized || action_wait_idle) {
         MJ_VK_TRY(vkDeviceWaitIdle(vk.device));
         action_wait_idle = false;
-        action_rebuild_shadow = false;
-        timing.shadow_rebuilt = shadow_changed;
         timing.swapchain_rebuilt = resized;
-        if (shadow_changed) {
-            if (auto result = create_shadow_map(view.shadows.quality); !result)
-                return std::unexpected(result.error());
-        }
         if (resized) {
+            recreate = false;
+            // New images start a fresh pacing history.
+            pacing.count = 0;
+            pacing.last_presented = std::numeric_limits<std::uint32_t>::max();
+            pacing.previous = {};
             if (imgui_renderer) {
                 ImGui_ImplVulkan_Shutdown();
                 imgui_renderer = false;
@@ -893,6 +972,10 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     if (auto result = wait(frame.completion); !result)
         return std::unexpected(result.error());
     timing.wait_ms = milliseconds(wait_started, Clock::now());
+    // This slot's previous frame is complete, so its descriptors may change now.
+    if (frame.shadow_generation != shadow_generation)
+        bind_shadow_map(frame);
+    release_retired();
     if (timestamps != VK_NULL_HANDLE && frame.timestamps_written) {
         std::array<std::uint64_t, 2> ticks{};
         const auto first = static_cast<std::uint32_t>(frame_index * 2);
@@ -919,6 +1002,8 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     const auto acquired = Clock::now();
     timing.acquire_ms = milliseconds(acquire_started, acquired);
     timing.image = image_index;
+    if (acquire == VK_SUCCESS || acquire == VK_SUBOPTIMAL_KHR)
+        timing.recovered = watch_pacing(image_index); // Rebuilds at the next draw.
     timing.swapchain_images = static_cast<std::uint32_t>(swap_images.size());
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate = true;
@@ -929,8 +1014,8 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     if (acquire != VK_SUCCESS && acquire != VK_SUBOPTIMAL_KHR) {
         return std::unexpected(vulkan_error("vkAcquireNextImageKHR", acquire));
     }
-    recreate = acquire == VK_SUBOPTIMAL_KHR;
-    timing.suboptimal = recreate;
+    timing.suboptimal = acquire == VK_SUBOPTIMAL_KHR;
+    recreate = timing.recovered || timing.suboptimal;
     auto &io = ImGui::GetIO();
     if ((SDL_GetWindowFlags(window->native_handle()) & SDL_WINDOW_INPUT_FOCUS) != 0)
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
@@ -1253,6 +1338,7 @@ Renderer::Impl::~Impl() {
         ImGui::DestroyContext();
     destroy_swapchain();
     shadow_map = {};
+    retired.clear();
     for (auto &frame : frames) {
         frame.uniforms = {};
         if (frame.acquired != VK_NULL_HANDLE)
@@ -1307,6 +1393,9 @@ bool Renderer::ui_wants_mouse() const {
 }
 const FrameTiming &Renderer::last_timing() const {
     return m_impl->timing;
+}
+void Renderer::set_pacing_recovery(bool enabled) {
+    m_impl->pacing.enabled = enabled;
 }
 void Renderer::request(RenderAction action) {
     switch (action) {

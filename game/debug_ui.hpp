@@ -25,6 +25,7 @@ struct SessionStatus {
 // F2 > Diagnostics: frame-pacing experiments. Buttons set one-shot requests for main.
 struct DiagnosticsControls {
     bool snap_to_refresh = false;
+    bool pacing_recovery = true; // Recreate the swapchain on paired presentation.
     float refresh_hz = 0;
     bool logging = false;
     std::string log_path;

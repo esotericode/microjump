@@ -196,6 +196,7 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
         auto &d = panels.diagnostics;
         ImGui::Text("Display refresh: %.2f Hz", static_cast<double>(d.refresh_hz));
         ImGui::Checkbox("Snap frame time to refresh", &d.snap_to_refresh);
+        ImGui::Checkbox("Recover from paired presentation", &d.pacing_recovery);
         ImGui::TextUnformatted("Experiments (each is logged):");
         d.wait_idle = ImGui::Button("Wait for GPU idle");
         ImGui::SameLine();

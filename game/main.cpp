@@ -396,6 +396,7 @@ int run(const LaunchOptions &options) {
             view.overlay_lines = &overlay_lines;
             view.debug_windows = &debug_windows;
             view.capture = capture ? &options.capture_out : nullptr;
+            (*renderer)->set_pacing_recovery(diagnostics.pacing_recovery);
             auto result = (*renderer)->draw(view);
             if (!result) {
                 log(result.error().message);
@@ -438,6 +439,8 @@ int run(const LaunchOptions &options) {
                     note("swapchain_rebuilt");
                 if (timing.suboptimal)
                     note("suboptimal");
+                if (timing.recovered)
+                    note("pacing_recovered");
                 if (snapping)
                     note("snap");
                 const FrameSample sample{.delta_ms = elapsed * 1000,

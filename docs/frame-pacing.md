@@ -66,7 +66,65 @@ GPU took 4 ms at Medium and 8 ms at High. Occasional single 30 ms compositor
 hiccups appeared at random times, unrelated to the rebuilds, and none persisted.
 The problem does not reproduce here, which matches the owner's observation.
 
-## Request to the owner (Windows)
+## Windows result and diagnosis
+
+The owner ran `--pacing-test` and a manual session on an NVIDIA GeForce RTX 4070
+SUPER (60 Hz, 1280×720 window, Release build). The logs were read and then removed
+from the repository.
+
+**Manual session:**
+
+| Period | Image sequence | Interval jitter |
+| --- | --- | --- |
+| Start, and while F2 was open | `1 0 1 0 …` | 1.0–1.1 ms |
+| After shadows → High (19.3 s) | `1 0 0 1 1 0 0 …` (half the frames reuse the previous image) | 13.2 ms |
+| Mouse captured or released again | unchanged | 13.1 ms |
+| After **Recreate swapchain** (50.3 s) | `1 2 1 2 …` | 0.6 ms |
+
+**Scripted test:** this run started in the broken state. Phases 1–6 (all shadow
+changes, the GPU idle wait and the same-quality rebuild) each had about 15 ms of
+jitter, and 239 of 240 frames changed their tick count. The swapchain-recreate
+phase dropped jitter to 0.3 ms, and it stayed there.
+
+**Mechanism.** In the broken state, `vkAcquireNextImageKHR` returns the image that
+was presented on the previous frame. The new frame's GPU work therefore waits until
+that image leaves the screen. Frames come in pairs: two frames about 0.2–3 ms apart,
+then a wait of about 33 ms on the frame slot. The average is still 16.67 ms, so the
+readout says 60 FPS. But each pair samples almost the same game time while the two
+frames are displayed one refresh apart, so motion moves at 30 Hz in 60 FPS clothing.
+
+`vkDeviceWaitIdle` during a shadow change triggered the state mid-session (it also
+waits on the presentation work queued on the graphics queue). The state can also
+appear at startup. Mouse capture and the tuning window had no effect.
+
+## Fix (D-045)
+
+1. **No device-wide wait on shadow changes.**
+   - The new shadow map is created immediately.
+   - Each frame slot rebinds it after that slot's own previous frame has finished.
+   - The old map is retired until the timeline shows that no in-flight frame uses it.
+   - A shadow change now costs about 0.1 ms locally, against 5–9 ms with
+     `vkDeviceWaitIdle`, and passes validation.
+   - Resizes, swapchain recreation and the diagnostic idle button still idle the device.
+2. **Automatic recovery.**
+   - The renderer checks 32-frame windows for the combined signature: at least 12
+     frames reacquired the image just presented, and the intervals split into at
+     least 10 short frames (under 0.3× the mean) and 10 long ones (over 1.6× the
+     mean).
+   - On a match it recreates the swapchain, the same fix as the owner's button.
+   - It is logged (`Paired presentation detected …`, CSV event `pacing_recovered`)
+     and rate-limited to 3 recreations per 30 s, after which it stops.
+   - It can be turned off with F2 → Diagnostics → *Recover from paired presentation*.
+   - Unit tests replay 32-frame windows taken from the Windows logs (paired and
+     recovered) and from Linux. Either symptom alone does not trigger recovery.
+   - On the Linux machine, natively and under Xvfb with software Vulkan, all four
+     images rotate (`0 1 2 3`) with zero reuse, and no recovery fires.
+
+Still to confirm on Windows: the scripted test should show no paired phase, and the
+*GPU idle wait* phase should recover automatically if that stall re-triggers pairing.
+
+## Original request to the owner (Windows)
+
 
 From a terminal in the unzipped folder:
 
