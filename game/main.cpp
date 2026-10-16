@@ -48,6 +48,10 @@ int run(const LaunchOptions &options) {
             return 1;
         }
         replay = std::move(*loaded);
+        if (options.capture_tick && *options.capture_tick > replay.size()) {
+            log("Capture tick exceeds the replay length");
+            return 1;
+        }
         log("Replaying " + std::to_string(replay.size()) + " ticks from " +
             options.replay.string());
     }
@@ -170,7 +174,11 @@ int run(const LaunchOptions &options) {
                 if (input.reset_pressed)
                     pending_buttons |= input_button::reset_pressed;
             }
-            const float alpha = fixed.advance(simulation_elapsed, [&](float dt) {
+            float alpha = fixed.advance(simulation_elapsed, [&](float dt) {
+                // A capture is a simulation snapshot: don't run past its requested tick,
+                // even when a slow rendered frame advances several simulation ticks.
+                if (options.capture_tick && simulation.ticks() >= *options.capture_tick)
+                    return;
                 if (use_free_camera)
                     free_camera.tick(camera_input, dt);
                 TickInput tick;
@@ -195,10 +203,13 @@ int run(const LaunchOptions &options) {
                 simulation.tick(tick, dt);
                 lighting.cycle.advance(dt); // Visual only; never feeds back into gameplay.
             });
+            if (options.capture_tick && simulation.ticks() == *options.capture_tick)
+                alpha = 1; // Show the selected state, independent of the render accumulator.
 
             const auto pose = simulation.player.interpolated(alpha);
-            const float seconds = (static_cast<float>(simulation.ticks()) + alpha) *
-                                  static_cast<float>(FixedStep::k_tick);
+            const float seconds =
+                std::max(0.0F, static_cast<float>(simulation.ticks()) - 1 + alpha) *
+                static_cast<float>(FixedStep::k_tick);
             const auto lights = lighting.local_lights
                                     ? animate_lights(level.lights, {seconds, lighting.cycle.hours})
                                     : std::vector<LocalLight>{};
@@ -264,6 +275,7 @@ int run(const LaunchOptions &options) {
                 continue;
             ++rendered;
             if (capture) {
+                log("Capture state: " + describe(simulation));
                 captured = true;
                 break;
             }

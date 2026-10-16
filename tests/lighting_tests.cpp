@@ -165,6 +165,10 @@ TEST_CASE("lighting command line options are validated") {
     CHECK(parse({"--shadow-quality", "high"})->shadow_quality == mj::ShadowQuality::high);
     CHECK(parse({"--shadow-quality", "low"})->shadow_quality == mj::ShadowQuality::low);
     CHECK(parse({"--hide-overlay"})->hide_overlay);
+    CHECK_FALSE(
+        parse({"--smoke-test", "--capture-tick", "100", "--capture-out", "tick.png"})->frames);
+    CHECK_FALSE(
+        parse({"--camera-test", "--capture-tick", "100", "--capture-out", "tick.png"})->frames);
     CHECK_FALSE(parse({"--time-of-day"}));
     CHECK_FALSE(parse({"--time-of-day", "25"}));
     CHECK_FALSE(parse({"--time-of-day", "-1"}));

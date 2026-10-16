@@ -8,6 +8,8 @@ M3 stays **in progress** until the owner has looked at it on their hardware and 
 opinion on the look. The renderer was not performance-tested; per D-004 the owner checks
 performance.
 
+Follow-up review and exact-tick capture correction: [M3 review](m3-review.md).
+
 | Afternoon (14:30) | Golden hour (17:18) | Night (22:00) |
 | --- | --- | --- |
 | ![Day](captures/m3-day.png) | ![Golden hour](captures/m3-golden.png) | ![Night](captures/m3-night.png) |

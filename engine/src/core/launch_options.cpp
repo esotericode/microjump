@@ -93,7 +93,7 @@ parse_launch_options(std::span<const std::string_view> arguments) {
     if (options.frames && options.capture_frame && *options.frames < *options.capture_frame) {
         return std::unexpected(Error{"--frames must not end the run before the capture frame"});
     }
-    if (!options.frames && !options.capture_frame) {
+    if (!options.frames && !options.capture_frame && !options.capture_tick) {
         if (options.resize_test || options.camera_test)
             options.frames = 36;
         else if (options.smoke_test)

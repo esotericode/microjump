@@ -20,7 +20,7 @@ struct LaunchOptions {
     bool hide_overlay = false;
     std::optional<std::uint32_t> frames;
     std::optional<std::uint32_t> capture_frame;
-    std::optional<std::uint32_t> capture_tick; // First frame after this simulation tick.
+    std::optional<std::uint32_t> capture_tick; // Exact simulation state, without interpolation.
     std::filesystem::path capture_out;
     std::filesystem::path record;
     std::filesystem::path replay;

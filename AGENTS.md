@@ -444,6 +444,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-033 | Materials are per-vertex roughness/metallic with GGX/Smith/Schlick specular + Lambert diffuse and hemisphere + sky-reflection ambient. Up to 16 forward-shaded point/spot lights with windowed inverse-square falloff, placed as level `LightFixture` data (orbiting or night-only). Local lights cast no shadows. | Gives readable material response on primitives without textures or a material graph. Fixtures are level data so M4's JSON can place them. |
 | 2026-10-15 / D-034 | Keep the player's contact (blob) shadow alongside sun shadows (35% default, toggle + strength in F2). | It shows the landing spot straight down when the sun's shadow falls sideways or the player is in shade. Supersedes D-028's "temporary" note; the owner's playtest decides. |
 | 2026-10-15 / D-035 | Ignore relative mouse motion for 150 ms after capture engages; never capture the mouse during `--replay`. Add `--capture-tick` and switch replay capture tests to it. | Wayland pointer lock delivered a one-off camera jump that made captures irreproducible. Frame-numbered replay captures failed on slow software Vulkan once frames got heavier. |
+| 2026-10-15 / D-036 | Tick captures stop at the exact simulation tick and render its current state without interpolation; light animation uses the same time. | M3 review reproduced tick 1 capturing tick 3. An integration regression now verifies exact tick-1 output and clean shutdown. Implicit fixture frame limits cannot end tick captures early. Evidence: `docs/m3-review.md`. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -475,6 +476,8 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
   - Next step: owner review, then M4.
 
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
+
+- **2026-10-15 — M3 review.** Reviewed lighting/resource synchronization and inspected fresh captures. Fixed capture-tick overshoot and interpolation-dependent snapshots. All 17 native Intel CTests pass, including ASan/UBSan, synchronization validation and the new exact-tick regression; 32 doctest cases / 49,824 assertions. Details: `docs/m3-review.md`; owner visual/feel and Windows checks remain open.
 
 ### Known risks and unanswered questions
 
