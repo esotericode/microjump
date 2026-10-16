@@ -201,7 +201,8 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
         s.run_phase += speed * dt / (1.2F + 0.1F * speed);
         s.run_phase -= std::floor(s.run_phase);
     }
-    s.stride = smooth(s.stride, grounded ? std::min(speed / 7, 1.0F) : 0.0F, grounded ? 12.0F : 5.0F, dt);
+    s.stride =
+        smooth(s.stride, grounded ? std::min(speed / 7, 1.0F) : 0.0F, grounded ? 12.0F : 5.0F, dt);
     s.air = grounded ? 0 : smooth(s.air, 1, 9, dt);
     s.rise = smooth(s.rise, std::clamp(player.velocity.y / 10, -1.0F, 1.0F), 20, dt);
 
