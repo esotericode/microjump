@@ -1,5 +1,7 @@
 # M4, first increment: JSON levels and the connected playground
 
+Follow-up: [M4 wall jumps and long jumps](m4-moves.md) implements the moves and adds elevated wall-course finishes. This document records the earlier layout increment.
+
 2026-10-15. Builds on the reviewed M3 lighting. This increment moves runtime
 placement data into versioned JSON and expands the default yard to 230 × 230 m.
 M4 remains **in progress**: wall jumps, the momentum move, and a complete human

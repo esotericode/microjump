@@ -36,6 +36,7 @@ RGB vectors; intensity is separate.
 | `kind` | `box`, `ramp`, or `cylinder`. A cylinder uses X/Z diameter and Y height; X and Z must match. |
 | `center`, `size` | Three-number vectors. Coordinates are bounded to ±4096 m; dimensions are positive, 0.01–512 m. |
 | `yaw` | Optional, default 0. Cylinders are rotationally symmetric. |
+| `wall_jump` | Optional boolean, default false. Enables kicks on near-vertical faces of this shape. Use the playground's purple palette for clear designation; floors, ceilings and rounded edge contacts do not grant kicks. |
 | `material` | Optional object: `roughness` defaults to 0.7, `metallic` to 0; both range 0–1. |
 | `checkpoints` | Required, 1–64 objects with `position` (capsule feet) and optional `yaw`. The first is spawn. All must be above the kill plane. |
 | `lights` | Optional, at most 16 fixtures. Requires `position`, `color`; the remaining fields below are optional. |

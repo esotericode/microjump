@@ -31,6 +31,7 @@ struct InputState {
     bool jump_held = false;
     bool jump_pressed = false; // A press happened during this poll (survives sub-frame taps).
     bool walk_held = false;
+    bool long_jump_held = false;
     CameraInput camera; // Free-flight debug camera.
     bool quit = false;
     bool toggle_overlay = false;

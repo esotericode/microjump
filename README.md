@@ -23,7 +23,7 @@ M3 adds real-time lighting:
 Details: [M3 notes](docs/m3-lighting.md). M4 now starts with a **230 m JSON playground**:
 40 raised route platforms, an extended sprint lane, a summit stair/ramp course,
 10 checkpoints and seven named regions. The original yard remains available as a
-separate level for regression replays. [M4 notes](docs/m4-playground.md) and the
+separate level for regression replays. [M4 layout](docs/m4-playground.md), [wall/long jumps](docs/m4-moves.md) and the
 [level format](docs/level-format.md) describe editing and routes. Wall jumps and the
 momentum move remain the next M4 slice; display settings are M5.
 
@@ -66,7 +66,8 @@ visible to LSan. See [M0 evidence](docs/m0-evidence.md) and [M1 evidence](docs/m
 | Keyboard / mouse | Gamepad | Action |
 | --- | --- | --- |
 | W / A / S / D | Left stick | Move (camera-relative) |
-| Space | A (south) | Jump; hold for height |
+| Space | A (south) | Jump; hold for height; press again at purple walls to kick |
+| Shift + Space | LB + A | Running long jump |
 | Ctrl | — | Walk |
 | Mouse | Right stick | Orbit the camera (mouse is captured while focused) |
 | R / Home | Back | Respawn at the last checkpoint |

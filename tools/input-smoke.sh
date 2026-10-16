@@ -11,16 +11,18 @@ trap 'kill "$task_pid" 2>/dev/null || true; wait "$task_pid" 2>/dev/null || true
 task_window="$(timeout 10s xdotool search --sync --onlyvisible --pid "$task_pid" --name '^microjump$' | head -n 1)"
 xdotool windowfocus --sync "$task_window"
 sleep 0.5
-# Run forward, turn with the mouse, jump twice (one tap, one held), strafe, toggle the overlay.
+# Run forward, turn, tap jump, use Shift+Space for a long jump, strafe, toggle the overlay.
 xdotool keydown w
 sleep 0.6
 xdotool mousemove_relative -- 160 0
 sleep 0.3
 xdotool key space
 sleep 0.5
+xdotool keydown Shift_L
 xdotool keydown space
 sleep 0.5
 xdotool keyup space
+xdotool keyup Shift_L
 xdotool keydown d
 sleep 0.4
 xdotool keyup d

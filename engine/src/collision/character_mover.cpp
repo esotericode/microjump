@@ -63,6 +63,9 @@ struct Slider {
                 } else if (std::abs(normal.y) < 0.7F) {
                     result.hit_wall = true;
                     result.wall_normal = normal;
+                    if (world.triangles()[hit->triangle].wall_jump &&
+                        std::abs(hit->face_normal.y) < 0.1F && dot(normal, hit->face_normal) > 0.9F)
+                        result.jump_wall_normal = normalized(horizontal(hit->face_normal));
                 }
                 if (steep_floor || (mode == SlideMode::ground && length_squared(flat) > 1.0e-6F)) {
                     // Too steep to stand on: horizontal motion treats it as a vertical wall, so

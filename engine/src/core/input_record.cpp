@@ -9,7 +9,7 @@
 
 namespace mj {
 namespace {
-constexpr std::string_view k_magic = "microjump-replay 1";
+constexpr std::string_view k_magic = "microjump-replay 2";
 constexpr std::string_view k_rate = "tick-rate 120";
 constexpr std::uint64_t k_max_ticks = 120ULL * 60 * 60 * 4; // Four hours.
 constexpr std::size_t k_max_bytes = 64ULL * 1024 * 1024;
@@ -65,6 +65,7 @@ std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text)
     std::vector<TickInput> ticks;
     std::size_t line_number = 0;
     bool header = false;
+    std::uint32_t allowed_buttons = input_button::all;
     bool rate = false;
     while (!text.empty()) {
         const auto end = text.find('\n');
@@ -74,8 +75,10 @@ std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text)
         if (!line.empty() && line.back() == '\r')
             line.remove_suffix(1);
         if (!header) {
-            if (line != k_magic)
-                return std::unexpected(Error{"Not a microjump replay (version 1)"});
+            if (line == "microjump-replay 1")
+                allowed_buttons = input_button::v1;
+            else if (line != k_magic)
+                return std::unexpected(Error{"Not a microjump replay (version 1 or 2)"});
             header = true;
             continue;
         }
@@ -114,7 +117,7 @@ std::expected<std::vector<TickInput>, Error> parse_replay(std::string_view text)
         }
         if (tick.move_x * tick.move_x + tick.move_y * tick.move_y > 1.0001F)
             return std::unexpected(line_error(line_number, "move input longer than 1"));
-        if ((tick.buttons & ~input_button::all) != 0)
+        if ((tick.buttons & ~allowed_buttons) != 0)
             return std::unexpected(line_error(line_number, "unknown button bits"));
         if (run > k_max_ticks - ticks.size())
             return std::unexpected(line_error(line_number, "replay longer than four hours"));

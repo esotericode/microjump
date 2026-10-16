@@ -12,6 +12,10 @@ const char *to_string(MoveState state) {
         return "Skid";
     case MoveState::jump:
         return "Jump";
+    case MoveState::wall_jump:
+        return "Wall jump";
+    case MoveState::long_jump:
+        return "Long jump";
     case MoveState::fall:
         return "Fall";
     }
@@ -72,14 +76,16 @@ void Player::air_motion(Steering steering, bool jump_held, float dt) {
     const auto [direction, amount] = steering;
     auto &s = m_current;
     float scale = 1;
-    if (s.velocity.y > 0 && s.state == MoveState::jump && !jump_held)
+    const bool rising_jump = s.state == MoveState::jump || s.state == MoveState::wall_jump ||
+                             s.state == MoveState::long_jump;
+    if (s.velocity.y > 0 && rising_jump && !jump_held)
         scale = tuning.release_gravity_scale;
     else if (s.velocity.y <= 0)
         scale = tuning.fall_gravity_scale;
     s.velocity.y = std::max(s.velocity.y - tuning.gravity() * scale * dt, -tuning.terminal_speed);
-    if (s.velocity.y <= 0 && s.state == MoveState::jump)
+    if (s.velocity.y <= 0 && rising_jump)
         s.state = MoveState::fall;
-    if (amount <= 0)
+    if (amount <= 0 || s.recovery_timer > 0)
         return;
     // Steering adds acceleration along the input but never raises speed beyond what the
     // jump started with (or air_speed), so momentum matters and control stays limited.
@@ -95,10 +101,30 @@ void Player::air_motion(Steering steering, bool jump_held, float dt) {
         s.facing + std::clamp(turn, -tuning.air_turn_rate * dt, tuning.air_turn_rate * dt), k_tau);
 }
 
+bool Player::wall_jump(bool requested, bool touching) {
+    auto &s = m_current;
+    if (!requested || s.grounded || (!touching && s.wall_timer <= 0) ||
+        (s.wall_used && dot(s.wall_normal, s.last_kick_normal) > 0.5F))
+        return false;
+    // A repeatable outward angle; normal air steering resumes after a short separation.
+    s.velocity = s.wall_normal * tuning.wall_jump_speed + Vec3{0, tuning.wall_jump_up_speed, 0};
+    s.facing = yaw_of(s.wall_normal);
+    s.state = MoveState::wall_jump;
+    s.last_kick_normal = s.wall_normal;
+    s.wall_used = true;
+    s.recovery_timer = tuning.wall_recovery_time;
+    s.wall_timer = 0;
+    s.buffer_timer = 0;
+    s.coyote_timer = 0;
+    return true;
+}
+
 void Player::tick(const TickInput &input, const CollisionWorld &world, float dt) {
     m_previous = {m_current.position, m_current.facing};
     auto &s = m_current;
     s.landed = false;
+    s.wall_timer = std::max(s.wall_timer - dt, 0.0F);
+    s.recovery_timer = std::max(s.recovery_timer - dt, 0.0F);
     const Vec3 stick =
         yaw_right(input.camera_yaw) * input.move_x + yaw_forward(input.camera_yaw) * input.move_y;
     const float amount = std::min(length(stick), 1.0F);
@@ -111,16 +137,28 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
 
     const bool wants_jump = input.held(input_button::jump_pressed) || s.buffer_timer > 0;
     const bool can_jump = s.grounded || s.coyote_timer > 0;
+    bool consumed_jump = false;
     if (wants_jump && can_jump && s.state != MoveState::jump) {
+        consumed_jump = true;
         const Vec3 launch =
             s.grounded ? yaw_forward(s.facing) * s.ground_speed : horizontal(s.velocity);
+        const bool long_jump = s.grounded && s.state != MoveState::skid &&
+                               input.held(input_button::long_jump_held) &&
+                               s.ground_speed >= tuning.long_jump_min_speed;
         s.velocity =
-            launch + Vec3{0, tuning.jump_velocity() + tuning.jump_speed_bonus * length(launch), 0};
+            long_jump
+                ? normalized(launch) * (std::min(length(launch), tuning.run_speed) *
+                                        tuning.long_jump_speed_scale) +
+                      Vec3{0, tuning.long_jump_up_speed, 0}
+                : launch +
+                      Vec3{0, tuning.jump_velocity() + tuning.jump_speed_bonus * length(launch), 0};
         s.grounded = false;
-        s.state = MoveState::jump;
+        s.state = long_jump ? MoveState::long_jump : MoveState::jump;
         s.buffer_timer = 0;
         s.coyote_timer = 0;
     }
+
+    consumed_jump = wall_jump(wants_jump && !consumed_jump) || consumed_jump;
 
     if (s.grounded) {
         ground_motion({direction, effective}, dt);
@@ -182,6 +220,17 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
             s.state = MoveState::fall;
         }
         s.grounded = false;
+    }
+    if (s.grounded) {
+        s.wall_timer = 0;
+        s.recovery_timer = 0;
+        s.wall_used = false;
+    } else if (length_squared(moved.jump_wall_normal) > 0) {
+        s.wall_normal = moved.jump_wall_normal;
+        s.wall_timer = tuning.wall_contact_grace;
+        wall_jump(wants_jump && !consumed_jump, true);
+    } else if (moved.hit_wall) {
+        s.wall_timer = 0; // A different, unmarked face cannot borrow the old wall's window.
     }
 }
 

@@ -165,7 +165,8 @@ std::expected<Level, Error> parse_level(std::string_view text) {
         for (std::size_t i = 0; i < shapes.size(); ++i) {
             const auto &item = shapes[i];
             const auto path = "level.shapes[" + std::to_string(i) + "]";
-            if (!read.object(item, path, {"kind", "center", "size", "color", "yaw", "material"}))
+            if (!read.object(item, path,
+                             {"kind", "center", "size", "color", "yaw", "material", "wall_jump"}))
                 break;
             Shape shape;
             const auto &kind = read.member(item, "kind", path);
@@ -192,6 +193,12 @@ std::expected<Level, Error> parse_level(std::string_view text) {
                     shape.surface.metallic =
                         read.scalar(material, "metallic", path + ".material", 0, 1, 0);
                 }
+            }
+            if (item.contains("wall_jump")) {
+                if (!item["wall_jump"].is_boolean())
+                    read.fail(path + ".wall_jump", "expected a boolean");
+                else
+                    shape.wall_jump = item["wall_jump"].get<bool>();
             }
             level.shapes.push_back(shape);
         }

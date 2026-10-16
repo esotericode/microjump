@@ -30,6 +30,7 @@ Vec3 linear_color(unsigned int srgb) {
 
 LevelGeometry build_geometry(const Level &level) {
     LevelGeometry geometry;
+    std::vector<bool> wall_flags;
     for (const auto &shape : level.shapes) {
         geometry.mesh.surface = shape.surface;
         switch (shape.kind) {
@@ -44,8 +45,12 @@ LevelGeometry build_geometry(const Level &level) {
                                        shape.color);
             break;
         }
+        wall_flags.resize(geometry.mesh.vertices.size() / 3, shape.wall_jump);
     }
-    geometry.collision = CollisionWorld(geometry.mesh.triangles());
+    auto triangles = geometry.mesh.triangles();
+    for (std::size_t i = 0; i < triangles.size(); ++i)
+        triangles[i].wall_jump = wall_flags[i];
+    geometry.collision = CollisionWorld(triangles);
     return geometry;
 }
 

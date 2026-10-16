@@ -68,6 +68,8 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
             input.toggle_free_camera = input.toggle_free_camera || key == SDLK_F3;
             input.reset_pressed = input.reset_pressed || key == SDLK_R || key == SDLK_HOME;
             input.jump_pressed = input.jump_pressed || key == SDLK_SPACE;
+            if (key == SDLK_SPACE && (event.key.mod & SDL_KMOD_SHIFT) != 0)
+                input.long_jump_held = true; // Keep a complete Shift+Space tap in one poll.
         } else if (event.type == SDL_EVENT_GAMEPAD_ADDED && m_gamepad == nullptr) {
             m_gamepad = SDL_OpenGamepad(event.gdevice.which);
             if (m_gamepad == nullptr)
@@ -123,6 +125,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     input.camera.vertical = key(SDL_SCANCODE_E) - key(SDL_SCANCODE_Q);
     input.camera.fast = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
     input.jump_held = keys[SDL_SCANCODE_SPACE];
+    input.long_jump_held = input.long_jump_held || input.camera.fast;
     input.walk_held = keys[SDL_SCANCODE_LCTRL] || keys[SDL_SCANCODE_RCTRL];
     const float keyboard_length = std::sqrt(right * right + forward * forward);
     if (keyboard_length > 0) {
@@ -145,6 +148,8 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
             k_stick_dead_zone);
         input.look_stick_x = look.x;
         input.look_stick_y = look.y;
+        input.long_jump_held = input.long_jump_held ||
+                               SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
         input.jump_held =
             input.jump_held || SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
     }
