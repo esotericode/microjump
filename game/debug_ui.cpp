@@ -17,7 +17,13 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
     const float slope = std::acos(std::clamp(s.ground_normal.y, -1.0F, 1.0F)) * 180 / k_pi;
     ImGui::Text("Ground %.0f deg   Checkpoint %zu   Respawns %u", static_cast<double>(slope),
                 simulation.active_checkpoint(), simulation.respawns());
-    ImGui::Text("Input: %s%s", status.input_mode.c_str(), status.gamepad ? "   |   Gamepad" : "");
+    ImGui::Text("Input: %s", status.input_mode.c_str());
+    if (!status.gamepad_name.empty()) {
+        ImGui::Text("Gamepad: %s", status.gamepad_name.c_str());
+        ImGui::Text("%.*s jump  |  LB + jump: long jump  |  RB walk",
+                    static_cast<int>(status.jump_label.size()), status.jump_label.data());
+        ImGui::TextUnformatted("R3 center camera  |  Back respawn  |  Start tuning");
+    }
     const int minutes = static_cast<int>(status.hours * 60) % (24 * 60);
     ImGui::Text("Time %02d:%02d %s", minutes / 60, minutes % 60,
                 status.day_animating ? "(day/night running)" : "(paused, F2 > Lighting)");
@@ -30,7 +36,7 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
         ImGui::TextUnformatted("FREE CAMERA  WASD/QE fly  Shift fast  Home reset");
     } else {
         ImGui::TextUnformatted("WASD move  |  Space jump / wall kick  |  Ctrl walk");
-        ImGui::TextUnformatted("Shift + jump: long jump  |  Pad: LB + A  |  R / Back respawn");
+        ImGui::TextUnformatted("Shift + jump: long jump  |  R respawn  |  Mouse look");
     }
     ImGui::TextUnformatted("F1 overlay  F2 tuning  F3 free camera  Esc quit");
 }
@@ -70,7 +76,8 @@ void lighting_section(LightingControls &lighting) {
 }
 } // namespace
 
-void tuning_window(Simulation &simulation, LightingControls &lighting, bool &open) {
+void tuning_window(Simulation &simulation, LightingControls &lighting, GamepadTuning &gamepad,
+                   bool &open) {
     if (!open)
         return;
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 420, 18), ImGuiCond_FirstUseEver);
@@ -131,6 +138,12 @@ void tuning_window(Simulation &simulation, LightingControls &lighting, bool &ope
         angle_slider("Max slope", t.collision.max_slope, 10, 80);
         slider("Step height", t.collision.step_height, 0, 1);
         slider("Ground snap", t.collision.ground_snap, 0, 1);
+    }
+    if (ImGui::CollapsingHeader("Gamepad", ImGuiTreeNodeFlags_DefaultOpen)) {
+        slider("Move dead zone", gamepad.move_dead_zone, 0, 0.5F);
+        slider("Look dead zone", gamepad.look_dead_zone, 0, 0.5F);
+        ImGui::TextUnformatted("D-pad / left stick: navigate; South: select; East: back.");
+        ImGui::TextUnformatted("Start closes tuning. Camera sensitivity is below.");
     }
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         slider("Distance", c.distance, 2, 16);

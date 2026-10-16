@@ -5,6 +5,7 @@ add_library(microjump_engine STATIC
     src/core/input_record.cpp
     src/core/launch_options.cpp
     src/core/png.cpp
+    src/platform/gamepad.cpp
     src/platform/window.cpp
     src/scene/mesh.cpp
     src/render/lighting.cpp

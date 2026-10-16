@@ -1,5 +1,5 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
-    movement_tests.cpp move_verbs_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp)
+    movement_tests.cpp move_verbs_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
@@ -26,6 +26,13 @@ set_tests_properties(cli_rejects_unknown_argument cli_rejects_replay_overflow cl
 set_tests_properties(foundation cli_help cli_rejects_unknown_argument cli_rejects_replay_overflow cli_rejects_missing_level PROPERTIES
     ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
 if(MJ_SMOKE_TESTS)
+    add_executable(microjump_gamepad_smoke gamepad_window_tests.cpp "${PROJECT_SOURCE_DIR}/game/debug_ui.cpp")
+    target_link_libraries(microjump_gamepad_smoke PRIVATE microjump_gameplay mj_imgui doctest::doctest)
+    mj_project_options(microjump_gamepad_smoke)
+    set_target_properties(microjump_gamepad_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/game")
+    add_dependencies(microjump_gamepad_smoke microjump_shaders)
+    add_test(NAME gamepad_window COMMAND microjump_gamepad_smoke)
+    set_tests_properties(gamepad_window PROPERTIES TIMEOUT 90 LABELS "display;vulkan;gamepad")
     add_test(NAME vulkan_startup COMMAND microjump --smoke-test)
     set_tests_properties(vulkan_startup PROPERTIES TIMEOUT 30 LABELS "display;vulkan")
     set(captures "${CMAKE_CURRENT_BINARY_DIR}/captures")
@@ -80,7 +87,7 @@ if(MJ_SMOKE_TESTS)
         render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
     set_tests_properties(capture_pixels PROPERTIES DEPENDS "render_capture;render_camera;render_resize;render_replay")
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set_tests_properties(vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
+        set_tests_properties(gamepad_window vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
             capture_pixels render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()

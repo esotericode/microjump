@@ -5,23 +5,6 @@
 #include <cmath>
 
 namespace mj {
-namespace {
-constexpr float k_stick_dead_zone = 0.18F;
-
-float axis(SDL_Gamepad *gamepad, SDL_GamepadAxis which) {
-    return std::clamp(static_cast<float>(SDL_GetGamepadAxis(gamepad, which)) / 32767.0F, -1.0F,
-                      1.0F);
-}
-} // namespace
-
-StickReading apply_dead_zone(StickReading raw, float dead_zone) {
-    const float magnitude = std::sqrt(raw.x * raw.x + raw.y * raw.y);
-    if (magnitude <= dead_zone || magnitude <= 0)
-        return {};
-    const float scaled = std::min((magnitude - dead_zone) / (1 - dead_zone), 1.0F);
-    return {raw.x / magnitude * scaled, raw.y / magnitude * scaled};
-}
-
 std::expected<std::unique_ptr<Window>, Error> Window::create() {
     auto window = std::unique_ptr<Window>(new Window);
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
@@ -34,12 +17,12 @@ std::expected<std::unique_ptr<Window>, Error> Window::create() {
     if (window->m_window == nullptr) {
         return std::unexpected(Error{"SDL_CreateWindow: " + std::string(SDL_GetError())});
     }
+    window->m_gamepad.open_available();
     return window;
 }
 
 Window::~Window() {
-    if (m_gamepad != nullptr)
-        SDL_CloseGamepad(m_gamepad);
+    m_gamepad.close();
     if (m_window != nullptr) {
         SDL_DestroyWindow(m_window);
     }
@@ -70,26 +53,8 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
             input.jump_pressed = input.jump_pressed || key == SDLK_SPACE;
             if (key == SDLK_SPACE && (event.key.mod & SDL_KMOD_SHIFT) != 0)
                 input.long_jump_held = true; // Keep a complete Shift+Space tap in one poll.
-        } else if (event.type == SDL_EVENT_GAMEPAD_ADDED && m_gamepad == nullptr) {
-            m_gamepad = SDL_OpenGamepad(event.gdevice.which);
-            if (m_gamepad == nullptr)
-                log(std::string("Gamepad open failed: ") + SDL_GetError());
-            else
-                log(std::string("Gamepad connected: ") + (SDL_GetGamepadName(m_gamepad) != nullptr
-                                                              ? SDL_GetGamepadName(m_gamepad)
-                                                              : "unnamed"));
-        } else if (event.type == SDL_EVENT_GAMEPAD_REMOVED && m_gamepad != nullptr &&
-                   event.gdevice.which == SDL_GetGamepadID(m_gamepad)) {
-            SDL_CloseGamepad(m_gamepad);
-            m_gamepad = nullptr;
-            log("Gamepad disconnected");
-        } else if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && m_gamepad != nullptr &&
-                   event.gbutton.which == SDL_GetGamepadID(m_gamepad)) {
-            const auto button = static_cast<SDL_GamepadButton>(event.gbutton.button);
-            input.jump_pressed = input.jump_pressed || button == SDL_GAMEPAD_BUTTON_SOUTH;
-            input.reset_pressed = input.reset_pressed || button == SDL_GAMEPAD_BUTTON_BACK;
-            input.toggle_tuning = input.toggle_tuning || button == SDL_GAMEPAD_BUTTON_START;
         }
+        m_gamepad.process_event(event);
     }
     const auto flags = SDL_GetWindowFlags(m_window);
     const bool focused =
@@ -114,8 +79,21 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
         input.look_x = dx;
         input.look_y = dy;
     }
-    if (!focused)
+    const auto pad = m_gamepad.sample(gamepad_tuning, focused);
+    input.focused = focused;
+    input.gamepad_connected = pad.connected;
+    input.gamepad_name = pad.name;
+    input.jump_label = pad.jump_label;
+    if (!focused) {
+        // Ignore gameplay and UI press edges received while the window is inactive.
+        const bool quit = input.quit;
+        input = {};
+        input.quit = quit;
+        input.gamepad_connected = pad.connected;
+        input.gamepad_name = pad.name;
+        input.jump_label = pad.jump_label;
         return input;
+    }
     const bool *keys = SDL_GetKeyboardState(nullptr);
     auto key = [keys](SDL_Scancode code) { return keys[code] ? 1.0F : 0.0F; };
     const float right = key(SDL_SCANCODE_D) - key(SDL_SCANCODE_A);
@@ -132,27 +110,21 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
         input.move_x = right / keyboard_length;
         input.move_y = forward / keyboard_length;
     }
-    if (m_gamepad != nullptr) {
-        input.gamepad_connected = true;
-        // SDL sticks report +Y down; gameplay uses +Y forward / up.
-        const auto move = apply_dead_zone(
-            {axis(m_gamepad, SDL_GAMEPAD_AXIS_LEFTX), -axis(m_gamepad, SDL_GAMEPAD_AXIS_LEFTY)},
-            k_stick_dead_zone);
-        if (move.x * move.x + move.y * move.y >
-            input.move_x * input.move_x + input.move_y * input.move_y) {
-            input.move_x = move.x;
-            input.move_y = move.y;
-        }
-        const auto look = apply_dead_zone(
-            {axis(m_gamepad, SDL_GAMEPAD_AXIS_RIGHTX), axis(m_gamepad, SDL_GAMEPAD_AXIS_RIGHTY)},
-            k_stick_dead_zone);
-        input.look_stick_x = look.x;
-        input.look_stick_y = look.y;
-        input.long_jump_held = input.long_jump_held ||
-                               SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
-        input.jump_held =
-            input.jump_held || SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_SOUTH);
+    if (pad.move.x * pad.move.x + pad.move.y * pad.move.y >
+        input.move_x * input.move_x + input.move_y * input.move_y) {
+        input.move_x = pad.move.x;
+        input.move_y = pad.move.y;
     }
+    input.look_stick_x = pad.look.x;
+    input.look_stick_y = pad.look.y;
+    input.jump_held = input.jump_held || pad.jump_held;
+    input.jump_pressed = input.jump_pressed || pad.jump_pressed;
+    input.long_jump_held = input.long_jump_held || pad.long_jump_held;
+    input.walk_held = input.walk_held || pad.walk_held;
+    input.reset_pressed = input.reset_pressed || pad.reset_pressed;
+    input.recenter_pressed = pad.recenter_pressed;
+    input.toggle_tuning = input.toggle_tuning || pad.toggle_tuning;
+    input.toggle_overlay = input.toggle_overlay || pad.toggle_overlay;
     return input;
 }
 
