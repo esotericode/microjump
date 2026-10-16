@@ -56,7 +56,7 @@ to talk there.
 - Keep the game building and playable on both Linux and Windows; the owner plays on
   Windows.
 - Be honest about what works and what doesn't.
-- `README.md` explains how to build and run. `docs/` holds notes from earlier work, and
-  [`docs/history/charter-v0.3.md`](docs/history/charter-v0.3.md) is the previous charter,
-  with the decisions (D-001 to D-045) that older notes refer to. Read them as background,
+- `README.md` explains how to build and run. `docs/` describes how the engine,
+  movement, levels and tests work; keep it current when you change them.
+  [`docs/history/`](docs/history/) holds the previous charter. Read it as background,
   not as rules.

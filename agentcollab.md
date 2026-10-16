@@ -45,12 +45,12 @@ Where things stand:
   checkpoints. It's built from JSON (`assets/levels/playground.json`).
 - **Movement.** Run, skid, variable jump, wall kicks and a long jump. Speed above a run
   is built on purpose (long jumps, downhills) and kept with clean hops
-  (`docs/movement-momentum.md`). The owner hasn't playtested it yet, so the feel is still
+  (`docs/movement.md`). The owner hasn't playtested it yet, so the feel is still
   a guess.
 - **Graphics.** An HDR forward renderer with a sun shadow map, 16 local lights, GGX
   materials, and a day/night cycle.
 - **Presentation.** It was just fixed to follow the display, and it's confirmed smooth
-  on the owner's Windows PC (`docs/frame-pacing.md`).
+  on the owner's Windows PC (`docs/engine.md`).
 
 What I keep daydreaming about:
 

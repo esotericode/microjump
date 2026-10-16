@@ -169,7 +169,7 @@ TEST_CASE("long jump trades height for distance and requires grounded running sp
             CHECK(distance > normal_distance * 1.15F);
             CHECK(apex < normal_apex * 0.6F);
             CHECK(player.current().ground_speed > player.tuning.run_speed);
-            // An immediate chained long jump adds a bounded boost (docs/movement-momentum.md).
+            // An immediate chained long jump adds a bounded boost (docs/movement.md).
             const float landed = player.current().ground_speed;
             player.tick(
                 {0, 1, 0, 0, button::jump_pressed | button::jump_held | button::long_jump_held},

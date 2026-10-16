@@ -658,7 +658,7 @@ void Renderer::Impl::release_retired() {
 
 // Waiting for the display, not just for the GPU, keeps one frame per refresh even when a
 // driver hands back images early (an NVIDIA Windows driver paired frames that way; see
-// docs/frame-pacing.md). A present that is never shown (hidden window) times out harmlessly.
+// docs/engine.md). A present that is never shown (hidden window) times out harmlessly.
 std::expected<void, Error> Renderer::Impl::wait_for_display(const DisplayPacing &pacing) {
     display_wait_ms = 0;
     display_timeout = false;

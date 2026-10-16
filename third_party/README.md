@@ -1,6 +1,6 @@
 # Third-party notices and pins
 
-CMake downloads only these charter-approved libraries. Pins are immutable
+CMake downloads only these libraries. Pins are immutable
 commits plus verified SHA-256 archive hashes in `cmake/Dependencies.cmake`.
 
 | Library | Version / commit | Purpose | License |
@@ -13,8 +13,7 @@ commits plus verified SHA-256 archive hashes in `cmake/Dependencies.cmake`.
 | [nlohmann/json](https://github.com/nlohmann/json) | 3.12.0 / `55f93686c01528224f448c19128836e7df245f72` | Versioned level-file parsing | MIT |
 
 Vulkan headers/loader, GPU drivers and development tools come from the platform
-SDK/distribution. They are not bundled with the game. No additional runtime library
-is introduced beyond the approved list. Other allowed libraries are deferred until needed.
+SDK/distribution. They are not bundled with the game.
 
 `cmake --install` and CPack include these libraries' upstream license notices in
 `licenses/`, plus the project's MIT license at the package root. SDL's shared library
