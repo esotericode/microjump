@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+
 namespace mj::game {
 
 void collectible_hud(const Simulation &simulation, const Level &level) {
@@ -33,6 +35,30 @@ void collectible_hud(const Simulation &simulation, const Level &level) {
     ImGui::TextColored(gold, "%s", complete ? "ALL SPARKS FOUND!" : "SPARK FOUND");
     ImGui::TextUnformatted(level.collectibles[*last].name.c_str());
     ImGui::End();
+}
+
+void travel_hud(const TravelNote &note) {
+    if (note.title.empty() || (note.arrival && note.age >= 3.5F))
+        return;
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav;
+    const auto display = ImGui::GetIO().DisplaySize;
+    // Arrival cards fade in and out; the gate hint stays while you stand near the gate.
+    const float fade =
+        note.arrival ? std::clamp(std::min(note.age * 3, (3.5F - note.age) * 2), 0.0F, 1.0F) : 1.0F;
+    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, fade);
+    ImGui::SetNextWindowPos(ImVec2(display.x * 0.5F, display.y * (note.arrival ? 0.2F : 0.78F)),
+                            ImGuiCond_Always, ImVec2(0.5F, 0.5F));
+    ImGui::SetNextWindowBgAlpha(0.82F);
+    ImGui::Begin("Travel", nullptr, flags);
+    ImGui::SetWindowFontScale(note.arrival ? 1.8F : 1.2F);
+    ImGui::TextColored(ImVec4(0.72F, 0.9F, 1, 1), "%s", note.title.c_str());
+    ImGui::SetWindowFontScale(1);
+    if (!note.subtitle.empty())
+        ImGui::TextUnformatted(note.subtitle.c_str());
+    ImGui::End();
+    ImGui::PopStyleVar();
 }
 
 void movement_overlay(const Simulation &simulation, const SessionStatus &status) {

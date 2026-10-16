@@ -38,6 +38,8 @@ With `MJ_SMOKE_TESTS=ON`, CTest also runs the game itself:
 - **Lighting:** day, night and pavilion captures, decoded and pixel-checked by
   `tests/capture_check.cpp`.
 - **Playground:** a playground capture.
+- **Lantern Isles:** an isles capture, the long-leap replay, and a scripted trip
+  through both gates.
 - **Gamepad:** the full game window driven by a virtual gamepad, including the tuning
   menu.
 
@@ -145,6 +147,36 @@ tests enabled, `render_spark_pickup` captures tick 140 with the counter at 1/16 
 `replay_spark_invitation` checks the completed replay at tick 170. Both require zero
 Vulkan validation errors. F1 can close diagnostics while leaving the hunt HUD visible;
 `--hide-overlay` suppresses both for clean scene captures.
+
+## The Lantern Isles and gates
+
+`lantern_isles_tests.cpp` checks the shipped isles the way a player meets them:
+
+- every checkpoint settles;
+- every spark but the mid-leap one sits over a walkable landing;
+- every gate in both levels leads to a real level and checkpoint, and you never
+  arrive inside the gate back;
+- nothing below the routes catches a fall.
+
+A small route driver plays the stepping stones, the grove's canopies, both slab bridges,
+the ruins' columns and the cloud steps. It runs and judges each takeoff as a player
+does: it jumps once its speed would carry it to the landing, or at an edge, and lines
+up the touchdown in the air. A wall-kick driver climbs the spire onto its tower. The
+long-leap test shows a long jump clears the pier's gap while a running jump falls
+short. Any respawn fails a route.
+
+`collision_tests.cpp` checks that a V of two 60° slopes holds a falling capsule, while a
+wall corner does not. `level_tests.cpp` covers the new shapes, `solid`, `title`,
+`atmosphere` and gate parsing. It also checks that stepping into a gate is reported
+once, never on arrival, and that a hunt survives the trip.
+
+With `MJ_SMOKE_TESTS=ON`:
+
+- `render_isles` and `isles_pixels` capture the isles.
+- `travel_gates` runs `--travel-test`, out through the playground's gate and back, so
+  both mesh swaps run under validation.
+- `replay_isles_leap` replays `tests/replays/isles-long-leap.mjr`, from spawn down the
+  pier and over the gap, through the whole game.
 
 ## Particle rendering
 

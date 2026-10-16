@@ -2,6 +2,7 @@
 #include "debug_ui.hpp"
 #include "level.hpp"
 #include "level_io.hpp"
+#include "portal_visuals.hpp"
 #include "simulation.hpp"
 #include "spark_visuals.hpp"
 
@@ -18,6 +19,8 @@
 #include <chrono>
 #include <cstdio>
 #include <format>
+#include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -31,6 +34,19 @@ constexpr MeshHandle k_bulb_mesh{2};
 constexpr MeshHandle k_spark_mesh{3};
 constexpr MeshHandle k_matte_part_mesh{4};
 constexpr MeshHandle k_glossy_part_mesh{5};
+constexpr MeshHandle k_portal_ring_mesh{6};
+
+// The level being played, its geometry and the simulation that references both. It is held
+// by pointer and never moves, so traveling through a gate swaps in a whole new one.
+struct LoadedLevel {
+    LoadedLevel(std::filesystem::path file, Level loaded, std::size_t checkpoint = 0)
+        : path(std::move(file)), level(std::move(loaded)), geometry(build_geometry(level)),
+          simulation(level, geometry.collision, checkpoint) {}
+    std::filesystem::path path;
+    Level level;
+    LevelGeometry geometry;
+    Simulation simulation;
+};
 
 std::string describe(const Simulation &simulation) {
     const auto &s = simulation.player.current();
@@ -74,19 +90,23 @@ int run(const LaunchOptions &options) {
         log(loaded_level.error().message);
         return 1;
     }
-    const Level level = std::move(*loaded_level);
-    log("Level: " + level.name + " (" + std::to_string(level.shapes.size()) + " primitives, " +
-        std::to_string(level.checkpoints.size()) + " checkpoints)");
-    if (replaying && !replay_level.empty() && replay_level != level.name) {
-        log("Replay was recorded on level '" + replay_level + "' but '" + level.name +
+    const auto describe_level = [](const Level &level) {
+        log("Level: " + level.name + " (" + std::to_string(level.shapes.size()) + " primitives, " +
+            std::to_string(level.checkpoints.size()) + " checkpoints)");
+    };
+    describe_level(*loaded_level);
+    if (replaying && !replay_level.empty() && replay_level != loaded_level->name) {
+        log("Replay was recorded on level '" + replay_level + "' but '" + loaded_level->name +
             "' is loaded; pass --level with that level's file");
         return 1;
     }
     if (replaying && replay_level.empty())
-        log("Replay predates level names (format 1/2); it assumes the loaded level '" + level.name +
-            "'");
-    const LevelGeometry geometry = build_geometry(level);
-    Simulation simulation(level, geometry.collision);
+        log("Replay predates level names (format 1/2); it assumes the loaded level '" +
+            loaded_level->name + "'");
+    auto world = std::make_unique<LoadedLevel>(level_path, std::move(*loaded_level));
+    // Gates only work in live play: a recording or replay belongs to one level.
+    const bool travel_allowed = !replaying && options.record.empty() && !options.camera_test;
+    std::map<std::string, std::vector<bool>> hunts; // Spark progress per level, this session.
     std::vector<TickInput> recording;
     std::size_t replay_index = 0;
     // Window outlives Vulkan surface; validation log outlives both.
@@ -102,13 +122,14 @@ int run(const LaunchOptions &options) {
             return 1;
         }
         // Order matches the k_*_mesh handles above.
-        const std::array meshes{
-            geometry.mesh,
-            make_player_mesh(simulation.player.tuning.radius, simulation.player.tuning.height),
-            make_bulb_mesh(),
-            make_spark_mesh(),
-            make_part_mesh(PartMesh::matte),
-            make_part_mesh(PartMesh::glossy)};
+        std::array meshes{world->geometry.mesh,
+                          make_player_mesh(world->simulation.player.tuning.radius,
+                                           world->simulation.player.tuning.height),
+                          make_bulb_mesh(),
+                          make_spark_mesh(),
+                          make_part_mesh(PartMesh::matte),
+                          make_part_mesh(PartMesh::glossy),
+                          make_portal_ring_mesh()};
         auto renderer = Renderer::create(**window, **context, meshes);
         if (!renderer) {
             log(renderer.error().message);
@@ -152,8 +173,8 @@ int run(const LaunchOptions &options) {
         bool was_captured = false;
         auto last = std::chrono::steady_clock::now();
         LightingControls lighting;
-        if (options.time_of_day)
-            lighting.cycle.hours = *options.time_of_day;
+        lighting.cycle.hours =
+            options.time_of_day ? *options.time_of_day : world->level.atmosphere.time_of_day;
         if (options.shadow_quality)
             lighting.shadows.quality = *options.shadow_quality;
         // --pacing-test: each phase runs 5 s; the last 4 s (after any rebuild hitch) are
@@ -189,14 +210,56 @@ int run(const LaunchOptions &options) {
         }
         std::vector<DrawInstance> instances;
         CharacterAnimator character;
-        character.snap(simulation.player.current());
+        character.snap(world->simulation.player.current());
         std::vector<CharacterPart> character_parts;
         std::vector<ParticleInstance> particles;
+        std::optional<std::size_t> pending_travel; // A gate entered during the last frame.
+        std::optional<std::chrono::steady_clock::time_point> arrived;
+        // Swaps in the gate's level at its arrival checkpoint. A level that fails to load
+        // keeps you where you are; only a renderer failure ends the game.
+        const auto travel = [&](std::size_t gate) -> std::expected<void, Error> {
+            const Portal portal = world->level.portals[gate];
+            const auto path = world->path.parent_path() / portal.level;
+            auto loaded = load_level(path);
+            if (loaded && portal.checkpoint >= loaded->checkpoints.size())
+                loaded = std::unexpected(
+                    Error{"it has no checkpoint " + std::to_string(portal.checkpoint)});
+            if (!loaded) {
+                log("The gate '" + portal.name + "' is closed: " + loaded.error().message);
+                return {};
+            }
+            describe_level(*loaded);
+            hunts[world->level.name] = world->simulation.collected();
+            auto next = std::make_unique<LoadedLevel>(path, std::move(*loaded), portal.checkpoint);
+            if (const auto hunt = hunts.find(next->level.name); hunt != hunts.end())
+                next->simulation.restore_collected(hunt->second);
+            meshes[k_world_mesh.index] = next->geometry.mesh;
+            if (auto uploaded = (*renderer)->set_meshes(meshes); !uploaded)
+                return uploaded;
+            world = std::move(next);
+            character.snap(world->simulation.player.current());
+            if (!options.time_of_day)
+                lighting.cycle.hours = world->level.atmosphere.time_of_day;
+            arrived = std::chrono::steady_clock::now();
+            log("Traveled through '" + portal.name + "' to " + world->level.name);
+            return {};
+        };
         log("M4 playground ready: WASD move, Space jump/wall kick, Shift+jump long jump, R "
             "respawn, F1 overlay, F2 "
             "tuning, "
             "F3 free camera.");
         while (true) {
+            if (pending_travel) {
+                if (auto traveled = travel(*pending_travel); !traveled) {
+                    log(traveled.error().message);
+                    return 1;
+                }
+                pending_travel.reset();
+            }
+            // Bound per frame: traveling replaces them, but only between frames.
+            Simulation &simulation = world->simulation;
+            const Level &level = world->level;
+            const LevelGeometry &geometry = world->geometry;
             // Input and time are sampled once the display has caught up (docs/engine.md).
             if (auto paced = (*renderer)->wait_for_display(diagnostics.display_pacing); !paced) {
                 log(paced.error().message);
@@ -312,6 +375,8 @@ int run(const LaunchOptions &options) {
                 // even when a slow rendered frame advances several simulation ticks.
                 if (options.capture_tick && simulation.ticks() >= *options.capture_tick)
                     return;
+                if (pending_travel)
+                    return; // The rest of this frame's time belongs to the next level.
                 if (use_free_camera)
                     free_camera.tick(camera_input, dt);
                 TickInput tick;
@@ -338,6 +403,8 @@ int run(const LaunchOptions &options) {
                 character.tick(simulation.player.current(), dt); // Visual only, like the sky.
                 if (simulation.collected_count() > found)
                     character.cheer();
+                if (travel_allowed && simulation.portal_entered())
+                    pending_travel = simulation.portal_entered();
                 ++frame_ticks;
                 lighting.cycle.advance(dt); // Visual only; never feeds back into gameplay.
             });
@@ -357,7 +424,7 @@ int run(const LaunchOptions &options) {
             instances.clear();
             instances.push_back({.mesh = k_world_mesh,
                                  .model = yaw_translation(0, {}),
-                                 .grid = 1,
+                                 .grid = level.atmosphere.grid ? 1.0F : 0.0F,
                                  .receives_blob = true});
             particles.clear();
             if (diagnostics.show_capsule) {
@@ -405,6 +472,20 @@ int run(const LaunchOptions &options) {
                     }
                 }
             }
+            for (const auto &portal : level.portals) {
+                const auto look = portal_look(portal, seconds);
+                instances.push_back({.mesh = k_portal_ring_mesh,
+                                     .model = look.ring,
+                                     .casts_shadow = false,
+                                     .tint = {1, 0.78F, 0.4F},
+                                     .emissive = 1.1F * look.glow});
+                instances.push_back({.mesh = k_glossy_part_mesh,
+                                     .model = look.veil,
+                                     .casts_shadow = false,
+                                     .tint = {0.32F, 0.55F, 1},
+                                     .emissive = 0.7F + 0.5F * look.glow});
+                portal_motes(portal, seconds, particles);
+            }
             if (lighting.bulbs) {
                 for (const auto &light : lights) {
                     const float peak = std::max({light.color.x, light.color.y, light.color.z});
@@ -432,9 +513,28 @@ int run(const LaunchOptions &options) {
             const std::function<void()> overlay_lines = [&] {
                 movement_overlay(simulation, status);
             };
+            TravelNote travel_note;
+            if (arrived) {
+                travel_note.age = std::chrono::duration<float>(now - *arrived).count();
+                if (travel_note.age < 3.5F) {
+                    travel_note = {level.title, std::string(zone_at(level, pose.position)),
+                                   travel_note.age, true};
+                }
+            }
+            for (const auto &portal : level.portals) {
+                const Vec3 middle = pose.position + Vec3{0, 0.8F, 0};
+                if (!travel_note.title.empty() ||
+                    length(middle - portal.position) > portal.radius + 3.5F)
+                    continue;
+                travel_note.title = portal.name;
+                travel_note.subtitle = travel_allowed ? "Step into the light to travel"
+                                                      : "Gates rest while recording or replaying";
+            }
             const std::function<void()> debug_windows = [&] {
-                if (!options.hide_overlay && !tuning_open)
+                if (!options.hide_overlay && !tuning_open) {
                     collectible_hud(simulation, level);
+                    travel_hud(travel_note);
+                }
                 tuning_window(simulation, {lighting, (*window)->gamepad_tuning, diagnostics},
                               tuning_open);
             };
@@ -466,6 +566,14 @@ int run(const LaunchOptions &options) {
                          lighting.blob ? simulation.player.tuning.radius * 1.35F : 0.0F,
                          lighting.blob_strength};
             view.environment = environment_at(lighting.cycle);
+            view.environment.fog_density *= level.atmosphere.fog;
+            if (level.atmosphere.sky_below) // The haze continues down, and so does its light.
+                view.environment.ground = view.environment.sky_horizon;
+            if (arrived) { // A bright breath of light as you step out of a gate.
+                const float since = std::chrono::duration<float>(now - *arrived).count();
+                const float flash = std::max(0.0F, 1 - since / 0.9F);
+                view.environment.exposure *= 1 + 6 * flash * flash;
+            }
             view.lights = lights;
             view.shadows = lighting.shadows;
             view.shadows.focus = pose.position;
@@ -546,6 +654,9 @@ int run(const LaunchOptions &options) {
                 captured = true;
                 break;
             }
+            // --travel-test: out through the first gate, then back through the far side's.
+            if (options.travel_test && (rendered == 4 || rendered == 10) && !level.portals.empty())
+                pending_travel = 0;
             if (options.frames && rendered >= *options.frames)
                 break;
             if (replay_finished)
@@ -560,14 +671,14 @@ int run(const LaunchOptions &options) {
     }
     if (replaying)
         log("Replay " + std::string(replay_index >= replay.size() ? "finished" : "stopped") + ": " +
-            describe(simulation));
+            describe(world->simulation));
     if (!options.record.empty()) {
-        if (auto saved = save_replay(options.record, recording, level.name); !saved) {
+        if (auto saved = save_replay(options.record, recording, world->level.name); !saved) {
             log(saved.error().message);
             return 1;
         }
         log("Recorded " + std::to_string(recording.size()) + " ticks to " +
-            options.record.string() + ": " + describe(simulation));
+            options.record.string() + ": " + describe(world->simulation));
     }
     const auto errors = validation.error_count.load(std::memory_order_relaxed);
     log("Shutdown complete; Vulkan validation errors: " + std::to_string(errors));
@@ -599,7 +710,7 @@ int main(int argc, char *argv[]) {
             "  --hide-overlay  Hide diagnostics and the spark HUD (clean captures).\n"
             "  --capture-tick N  Capture the exact state at simulation tick N.\n"
             "  --frame-log PATH  Write per-frame timing (CSV) for frame-pacing diagnostics.\n"
-            "  --resize-test / --camera-test  Scripted render correctness checks.\n"
+            "  --resize-test / --camera-test / --travel-test  Scripted render correctness checks.\n"
             "  Debug builds require Vulkan validation layers.\n"
             "  WASD move, Space jump/wall kick, Shift+jump long jump, Ctrl walk, mouse look, R "
             "respawn, F1 overlay,\n"

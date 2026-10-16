@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 
 namespace mj {
 
@@ -83,6 +84,84 @@ void SceneMesh::add_ramp(const Ramp &ramp) {
     face({0, 1, 5, 4}); // Slope.
     face({0, 3, 4});    // Sides.
     face({1, 2, 5});
+}
+
+void SceneMesh::add_ellipsoid(const Ellipsoid &ellipsoid) {
+    constexpr int k_sides = 28;
+    constexpr int k_rings = 14; // Pole to pole.
+    const auto &[center, size, color, yaw] = ellipsoid;
+    const Vec3 radius = size * 0.5F;
+    const float cos_yaw = std::cos(yaw);
+    const float sin_yaw = std::sin(yaw);
+    const auto turn = [&](Vec3 v) {
+        return Vec3{v.x * cos_yaw + v.z * sin_yaw, v.y, -v.x * sin_yaw + v.z * cos_yaw};
+    };
+    const auto point = [&](int ring, int side) {
+        const float latitude = k_pi * (static_cast<float>(ring) / k_rings - 0.5F);
+        const float longitude = k_tau * static_cast<float>(side) / k_sides;
+        const Vec3 unit{std::cos(latitude) * std::cos(longitude), std::sin(latitude),
+                        std::cos(latitude) * std::sin(longitude)};
+        // The normal of a scaled sphere divides by the scale (the inverse transpose).
+        const Vec3 local{unit.x * radius.x, unit.y * radius.y, unit.z * radius.z};
+        const Vec3 normal{unit.x / radius.x, unit.y / radius.y, unit.z / radius.z};
+        return Vertex{center + turn(local), normalized(turn(normal)), color, surface};
+    };
+    for (int ring = 0; ring < k_rings; ++ring) {
+        for (int side = 0; side < k_sides; ++side) {
+            const auto a = point(ring, side);
+            const auto b = point(ring, side + 1);
+            const auto c = point(ring + 1, side + 1);
+            const auto d = point(ring + 1, side);
+            // Counter-clockwise seen from outside; the pole rows skip their sliver triangle.
+            if (ring + 1 < k_rings)
+                for (const auto &vertex : {a, d, c})
+                    vertices.push_back(vertex);
+            if (ring > 0)
+                for (const auto &vertex : {a, c, b})
+                    vertices.push_back(vertex);
+        }
+    }
+}
+
+void SceneMesh::add_cone(const Cone &cone) {
+    constexpr int k_sides = 12; // Few, flat facets read as cut rock.
+    const auto &[center, size, color, yaw, taper, tip_down] = cone;
+    const float wide_y = tip_down ? size.y * 0.5F : -size.y * 0.5F;
+    const float narrow_y = -wide_y;
+    const auto rim = [&](int side, bool wide) {
+        const float a = yaw + k_tau * static_cast<float>(side) / k_sides;
+        const float scale = wide ? 1.0F : taper;
+        return center + Vec3{std::cos(a) * size.x * 0.5F * scale, wide ? wide_y : narrow_y,
+                             std::sin(a) * size.z * 0.5F * scale};
+    };
+    const Vec3 inside = center;
+    const auto triangle = [&](Vec3 p0, Vec3 p1, Vec3 p2) {
+        Vec3 normal = cross(p1 - p0, p2 - p0);
+        if (length_squared(normal) < 1.0e-12F)
+            return;
+        normal = normalized(normal);
+        if (dot(normal, p0 - inside) < 0) {
+            std::swap(p1, p2);
+            normal = -normal;
+        }
+        emit(p0, normal, color);
+        emit(p1, normal, color);
+        emit(p2, normal, color);
+    };
+    const Vec3 wide_center = center + Vec3{0, wide_y, 0};
+    const Vec3 narrow_center = center + Vec3{0, narrow_y, 0};
+    for (int side = 0; side < k_sides; ++side) {
+        const Vec3 w0 = rim(side, true);
+        const Vec3 w1 = rim(side + 1, true);
+        const Vec3 n0 = rim(side, false);
+        const Vec3 n1 = rim(side + 1, false);
+        triangle(wide_center, w0, w1);
+        triangle(w0, n0, w1);
+        if (taper > 0) {
+            triangle(w1, n0, n1);
+            triangle(narrow_center, n0, n1);
+        }
+    }
 }
 
 void SceneMesh::add_capsule(const CapsuleMesh &capsule) {

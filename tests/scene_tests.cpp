@@ -8,6 +8,7 @@
 #include <mj/scene/debug_camera.hpp>
 #include <mj/scene/mesh.hpp>
 
+#include <cmath>
 #include <fstream>
 #include <limits>
 
@@ -87,6 +88,48 @@ TEST_CASE("generated primitives have outward unit normals and consistent winding
     }
 }
 
+TEST_CASE("ellipsoids and cones close around their boxes with outward-facing triangles") {
+    const mj::Vec3 center{1, 2, 3};
+    const mj::Vec3 size{4, 2, 3};
+    for (const int kind : {0, 1, 2, 3}) {
+        CAPTURE(kind);
+        mj::SceneMesh mesh;
+        if (kind == 0)
+            mesh.add_ellipsoid({center, size, {1, 1, 1}, 0.7F});
+        else
+            mesh.add_cone({center, size, {1, 1, 1}, 0.3F, kind == 2 ? 0.0F : 0.4F, kind == 3});
+        REQUIRE_FALSE(mesh.vertices.empty());
+        REQUIRE(mesh.vertices.size() % 3 == 0);
+        float volume = 0; // Divergence theorem: a closed, outward mesh encloses positive volume.
+        for (std::size_t i = 0; i < mesh.vertices.size(); i += 3) {
+            const auto &a = mesh.vertices[i];
+            const auto &b = mesh.vertices[i + 1];
+            const auto &c = mesh.vertices[i + 2];
+            const auto winding =
+                mj::normalized(mj::cross(b.position - a.position, c.position - a.position));
+            // Smooth ellipsoid normals lean from the facet; cone facets are flat.
+            CHECK(mj::dot(winding, a.normal) > (kind == 0 ? 0.7F : 0.99F));
+            CHECK(mj::length(a.normal) == doctest::Approx(1));
+            CHECK(mj::dot(winding, (a.position + b.position + c.position) * (1.0F / 3) - center) >
+                  0.0F);
+            volume +=
+                mj::dot(a.position - center, mj::cross(b.position - center, c.position - center)) /
+                6;
+            for (const auto *vertex : {&a, &b, &c}) {
+                const auto local = vertex->position - center;
+                CHECK(std::abs(local.y) <= size.y * 0.5F + 1e-4F);
+                CHECK(std::hypot(local.x, local.z) <= size.x * 0.5F + 1e-4F);
+            }
+        }
+        const float box = size.x * size.y * size.z;
+        if (kind == 0)
+            CHECK(volume == doctest::Approx(box * mj::k_pi / 6).epsilon(0.05)); // Ellipsoid.
+        else
+            CHECK(volume > box * 0.12F); // Cones fill about a quarter of their box, or more.
+        CHECK(volume < box);
+    }
+}
+
 TEST_CASE("spark facets face outward and stay inside the centered visual envelope") {
     const auto mesh = mj::game::make_spark_mesh();
     REQUIRE(mesh.vertices.size() == 24);
@@ -124,6 +167,8 @@ TEST_CASE("capture CLI rejects incomplete, impossible and overflowing requests")
     CHECK(result->capture_frame == 4);
     CHECK(result->capture_out == "frame.png");
     CHECK(parse({"--smoke-test"})->frames == 12);
+    CHECK(parse({"--travel-test"})->frames == 16);
+    CHECK_FALSE(parse({"--travel-test", "--replay", "input.mjr"})); // Gates rest in replays.
 }
 
 TEST_CASE("PNG writer validates dimensions and reports filesystem failures") {

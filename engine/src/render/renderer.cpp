@@ -349,6 +349,7 @@ struct Renderer::Impl {
 
     ~Impl();
     std::expected<void, Error> initialize(std::span<const SceneMesh> scene_meshes);
+    std::expected<void, Error> upload_meshes(std::span<const SceneMesh> scene_meshes);
     std::expected<void, Error> create_descriptors();
     std::expected<void, Error> create_pipelines();
     std::expected<void, Error> create_shadow_map(ShadowQuality quality);
@@ -377,17 +378,37 @@ std::expected<void, Error> Renderer::Impl::wait(std::uint64_t value) const {
     return {};
 }
 
-std::expected<void, Error> Renderer::Impl::initialize(std::span<const SceneMesh> scene_meshes) {
+std::expected<void, Error> Renderer::Impl::upload_meshes(std::span<const SceneMesh> scene_meshes) {
+    std::vector<MeshRange> ranges;
     std::size_t total = 0;
     for (const auto &mesh : scene_meshes) {
         if (mesh.vertices.empty())
             return std::unexpected(Error{"Scene mesh is empty"});
-        meshes.push_back(
+        ranges.push_back(
             {static_cast<std::uint32_t>(total), static_cast<std::uint32_t>(mesh.vertices.size())});
         total += mesh.vertices.size();
     }
     if (total == 0 || total > std::numeric_limits<std::uint32_t>::max())
         return std::unexpected(Error{"Scene meshes are empty or too large"});
+    auto buffer = Buffer::create(
+        vk.device, vk.physical,
+        {.size = total * sizeof(Vertex), .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT});
+    if (!buffer)
+        return std::unexpected(buffer.error());
+    for (std::size_t i = 0; i < scene_meshes.size(); ++i) {
+        std::memcpy(static_cast<Vertex *>(buffer->mapped) + ranges[i].first,
+                    scene_meshes[i].vertices.data(),
+                    scene_meshes[i].vertices.size() * sizeof(Vertex));
+    }
+    if (auto result = buffer->cache(false); !result)
+        return result;
+    // The caller has made sure no frame in flight still reads the old buffer.
+    vertices = std::move(*buffer);
+    meshes = std::move(ranges);
+    return {};
+}
+
+std::expected<void, Error> Renderer::Impl::initialize(std::span<const SceneMesh> scene_meshes) {
     if (!supports(vk.physical, k_color_format,
                   VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_BLIT_SRC_BIT) ||
         !supports(vk.physical, k_hdr_format,
@@ -445,18 +466,7 @@ std::expected<void, Error> Renderer::Impl::initialize(std::span<const SceneMesh>
         allocation.commandBufferCount = 1;
         MJ_VK_TRY(vkAllocateCommandBuffers(vk.device, &allocation, &frame.command));
     }
-    auto buffer = Buffer::create(
-        vk.device, vk.physical,
-        {.size = total * sizeof(Vertex), .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT});
-    if (!buffer)
-        return std::unexpected(buffer.error());
-    vertices = std::move(*buffer);
-    for (std::size_t i = 0; i < scene_meshes.size(); ++i) {
-        std::memcpy(static_cast<Vertex *>(vertices.mapped) + meshes[i].first,
-                    scene_meshes[i].vertices.data(),
-                    scene_meshes[i].vertices.size() * sizeof(Vertex));
-    }
-    if (auto result = vertices.cache(false); !result)
+    if (auto result = upload_meshes(scene_meshes); !result)
         return result;
     if (auto result = create_descriptors(); !result)
         return result;
@@ -1460,6 +1470,11 @@ bool Renderer::ui_wants_keyboard() const {
 }
 std::expected<bool, Error> Renderer::draw(const FrameView &view) {
     return m_impl->draw(view);
+}
+std::expected<void, Error> Renderer::set_meshes(std::span<const SceneMesh> meshes) {
+    if (auto idle = m_impl->wait(m_impl->submission); !idle)
+        return idle;
+    return m_impl->upload_meshes(meshes);
 }
 
 } // namespace mj

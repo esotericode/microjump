@@ -1,6 +1,6 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
     movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp frame_pacing_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp
-    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp)
+    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp lantern_isles_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
@@ -94,6 +94,22 @@ if(MJ_SMOKE_TESTS)
         "-DCAPTURE_TICK=2899" "-DCAPTURE_OUT=${captures}/m4-moves.png"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
     add_test(NAME render_playground COMMAND microjump --capture-tick 60 --capture-out "${captures}/playground.png")
+    add_test(NAME render_isles COMMAND microjump --level "${PROJECT_SOURCE_DIR}/assets/levels/lantern-isles.json"
+        --capture-tick 60 --capture-out "${captures}/isles.png")
+    add_test(NAME isles_pixels COMMAND microjump_capture_check --scene "${captures}/isles.png")
+    set_tests_properties(isles_pixels PROPERTIES DEPENDS render_isles)
+    # Through the playground's gate to the isles and back: mesh swaps under validation.
+    add_test(NAME travel_gates COMMAND ${CMAKE_COMMAND}
+        "-DGAME=$<TARGET_FILE:microjump>" "-DEXTRA=--travel-test"
+        "-DEXPECTED=Traveled through 'To the Lantern Isles' to lantern-isles.*Traveled through 'Back to the playground' to microjump-playground"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
+    # The pier's long leap through the whole game, landing on Lantern Isle with its spark.
+    add_test(NAME replay_isles_leap COMMAND ${CMAKE_COMMAND}
+        "-DGAME=$<TARGET_FILE:microjump>"
+        "-DLEVEL=${PROJECT_SOURCE_DIR}/assets/levels/lantern-isles.json"
+        "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/isles-long-leap.mjr"
+        "-DEXPECTED=Replay finished: tick 628, feet [(][^,]*, -3[.]99[0-9]*, [^)]*[)], state Run, grounded, checkpoint 5, sparks 1/10"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
     add_test(NAME render_spark_pickup COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>"
         "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/spark-invitation.mjr"
@@ -111,12 +127,12 @@ if(MJ_SMOKE_TESTS)
         "${captures}/resized.png" "${captures}/replay.png")
     set_tests_properties(render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick capture_pixels
         render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
-        render_spark_pickup replay_spark_invitation PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
+        render_spark_pickup replay_spark_invitation render_isles isles_pixels travel_gates replay_isles_leap PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
     set_tests_properties(capture_pixels PROPERTIES DEPENDS "render_capture;render_camera;render_resize;render_replay")
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         set_tests_properties(gamepad_window vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
             capture_pixels render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
-            render_spark_pickup replay_spark_invitation particle_render PROPERTIES ENVIRONMENT
+            render_spark_pickup replay_spark_invitation particle_render render_isles isles_pixels travel_gates replay_isles_leap PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()
 endif()

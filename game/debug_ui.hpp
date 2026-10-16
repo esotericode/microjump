@@ -42,6 +42,14 @@ struct DiagnosticsControls {
 void movement_overlay(const Simulation &simulation, const SessionStatus &status);
 // Gameplay progress stays visible when F1 diagnostics are closed.
 void collectible_hud(const Simulation &simulation, const Level &level);
+// What the gates say: the place you just arrived in, or the gate you are standing near.
+struct TravelNote {
+    std::string title;    // Arrival: the level name. Near a gate: its name.
+    std::string subtitle; // e.g. "Step through to travel" or why a gate is closed.
+    float age = 0;        // Seconds since it appeared; arrival cards fade after a few.
+    bool arrival = false;
+};
+void travel_hud(const TravelNote &note);
 // Live tuning window (F2). Movement edits apply from the next tick, lighting immediately.
 struct TuningPanels {
     LightingControls &lighting;

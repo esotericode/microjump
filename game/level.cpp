@@ -31,6 +31,7 @@ Vec3 linear_color(unsigned int srgb) {
 LevelGeometry build_geometry(const Level &level) {
     LevelGeometry geometry;
     std::vector<bool> wall_flags;
+    std::vector<bool> solid_flags;
     for (const auto &shape : level.shapes) {
         geometry.mesh.surface = shape.surface;
         switch (shape.kind) {
@@ -44,12 +45,25 @@ LevelGeometry build_geometry(const Level &level) {
             geometry.mesh.add_cylinder(shape.center, shape.size.x * 0.5F, shape.size.y,
                                        shape.color);
             break;
+        case ShapeKind::ellipsoid:
+            geometry.mesh.add_ellipsoid({shape.center, shape.size, shape.color, shape.yaw});
+            break;
+        case ShapeKind::cone:
+            geometry.mesh.add_cone(
+                {shape.center, shape.size, shape.color, shape.yaw, shape.taper, shape.tip_down});
+            break;
         }
         wall_flags.resize(geometry.mesh.vertices.size() / 3, shape.wall_jump);
+        solid_flags.resize(geometry.mesh.vertices.size() / 3, shape.solid);
     }
-    auto triangles = geometry.mesh.triangles();
-    for (std::size_t i = 0; i < triangles.size(); ++i)
-        triangles[i].wall_jump = wall_flags[i];
+    std::vector<Triangle> triangles;
+    const auto drawn = geometry.mesh.triangles();
+    for (std::size_t i = 0; i < drawn.size(); ++i) {
+        if (!solid_flags[i])
+            continue;
+        triangles.push_back(drawn[i]);
+        triangles.back().wall_jump = wall_flags[i];
+    }
     geometry.collision = CollisionWorld(triangles);
     return geometry;
 }

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "name": "microjump-playground",
+  "title": "The Playground",
   "kill_height": -25.0,
   "shapes": [
     {"kind": "box", "center": [0.0, -0.5, 0.0], "size": [230, 1, 230], "color": "#c2cac6", "yaw": 0.0, "material": {"roughness": 0.8500000238418579, "metallic": 0.0}},
@@ -291,5 +292,9 @@
     {"name": "Slope and step course", "center": [60, 0, 31], "radius": 27},
     {"name": "Lighting pavilion", "center": [30, 0, 30], "radius": 15},
     {"name": "Yard slopes", "center": [23, 0, -10], "radius": 16}
+  ],
+  "portals": [
+    {"name": "To the Lantern Isles", "position": [6.5, 1.6, 4.5], "radius": 1.1, "yaw": -2.06,
+     "level": "lantern-isles.json", "checkpoint": 0}
   ]
 }

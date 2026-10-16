@@ -3,6 +3,7 @@
 #include <mj/collision/character_mover.hpp>
 #include <mj/scene/mesh.hpp>
 
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -229,4 +230,38 @@ TEST_CASE("character mover walks, slides, steps and respects the slope limit") {
         const auto result = walk(world, body, {0.075F, 0, 0}, 60);
         CHECK_FALSE(result.grounded);
     }
+}
+
+TEST_CASE("a V between faces too steep to stand on holds a falling capsule; a steep one doesn't") {
+    const mj::MoveSettings settings;
+    // Two 60-degree slopes meeting along the X axis: each alone is too steep to stand on.
+    const float rise = 2 * std::tan(mj::k_pi / 3);
+    const auto valley = world_of({}, {{{0, rise * 0.5F, -1}, {6, rise, 2}, {1, 1, 1}, 0},
+                                      {{0, rise * 0.5F, 1}, {6, rise, 2}, {1, 1, 1}, mj::k_pi}});
+    mj::Capsule shape{{0, 1.5F, 0.05F}, 0.35F, 1.6F};
+    bool held = false;
+    for (int step = 0; step < 60 && !held; ++step) {
+        const auto moved = mj::move_character(valley, settings, {shape, {0, -0.05F, 0}, false});
+        shape.base = moved.base;
+        held = moved.grounded;
+    }
+    REQUIRE(held);
+    const float resting = shape.base.y;
+    CHECK(resting > 0.0F); // Wedged between the slopes, above the crease line itself.
+    // Standing there stays supported (so the player can jump out) and does not sink.
+    const auto standing = mj::move_character(valley, settings, {shape, {0, 0, 0}, true});
+    CHECK(standing.grounded);
+    CHECK(standing.base.y == doctest::Approx(resting).epsilon(0.01));
+    // Pushing along the valley still walks along it.
+    const auto along = mj::move_character(valley, settings, {shape, {0.1F, 0, 0}, true});
+    CHECK(along.base.x > shape.base.x + 0.05F);
+
+    // A corner between two walls is a vertical crease: falling into it keeps falling.
+    const auto corner = world_of(
+        {k_floor, {{-1, 5, 0}, {0.5F, 10, 6}, {1, 1, 1}}, {{0, 5, -1}, {6, 10, 0.5F}, {1, 1, 1}}});
+    mj::Capsule wedged{{-0.39F, 4, -0.39F}, 0.35F, 1.6F};
+    const auto fell =
+        mj::move_character(corner, settings, {wedged, {-0.05F, -0.2F, -0.05F}, false});
+    CHECK_FALSE(fell.grounded);
+    CHECK(fell.base.y < 3.85F);
 }

@@ -34,6 +34,13 @@ From the plaza:
 
 Street lamps come on at dusk. F2 lets you change the time of day.
 
+**Somewhere else:** the glowing ring just right of spawn is a gate to **the Lantern
+Isles**, floating islands above the clouds at golden hour. Hop the stepping stones to
+the blossom grove and climb its canopies, kick up the crystal spire, climb the ruins'
+columns, or run the long pier and long-jump the gap at its end. Ten more sparks wait
+there. The gate on the first island brings you home, and each place keeps its sparks
+until you quit.
+
 **Follow the golden sparks.** There are 16 to find. The first waits just ahead of
 spawn; others reward the plaza crown, small stairs and ramp, the winding platform
 route, each narrowing western route, both wall decks, the summit, sprint lane and a

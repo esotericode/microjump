@@ -55,7 +55,9 @@ transforms that is the rotation itself. There are two CPU frame slots. Their com
 tracked on one timeline semaphore, and each swapchain image has its own present
 semaphore. A replaced resource, such as an old shadow map, is retired until the timeline
 shows that no in-flight frame still uses it. Only resizes and swapchain rebuilds wait
-for the whole device.
+for the whole device, plus `Renderer::set_meshes`, which replaces every mesh when you
+travel through a gate. It waits for the frames in flight, then uploads the new vertex
+buffer: a loading hitch, not a per-frame tool.
 
 **Sun shadows.** A single orthographic map follows the player, snapped to whole texels
 so that edges don't crawl. It uses PCF with hardware bilinear compares, constant and
@@ -120,6 +122,10 @@ one CSV row per frame. See [testing](testing.md).
   - Ledges up to 0.35 m are stepped, but only onto walkable faces no higher than the
     step height.
   - Ground snap (0.3 m) keeps the capsule on stairs and descending slopes.
+  - Two faces too steep to stand on can still hold a falling capsule between them: in a
+    V between slopes, or a slope and a wall. When the line where they meet is no
+    steeper than a walkable slope, the crease counts as flat ground, so you can jump
+    out. A steeper crease, like a corner between walls, still lets you fall.
   - Faces can carry a wall-kick designation from the level.
 
 ## Platform and input
@@ -137,8 +143,16 @@ move and look sticks.
 
 ## Levels
 
-`mj/scene/` generates box, ramp, cylinder and bulb meshes. The game turns a JSON level
-into one world mesh plus its collision triangles; see [levels](levels.md).
+`mj/scene/` generates box, ramp, cylinder, ellipsoid, cone and capsule meshes. Ellipsoids
+are smooth, with normals scaled by the inverse of their radii. Cones are faceted, with
+twelve flat sides that read as cut rock. The game turns a JSON level into one world mesh
+plus collision triangles from its solid shapes. Drawn-only shapes, like clouds and grass,
+add only to the mesh. See [levels](levels.md).
+
+Gates swap the whole level at runtime. `main.cpp` keeps the level, its geometry and the
+simulation together in one object, and replaces it between frames. A travel loads the
+JSON and builds the geometry, hands the new world mesh to `Renderer::set_meshes`, snaps
+the character, and sets the level's time of day.
 
 ## Known limits
 

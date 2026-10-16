@@ -33,6 +33,24 @@ struct Ramp {
     Vec3 color;
     float yaw = 0;
 };
+// Smooth ellipsoid filling its box: `size` holds the three diameters.
+struct Ellipsoid {
+    Vec3 center;
+    Vec3 size;
+    Vec3 color;
+    float yaw = 0;
+};
+// Faceted cone or frustum filling its box. `size` X and Z are the wide end's diameters and
+// `taper` is the narrow end's diameter as a fraction of them (0 makes a point). The narrow
+// end is at the top unless `tip_down` (a floating island's rocky underside).
+struct Cone {
+    Vec3 center;
+    Vec3 size;
+    Vec3 color;
+    float yaw = 0;
+    float taper = 0;
+    bool tip_down = false;
+};
 struct CapsuleMesh {
     Vec3 base; // Lowest point.
     float radius;
@@ -45,6 +63,8 @@ struct SceneMesh {
     void add_box(const Box &box);
     void add_ramp(const Ramp &ramp);
     void add_cylinder(Vec3 center, float radius, float height, Vec3 color);
+    void add_ellipsoid(const Ellipsoid &ellipsoid);
+    void add_cone(const Cone &cone);
     void add_capsule(const CapsuleMesh &capsule);
     // Every three vertices form one outward-facing triangle; collision uses the same surfaces.
     [[nodiscard]] std::vector<Triangle> triangles() const;

@@ -14,6 +14,7 @@ struct Slider {
     const MoveSettings &settings;
     Capsule shape;
     MoveResult result{};
+    bool held_by_crease = false; // Air slide: resting in a V between faces too steep to stand on.
 
     [[nodiscard]] Capsule at(Vec3 base) const {
         Capsule moved = shape;
@@ -28,9 +29,12 @@ struct Slider {
     // other contacts remove the blocked component. In ground mode those contacts are treated as
     // vertical walls so steep slopes cannot be climbed by sliding.
     Vec3 slide(Vec3 base, Vec3 delta, SlideMode mode) {
+        const Vec3 start = base;
         const Vec3 original = delta;
         std::array<Vec3, 3> walls{};
         std::size_t wall_count = 0;
+        std::array<Vec3, 2> blockers{}; // The first two unwalkable faces met while falling.
+        std::size_t blocker_count = 0;
         auto respect_walls = [&](Vec3 motion) {
             for (std::size_t i = 0; i < wall_count; ++i) {
                 const float into = dot(motion, walls[i]);
@@ -57,6 +61,9 @@ struct Slider {
                 const Vec3 along = respect_walls(horizontal(remaining));
                 delta = along + Vec3{0, -(normal.x * along.x + normal.z * along.z) / normal.y, 0};
             } else {
+                if (mode == SlideMode::air && original.y < 0 && normal.y > -0.3F &&
+                    blocker_count < blockers.size())
+                    blockers[blocker_count++] = normal;
                 const Vec3 flat = horizontal(normal);
                 const bool steep_floor = normal.y > 0 && length_squared(flat) > 1.0e-6F;
                 if (normal.y < -0.3F) {
@@ -94,6 +101,21 @@ struct Slider {
                                       : dot(delta, original) <= 0;
             if (reversed)
                 break;
+        }
+        // Each face alone would slide a falling capsule down, but two faces leaning together
+        // can hold it: in a V between slopes, or between a slope and a wall. Without support it
+        // would hang there unable to jump, so a crease whose line is no steeper than a walkable
+        // slope counts as flat ground. A steeper crease is left alone.
+        if (mode == SlideMode::air && !result.grounded && blocker_count == 2 &&
+            start.y - base.y < -original.y * 0.5F) {
+            const Vec3 line = cross(blockers[0], blockers[1]);
+            if (length_squared(line) > 1.0e-6F &&
+                std::abs(normalized(line).y) <= std::sin(settings.max_slope)) {
+                held_by_crease = true;
+                result.grounded = true;
+                result.ground_normal = {0, 1, 0};
+                result.ground_face_normal = {0, 1, 0};
+            }
         }
         return base;
     }
@@ -143,8 +165,17 @@ MoveResult move_character(const CollisionWorld &world, const MoveSettings &setti
     const Vec3 direction = normalized(flat);
     Slider plain{world, settings, shape};
     Vec3 base = plain.slide(start, flat, SlideMode::ground);
-    if (!plain.snap_down(base, settings.ground_snap))
-        plain.result.grounded = false;
+    if (!plain.snap_down(base, settings.ground_snap)) {
+        // Standing in a crease: no face below is walkable, but settling back in still holds.
+        Slider settle{world, settings, shape};
+        const Vec3 settled = settle.slide(base, {0, -settings.skin * 2, 0}, SlideMode::air);
+        plain.result.grounded = settle.held_by_crease;
+        if (settle.held_by_crease) {
+            base = settled;
+            plain.result.ground_normal = settle.result.ground_normal;
+            plain.result.ground_face_normal = settle.result.ground_face_normal;
+        }
+    }
     plain.result.base = base;
     const float plain_progress = horizontal_progress(start, base, direction);
     if (!plain.result.hit_wall || plain_progress >= length(flat) - 1.0e-5F)
