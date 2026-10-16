@@ -12,6 +12,8 @@ Vulkan 1.3; nothing else to install.
 | Space | South button | Jump (hold for height) |
 | Space again at a purple wall | South button | Wall kick; alternate walls to climb |
 | Shift + Space while running | Left shoulder + jump | Long jump |
+| Space again as you land | South again as you land | Double jump; once more while moving: triple jump |
+| E or left click | West button (X, Square, Y) | Dive; jump while sliding to roll out |
 | Ctrl | Right shoulder | Walk |
 | Mouse | Right stick | Camera; click the right stick to recenter |
 | R | Back | Back to the last checkpoint (teal pads) |

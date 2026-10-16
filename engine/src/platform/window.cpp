@@ -53,7 +53,12 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
             input.jump_pressed = input.jump_pressed || key == SDLK_SPACE;
             if (key == SDLK_SPACE && (event.key.mod & SDL_KMOD_SHIFT) != 0)
                 input.long_jump_held = true; // Keep a complete Shift+Space tap in one poll.
+            input.dive_pressed = input.dive_pressed || key == SDLK_E;
         }
+        // A click that captures the mouse is not a dive; only clicks while playing count.
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT &&
+            m_mouse_captured)
+            input.dive_pressed = true;
         m_gamepad.process_event(event);
     }
     const auto flags = SDL_GetWindowFlags(m_window);
@@ -126,6 +131,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     input.jump_held = input.jump_held || pad.jump_held;
     input.jump_pressed = input.jump_pressed || pad.jump_pressed;
     input.long_jump_held = input.long_jump_held || pad.long_jump_held;
+    input.dive_pressed = input.dive_pressed || pad.dive_pressed;
     input.walk_held = input.walk_held || pad.walk_held;
     input.reset_pressed = input.reset_pressed || pad.reset_pressed;
     input.recenter_pressed = pad.recenter_pressed;

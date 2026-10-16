@@ -44,6 +44,9 @@ class CharacterAnimator {
         float blink = 0;     // 0 open .. 1 shut.
         float breath = 0;    // Idle breathing, -1 .. 1.
         float glow = 0;      // Antenna flash after a clean hop or a found spark.
+        float flip = 0;      // Forward somersault (triple jump, rollout), radians.
+        float tuck = 0;      // Knees up for a somersault, 0 .. 1.
+        float slide = 0;     // Lying on the belly after a dive, 0 .. 1.
         Vec3 antenna;        // Lag of the antenna tip, character space.
     };
 
@@ -94,6 +97,8 @@ class CharacterAnimator {
     MoveState m_state = MoveState::idle;
     bool m_diving = false; // From a long-jump takeoff until the landing or a wall kick.
     Vec3 m_kick_normal;
+    float m_flip_target = 0; // The somersault in progress ends here...
+    float m_flip_rate = 0;   // ...turning at this many radians per second.
     float m_squash_rate = 0;
     Vec3 m_antenna_rate;
     float m_clock = 0; // Seconds since the last snap, wrapped; drives blinks and breathing.

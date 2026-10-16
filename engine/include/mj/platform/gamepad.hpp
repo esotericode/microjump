@@ -20,6 +20,7 @@ enum class GamepadFamily : std::uint8_t { generic, xbox, playstation, nintendo }
 struct GamepadLabels {
     std::string_view jump = "South";
     std::string_view long_jump = "Left shoulder";
+    std::string_view dive = "West";
     std::string_view walk = "Right shoulder";
     std::string_view recenter = "Right stick";
     std::string_view respawn = "Back";
@@ -38,6 +39,7 @@ struct GamepadFrame {
     bool jump_held = false;
     bool jump_pressed = false;
     bool long_jump_held = false; // Includes the modifier at a short jump press.
+    bool dive_pressed = false;
     bool walk_held = false;
     bool reset_pressed = false;
     bool recenter_pressed = false;

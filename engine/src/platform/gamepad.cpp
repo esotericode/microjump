@@ -51,11 +51,11 @@ GamepadLabels gamepad_labels(GamepadFamily family, std::string_view jump) {
     labels.jump = jump;
     switch (family) {
     case GamepadFamily::xbox:
-        return {jump, "LB", "RB", "RS (click)", "View", "Menu"};
+        return {jump, "LB", "X", "RB", "RS (click)", "View", "Menu"};
     case GamepadFamily::playstation:
-        return {jump, "L1", "R1", "R3", "Share/Create", "Options"};
+        return {jump, "L1", "Square", "R1", "R3", "Share/Create", "Options"};
     case GamepadFamily::nintendo:
-        return {jump, "L", "R", "R stick (click)", "-", "+"};
+        return {jump, "L", "Y", "R", "R stick (click)", "-", "+"};
     case GamepadFamily::generic:
         break;
     }
@@ -133,6 +133,7 @@ void Gamepad::process_event(const SDL_Event &event) {
         m_pending.jump_pressed = true;
         m_pending.long_jump_held = m_pending.long_jump_held || m_long_jump_down;
     }
+    m_pending.dive_pressed = m_pending.dive_pressed || button == SDL_GAMEPAD_BUTTON_WEST;
     m_pending.reset_pressed = m_pending.reset_pressed || button == SDL_GAMEPAD_BUTTON_BACK;
     m_pending.recenter_pressed =
         m_pending.recenter_pressed || button == SDL_GAMEPAD_BUTTON_RIGHT_STICK;

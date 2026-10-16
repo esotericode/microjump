@@ -8,7 +8,20 @@
 
 namespace mj::game {
 
-enum class MoveState : std::uint8_t { idle, run, skid, jump, wall_jump, long_jump, fall };
+enum class MoveState : std::uint8_t {
+    idle,
+    run,
+    skid,
+    jump,
+    wall_jump,
+    long_jump,
+    fall,
+    double_jump,
+    triple_jump,
+    dive,       // Airborne lunge, from a run or out of a jump.
+    dive_slide, // Grounded belly slide after a dive lands.
+    rollout,    // The hop out of a belly slide.
+};
 [[nodiscard]] const char *to_string(MoveState state);
 
 // How the last grounded takeoff was timed relative to its landing (see docs/movement.md).
@@ -58,6 +71,23 @@ struct PlayerTuning {
     float wall_jump_up_speed = 12.0F;
     float wall_contact_grace = 0.1F;
     float wall_recovery_time = 0.14F; // Brief steering lock guarantees separation.
+    // Jump chain, after Super Mario 64: jump again within the window after landing a jump for
+    // a double jump; again after that, while moving, for a triple jump (a fixed arc).
+    float jump_chain_window = 0.15F;    // SM64: 5 frames at 30 Hz.
+    float double_jump_scale = 1.2F;     // Launch speed relative to a jump (SM64: 52 + 8 / 42 + 8).
+    float triple_jump_scale = 1.38F;    // SM64: 69 / 50.
+    float triple_jump_min_speed = 5.6F; // SM64: forward speed above 20 of 32.
+    // Dive: a lunge that adds speed, then a belly slide you can roll out of.
+    float dive_min_speed = 6.0F;   // Ground speed to dive from a run; any speed from a jump.
+    float dive_boost = 4.2F;       // Added to forward speed (SM64: 15 of 32)...
+    float dive_max_speed = 13.5F;  // ...up to this (SM64: 48); faster momentum is kept.
+    float dive_up_speed = 3.0F;    // Lift when diving from the ground.
+    float dive_air_control = 0.3F; // Fraction of normal air steering while diving.
+    float dive_slide_friction = 9.0F;
+    float dive_slide_turn_rate = 1.5F;
+    float dive_getup_time = 0.3F;  // Shortest belly slide before standing up...
+    float dive_getup_speed = 1.2F; // ...once it has slowed below this.
+    float rollout_up_speed = 7.5F; // SM64: 30 of a 50 jump.
     // Body and collision.
     float radius = 0.35F;
     float height = 1.6F;
@@ -94,6 +124,8 @@ struct PlayerState {
     float ground_time = 0;  // Since the last landing.
     float press_age = 0;    // Since the first press of the current buffered press chain.
     HopTiming last_hop = HopTiming::none;
+    std::uint8_t jump_chain = 0; // The last takeoff: 1 jump, 2 double, 3 triple, 0 anything else.
+    bool dive_used = false;      // One dive per airtime.
 };
 
 struct PlayerPose {
@@ -126,6 +158,9 @@ class Player {
     void air_motion(Steering steering, bool jump_held, float dt);
     void hop_timing();
     bool wall_jump(bool requested, bool touching = false);
+    [[nodiscard]] bool can_dive() const;
+    void dive();
+    void rollout();
 
     PlayerState m_current;
     PlayerPose m_previous;

@@ -38,6 +38,35 @@ and a 0.14 s steering lock to separate from the wall.
 **Long jump.** Running at 6 m/s or more, hold Shift or the left shoulder and press jump.
 The jump is fast and low on a fixed arc: `run_speed × 1.8` forward and 8.5 m/s up.
 
+**Double and triple jumps.** These follow Super Mario 64 (`act_double_jump` and
+`act_triple_jump` in the decompilation).
+- Jump again within `jump_chain_window` (0.15 s, SM64's five frames) of landing a jump
+  for a double jump. It launches 1.2× as fast and goes about 1.44× as high, 3.8 m from a
+  run. Like a jump, releasing early cuts it short.
+- Land that and jump again while moving at 5.6 m/s or more for a triple jump: 1.38× the
+  launch speed and about 1.9× the height, 5 m. It's a fixed arc with a somersault.
+- Waiting longer, a long jump, a wall kick, a dive or walking off a ledge starts the chain
+  over.
+- Standing still, the third jump is another double.
+
+**Dive.** Press E, the left mouse button or the West face button.
+- **Where from.** A dive comes from a run of at least 6 m/s, or out of a jump, double,
+  triple, fall or wall kick. Long jumps are committed and can't dive, and there is one
+  dive per airtime.
+- **Speed.** It lunges along your facing, adding `dive_boost` (4.2 m/s, SM64's 15 of 32)
+  up to `dive_max_speed` (13.5 m/s). Faster momentum is never lost.
+- **Arc.** From the ground it lifts 3 m/s. In the air it keeps your vertical speed, so
+  it stretches a jump rather than lifting it. Steering drops to 30%.
+- **Belly slide.** A dive lands on its belly and slides, slowing at 9 m/s² and steering
+  only gently. It stands up once slow.
+- **Rollout.** Jump or dive during the slide to roll out: a small fixed hop (7.5 m/s up,
+  about 0.9 m) at the slide's speed. A jump pressed while still diving rolls out the
+  instant you land.
+- **Speed tech.** Dive, roll out and hop cleanly to carry about 13 m/s, much like
+  SM64's dive-rollouts.
+
+![A triple jump's somersault, a rollout, a dive out of a jump and a belly slide](captures/sm64-moves.png)
+
 ## Momentum
 
 Speed above `run_speed` is **momentum**. You build it on purpose, and it isn't free.
@@ -102,15 +131,15 @@ from events until the next tick, so a tap shorter than a frame still counts.
 The format is text, run-length encoded, with shortest round-trip floats:
 
 ```text
-microjump-replay 3
+microjump-replay 4
 tick-rate 120
 level microjump-playground
 # count move_x move_y camera_yaw camera_pitch buttons
 30 0 0 0 -0.32 0
 ```
 
-- **Format versions:** version 2 added the long-jump modifier bit, and version 3 added
-  the `level` line. A named recording is refused on a different level. Older files still
+- **Format versions:** version 2 added the long-jump modifier bit, version 3 added the
+  `level` line, and version 4 added the dive bit (16). A named recording is refused on a different level. Older files still
   load, with a note.
 - **Tuning:** tuning isn't recorded, so recordings assume default tuning.
 - **Exactness:** results are bit-identical within one build. Across compilers the last

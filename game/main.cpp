@@ -244,10 +244,9 @@ int run(const LaunchOptions &options) {
             log("Traveled through '" + portal.name + "' to " + world->level.name);
             return {};
         };
-        log("M4 playground ready: WASD move, Space jump/wall kick, Shift+jump long jump, R "
-            "respawn, F1 overlay, F2 "
-            "tuning, "
-            "F3 free camera.");
+        log("Ready: WASD move, Space jump (again on landing: double, triple)/wall kick, "
+            "Shift+jump long jump, E or click dive (jump to roll out), R respawn, F1 overlay, "
+            "F2 tuning, F3 free camera.");
         while (true) {
             if (pending_travel) {
                 if (auto traveled = travel(*pending_travel); !traveled) {
@@ -367,6 +366,8 @@ int run(const LaunchOptions &options) {
                 }
                 if (input.reset_pressed)
                     pending_buttons |= input_button::reset_pressed;
+                if (input.dive_pressed)
+                    pending_buttons |= input_button::dive_pressed;
             }
             std::uint32_t frame_ticks = 0;
             const auto simulation_started = std::chrono::steady_clock::now();
@@ -712,10 +713,11 @@ int main(int argc, char *argv[]) {
             "  --frame-log PATH  Write per-frame timing (CSV) for frame-pacing diagnostics.\n"
             "  --resize-test / --camera-test / --travel-test  Scripted render correctness checks.\n"
             "  Debug builds require Vulkan validation layers.\n"
-            "  WASD move, Space jump/wall kick, Shift+jump long jump, Ctrl walk, mouse look, R "
-            "respawn, F1 overlay,\n"
-            "  F2 tuning, F3 free camera, Escape exit. Gamepad: sticks, South jump, LB+jump long "
-            "jump, R3 center, Back respawn, Start tuning.");
+            "  WASD move, Space jump/wall kick, Shift+jump long jump, E or left click dive, Ctrl "
+            "walk, mouse look,\n"
+            "  R respawn, F1 overlay, F2 tuning, F3 free camera, Escape exit. Gamepad: sticks, "
+            "South jump, West dive,\n"
+            "  LB+jump long jump, R3 center, Back respawn, Start tuning.");
         return 0;
     }
     return mj::game::run(*options);
