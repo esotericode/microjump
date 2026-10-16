@@ -11,12 +11,12 @@ namespace mj::game {
 enum class MoveState : std::uint8_t { idle, run, skid, jump, wall_jump, long_jump, fall };
 [[nodiscard]] const char *to_string(MoveState state);
 
-// How the last grounded takeoff was timed relative to its landing (see docs/movement-momentum.md).
+// How the last grounded takeoff was timed relative to its landing (see docs/movement.md).
 enum class HopTiming : std::uint8_t { none, clean, early, late };
 [[nodiscard]] const char *to_string(HopTiming timing);
 
 // Every movement value in one place. Units: meters, seconds, radians. Edited live in the
-// tuning window (F2); see docs/m2-movement.md for what each value does.
+// tuning window (F2); see docs/movement.md for what each value does.
 struct PlayerTuning {
     // Ground.
     float run_speed = 9.0F;

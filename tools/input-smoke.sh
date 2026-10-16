@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run inside Xvfb. Drives the game with real X11 keyboard/mouse events while recording the
-# simulation input, so the recording can be replayed and compared (see docs/m2-movement.md).
+# simulation input, so the recording can be replayed and compared (see docs/testing.md).
 set -euo pipefail
 task_executable="${1:?Pass the built microjump executable}"
 task_output="${2:?Pass a PNG output path}"

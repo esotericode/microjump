@@ -184,7 +184,7 @@ int run(const LaunchOptions &options) {
             "tuning, "
             "F3 free camera.");
         while (true) {
-            // Input and time are sampled once the display has caught up (docs/frame-pacing.md).
+            // Input and time are sampled once the display has caught up (docs/engine.md).
             if (auto paced = (*renderer)->wait_for_display(diagnostics.display_pacing); !paced) {
                 log(paced.error().message);
                 return 1;
