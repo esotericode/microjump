@@ -1,0 +1,8 @@
+microjump-replay 3
+tick-rate 120
+level microjump-playground
+# Approach the first spark from the default spawn, then let the pickup effect play.
+# count move_x move_y camera_yaw camera_pitch buttons
+30 0 0 0 -0.32 0
+100 0 1 0 -0.32 0
+40 0 0 0 -0.32 0

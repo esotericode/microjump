@@ -12,6 +12,23 @@ It is 230 × 230 m on one connected ground surface, made of 229 primitives, with
 checkpoints (teal pads) and 16 lights. Spawn is at (0, 8) facing north (−Z). The F1
 overlay shows the current zone.
 
+Sixteen collectible golden sparks give the routes destinations. The first is five
+metres ahead of spawn, with easy climbs on the plaza crown, small stair landing and
+yard ramp. The original winding platform route has a midway reward and a finish
+reward. Each of the four narrowing western routes has a spark on its final platform;
+the finish deck's return ramp also offers a gentler way to explore them. Both wall
+decks, the summit, the sprint lane's midpoint and far end, and the pavilion interior
+hold the rest. Sparks hover about one metre above a walkable landing, within reach
+of the standing player capsule.
+
+The **SPARKS** HUD displays progress, the latest find's name and completion. Collected
+sparks stay gone across checkpoint respawns within the current session; restarting
+starts a fresh hunt. F1 toggles diagnostics while leaving progress visible, and
+`--hide-overlay` hides both for captures. Collectibles do not change collision or
+movement, so existing recordings retain their paths.
+
+![First light collected, with the hunt HUD and the next sparks visible](captures/spark-pickup.png)
+
 | Zone | Center (X, Z) | What's there |
 | --- | --- | --- |
 | Central plaza | 0, 0 | Open ground with a tiered centerpiece, for running, turning and camera work. |
@@ -42,6 +59,7 @@ recordings and the lighting tests use it.
      "yaw":0, "material":{"roughness":0.45,"metallic":0}}
   ],
   "checkpoints": [{"position":[0,0.01,4], "yaw":0}],
+  "collectibles": [{"name":"First light", "position":[0,1,0], "radius":0.65}],
   "lights": [{"position":[3,4,1], "color":[1,0.7,0.4], "intensity":30, "range":12,
               "night_only":true}],
   "zones": [{"name":"Plaza", "center":[0,0,0], "radius":12}]
@@ -69,6 +87,7 @@ recordings and the lighting tests use it.
 | `checkpoints` | Required, 1–64 entries, each with `position` (capsule feet) and an optional `yaw`. The first one is the spawn point. |
 | `lights` | Optional, up to 16 entries. Each needs `position` and `color`; the extra fields are below. |
 | `zones` | Optional, up to 32 named regions, each with `name`, `center` and an optional `radius` (default 20 m). |
+| `collectibles` | Optional, up to 128 golden sparks. Each needs a unique `name` and a `position` (visual centre, within ±4096 m). `radius` is the pickup radius, 0.1–2 m, default 0.65 m; the player's capsule also contributes its own radius. Names use the same 1–80-byte rule as the level name. An omitted or empty array gives no collectible HUD. |
 
 | Light field | Meaning and defaults |
 | --- | --- |
@@ -82,7 +101,8 @@ recordings and the lighting tests use it.
 values and too many elements are all rejected with a message before any window opens.
 Files are limited to 2 MiB and 32 levels of nesting. Nothing repairs geometry, so place
 each checkpoint just above a safe, walkable surface. Tests settle the player on every
-playground checkpoint.
+playground checkpoint and spark landing, check pickup clearance and exercise the
+invitation, sprint, stair and platform routes.
 
 **Editing tips:** iterate with `--level` on your own copy. Pair `--capture-tick` with
 `--hide-overlay` for before/after screenshots. Recordings are tied to the level name, so

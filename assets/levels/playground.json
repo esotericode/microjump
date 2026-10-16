@@ -265,6 +265,24 @@
     {"position": [13, 4.4, -70], "color": [1, 0.72, 0.38], "intensity": 32, "range": 18, "night_only": true},
     {"position": [13, 4.4, -102], "color": [1, 0.72, 0.38], "intensity": 32, "range": 18, "night_only": true}
   ],
+  "collectibles": [
+    {"name": "First light", "position": [0, 1, 3]},
+    {"name": "Plaza crown", "position": [0, 2.8, -6]},
+    {"name": "Ramp lookout", "position": [26, 4, -15]},
+    {"name": "Little stair", "position": [16, 3.5, 11]},
+    {"name": "Turning point", "position": [-17.5, 3, -12]},
+    {"name": "Old route finish", "position": [-5, 4.8, -30.2]},
+    {"name": "Broad strides", "position": [-48, 5.8, -52]},
+    {"name": "Steady steps", "position": [-62, 5.8, -52]},
+    {"name": "Narrow way", "position": [-76, 5.8, -52]},
+    {"name": "Needle thread", "position": [-90, 5.8, -52]},
+    {"name": "Wallflower", "position": [61.5, 7, -58]},
+    {"name": "High wallflower", "position": [78, 9, -56]},
+    {"name": "Summit sun", "position": [67, 7, 46]},
+    {"name": "Quiet glow", "position": [30, 1.3, 30]},
+    {"name": "Second wind", "position": [7, 1.02, -60]},
+    {"name": "Last light", "position": [7, 1, -109]}
+  ],
   "zones": [
     {"name": "Central plaza", "center": [0, 0, 0], "radius": 22},
     {"name": "Sprint lane", "center": [7, 0, -66], "radius": 46},

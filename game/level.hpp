@@ -36,6 +36,12 @@ struct LevelZone {
     float radius = 20;
 };
 
+struct Collectible {
+    std::string name;
+    Vec3 position; // Fixed center; visual animation never moves the pickup trigger.
+    float radius = 0.65F;
+};
+
 // Placement data loaded from a versioned JSON level file.
 struct Level {
     std::string name;
@@ -44,6 +50,7 @@ struct Level {
     std::vector<LightFixture> lights;
     float kill_height = -25;
     std::vector<LevelZone> zones; // Optional named regions for diagnostics and playtest directions.
+    std::vector<Collectible> collectibles; // Optional sparks, identified by their array index.
 };
 
 struct LevelGeometry {

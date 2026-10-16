@@ -34,6 +34,14 @@ From the plaza:
 
 Street lamps come on at dusk. F2 lets you change the time of day.
 
+**Follow the golden sparks.** There are 16 to find. The first waits just ahead of
+spawn; others reward the plaza crown, small stairs and ramp, the winding platform
+route, each narrowing western route, both wall decks, the summit, sprint lane and a
+quiet corner in the pavilion. Walk or jump into them. The **SPARKS** counter shows
+progress, names each find and celebrates when you have them all. Checkpoint respawns
+keep your finds; restarting the game begins a fresh hunt. F1 leaves this counter
+visible; `--hide-overlay` hides it along with diagnostics for clean captures.
+
 **Speed is earned.** Long jumps and running downhill make you faster than a run. Jump
 again right as you land (the overlay shows "Clean") to keep that speed. Jumping early,
 mashing, turning hard or running uphill bleeds it away. Chained clean long jumps reach

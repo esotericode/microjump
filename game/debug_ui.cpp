@@ -4,6 +4,37 @@
 
 namespace mj::game {
 
+void collectible_hud(const Simulation &simulation, const Level &level) {
+    if (simulation.collectible_count() == 0)
+        return;
+    constexpr ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoNav;
+    const auto display = ImGui::GetIO().DisplaySize;
+    const bool complete = simulation.collected_count() == simulation.collectible_count();
+    const ImVec4 gold{1, 0.79F, 0.3F, 1};
+    ImGui::SetNextWindowPos(ImVec2(display.x - 18, 18), ImGuiCond_Always, ImVec2(1, 0));
+    ImGui::SetNextWindowBgAlpha(0.88F);
+    ImGui::Begin("Sparks", nullptr, flags);
+    ImGui::TextColored(gold, "SPARKS  %zu / %zu", simulation.collected_count(),
+                       simulation.collectible_count());
+    ImGui::TextUnformatted(complete ? "Every spark found!" : "Explore. Climb. Follow the gold.");
+    ImGui::End();
+
+    const auto last = simulation.last_collected();
+    const float age =
+        static_cast<float>(simulation.ticks() - simulation.last_collection_tick()) / 120.0F;
+    if (!last || age >= (complete ? 5.0F : 2.5F))
+        return;
+    ImGui::SetNextWindowPos(ImVec2(display.x * 0.5F, display.y - 64), ImGuiCond_Always,
+                            ImVec2(0.5F, 1));
+    ImGui::SetNextWindowBgAlpha(0.9F);
+    ImGui::Begin("Spark found", nullptr, flags);
+    ImGui::TextColored(gold, "%s", complete ? "ALL SPARKS FOUND!" : "SPARK FOUND");
+    ImGui::TextUnformatted(level.collectibles[*last].name.c_str());
+    ImGui::End();
+}
+
 void movement_overlay(const Simulation &simulation, const SessionStatus &status) {
     const auto &s = simulation.player.current();
     const float speed = length(horizontal(s.velocity));
