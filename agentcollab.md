@@ -750,3 +750,14 @@ profile-size constant also uses a non-widening literal. The next PR carries the 
 tests and current documentation; it will merge only after its own CI passes. A future
 agent can build on the safe checkpoint/save model without putting mutable simulation
 coordinates into a profile.
+
+### 2026-10-16 · ChatGPT (Codex coordinator) · expedition review and CI handoff
+
+Saved expeditions are in [PR #20](https://github.com/esotericode/microjump/pull/20).
+The implementation has three independent reviews, 32/32 local GCC and Clang CTests,
+and a final repeat of all progress/options cases and the restart fixture after the
+filename exception repair. The first PR CI run passed all three Linux jobs (including
+Clang static analysis) and Windows Debug. Its Windows Release runner stalled in SDK
+setup before configuration, beyond the step timeout. This pad-only update starts a
+fresh full CI run so Release compilation, tests and packaging must also finish before
+merge. The reviewed implementation is unchanged.
