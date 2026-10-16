@@ -112,7 +112,8 @@ int run(const LaunchOptions &options) {
         if (options.shadow_quality)
             lighting.shadows.quality = *options.shadow_quality;
         std::vector<DrawInstance> instances;
-        log("M4 playground ready: WASD move, Space jump, mouse look, R respawn, F1 overlay, F2 "
+        log("M4 playground ready: WASD move, Space jump/wall kick, Shift+jump long jump, R "
+            "respawn, F1 overlay, F2 "
             "tuning, "
             "F3 free camera.");
         while (true) {
@@ -179,10 +180,15 @@ int run(const LaunchOptions &options) {
                 const float scale = input.walk_held ? simulation.player.tuning.walk_fraction : 1;
                 live.move_x = input.move_x * scale;
                 live.move_y = input.move_y * scale;
+                if (input.long_jump_held)
+                    live.buttons |= input_button::long_jump_held;
                 if (input.jump_held)
                     live.buttons |= input_button::jump_held;
-                if (input.jump_pressed)
+                if (input.jump_pressed) {
                     pending_buttons |= input_button::jump_pressed;
+                    if (input.long_jump_held)
+                        pending_buttons |= input_button::long_jump_held;
+                }
                 if (input.reset_pressed)
                     pending_buttons |= input_button::reset_pressed;
             }
@@ -346,8 +352,10 @@ int main(int argc, char *argv[]) {
                 "  --capture-tick N  Capture the exact state at simulation tick N.\n"
                 "  --resize-test / --camera-test  Scripted render correctness checks.\n"
                 "  Debug builds require Vulkan validation layers.\n"
-                "  WASD move, Space jump, Ctrl walk, mouse look, R respawn, F1 overlay,\n"
-                "  F2 tuning, F3 free camera, Escape exit. Gamepad: sticks, A jump, Back respawn.");
+                "  WASD move, Space jump/wall kick, Shift+jump long jump, Ctrl walk, mouse look, R "
+                "respawn, F1 overlay,\n"
+                "  F2 tuning, F3 free camera, Escape exit. Gamepad: sticks, A jump, LB+A long "
+                "jump, Back respawn.");
         return 0;
     }
     return mj::game::run(*options);

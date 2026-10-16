@@ -21,12 +21,16 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
     const int minutes = static_cast<int>(status.hours * 60) % (24 * 60);
     ImGui::Text("Time %02d:%02d %s", minutes / 60, minutes % 60,
                 status.day_animating ? "(day/night running)" : "(paused, F2 > Lighting)");
+    ImGui::Text("Wall kick window: %s",
+                s.wall_timer > 0 && (!s.wall_used || dot(s.wall_normal, s.last_kick_normal) <= 0.5F)
+                    ? "ready"
+                    : "--");
     ImGui::Separator();
     if (status.free_camera) {
         ImGui::TextUnformatted("FREE CAMERA  WASD/QE fly  Shift fast  Home reset");
     } else {
-        ImGui::TextUnformatted("WASD move  |  Space jump  |  Ctrl walk  |  Mouse look");
-        ImGui::TextUnformatted("R respawn  |  Pad: sticks, A jump, Back respawn");
+        ImGui::TextUnformatted("WASD move  |  Space jump / wall kick  |  Ctrl walk");
+        ImGui::TextUnformatted("Shift + jump: long jump  |  Pad: LB + A  |  R / Back respawn");
     }
     ImGui::TextUnformatted("F1 overlay  F2 tuning  F3 free camera  Esc quit");
 }
@@ -113,6 +117,15 @@ void tuning_window(Simulation &simulation, LightingControls &lighting, bool &ope
         slider("Jump buffer", t.jump_buffer, 0, 0.3F, "%.3f s");
         ImGui::Text("Derived: gravity %.1f m/s^2, launch %.2f m/s",
                     static_cast<double>(t.gravity()), static_cast<double>(t.jump_velocity()));
+    }
+    if (ImGui::CollapsingHeader("Wall / long jump", ImGuiTreeNodeFlags_DefaultOpen)) {
+        slider("Long jump min speed", t.long_jump_min_speed, 0, 15);
+        slider("Long jump speed x", t.long_jump_speed_scale, 1, 3);
+        slider("Long jump up speed", t.long_jump_up_speed, 2, 16);
+        slider("Wall kick speed", t.wall_jump_speed, 2, 16);
+        slider("Wall kick up speed", t.wall_jump_up_speed, 2, 18);
+        slider("Wall contact grace", t.wall_contact_grace, 0, 0.3F, "%.3f s");
+        slider("Wall recovery", t.wall_recovery_time, 0, 0.4F, "%.3f s");
     }
     if (ImGui::CollapsingHeader("Collision")) {
         angle_slider("Max slope", t.collision.max_slope, 10, 80);

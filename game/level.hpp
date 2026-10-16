@@ -22,6 +22,7 @@ struct Shape {
     Vec3 color;
     float yaw = 0;
     Surface surface;
+    bool wall_jump = false; // Marked walls; floors/ceilings never grant a wall jump.
 };
 
 struct Checkpoint {

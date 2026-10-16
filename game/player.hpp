@@ -7,7 +7,7 @@
 
 namespace mj::game {
 
-enum class MoveState : std::uint8_t { idle, run, skid, jump, fall };
+enum class MoveState : std::uint8_t { idle, run, skid, jump, wall_jump, long_jump, fall };
 [[nodiscard]] const char *to_string(MoveState state);
 
 // Every movement value in one place. Units: meters, seconds, radians. Edited live in the
@@ -36,6 +36,14 @@ struct PlayerTuning {
     float air_turn_rate = 5.0F;
     float coyote_time = 0.1F;
     float jump_buffer = 0.12F;
+    // M4 moves. Long jump needs grounded speed plus the modifier at takeoff.
+    float long_jump_min_speed = 6.0F;
+    float long_jump_speed_scale = 1.8F;
+    float long_jump_up_speed = 8.5F;
+    float wall_jump_speed = 8.5F;
+    float wall_jump_up_speed = 12.0F;
+    float wall_contact_grace = 0.1F;
+    float wall_recovery_time = 0.14F; // Brief steering lock guarantees separation.
     // Body and collision.
     float radius = 0.35F;
     float height = 1.6F;
@@ -59,7 +67,12 @@ struct PlayerState {
     Vec3 ground_normal{0, 1, 0};
     float coyote_timer = 0;
     float buffer_timer = 0;
-    bool landed = false; // Became grounded this tick.
+    Vec3 wall_normal;
+    Vec3 last_kick_normal;
+    float wall_timer = 0;
+    float recovery_timer = 0;
+    bool wall_used = false; // Same-facing walls cannot be farmed before landing.
+    bool landed = false;    // Became grounded this tick.
 };
 
 struct PlayerPose {
@@ -89,6 +102,7 @@ class Player {
     };
     void ground_motion(Steering steering, float dt);
     void air_motion(Steering steering, bool jump_held, float dt);
+    bool wall_jump(bool requested, bool touching = false);
 
     PlayerState m_current;
     PlayerPose m_previous;

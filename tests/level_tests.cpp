@@ -36,6 +36,7 @@ TEST_CASE("versioned levels preserve units, linear colors, materials and collisi
     REQUIRE(level->shapes.size() == 1);
     const auto &shape = level->shapes.front();
     CHECK(shape.color.x == doctest::Approx(0.2158605F));
+    CHECK_FALSE(shape.wall_jump);
     CHECK(shape.surface.roughness == doctest::Approx(0.1F));
     CHECK(shape.surface.metallic == doctest::Approx(0.9F));
     REQUIRE(level->lights.size() == 1);
@@ -60,6 +61,7 @@ TEST_CASE("level parsing rejects malformed versions, placement, material and lig
           {"\"name\": \"Test yard\"", "\"name\":\"First\",\"name\":\"Second\""},
           {"\"name\": \"Test yard\"", "\"typo\": \"Test yard\""},
           {"\"kind\":\"box\"", "\"kind\":\"mesh\""},
+          {"\"kind\":\"box\"", "\"kind\":\"box\",\"wall_jump\":1"},
           {"\"center\":[0,-0.5,0]", "\"center\":[0,0]"},
           {"\"center\":[0,-0.5,0]", "\"center\":[1e100,0,0]"},
           {"\"size\":[20,1,20]", "\"size\":[0,1,20]"},
@@ -173,4 +175,14 @@ TEST_CASE("level files support Unicode paths and report missing or invalid files
     std::error_code error;
     std::filesystem::remove(path, error);
     CHECK_FALSE(mj::game::load_level(path));
+}
+
+TEST_CASE("wall jump tags survive generated collision geometry and default to false") {
+    const auto level =
+        mj::game::parse_level(changed("\"kind\":\"box\"", "\"kind\":\"box\",\"wall_jump\":true"));
+    REQUIRE(level);
+    CHECK(level->shapes.front().wall_jump);
+    const auto geometry = mj::game::build_geometry(*level);
+    for (const auto &triangle : geometry.collision.triangles())
+        CHECK(triangle.wall_jump);
 }

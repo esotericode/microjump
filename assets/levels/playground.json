@@ -167,10 +167,10 @@
     {"kind": "ramp", "center": [-31.2, 2.4, -59], "size": [6, 4.8, 9.6], "color": "#42a5a0", "yaw": 1.5707963267948966, "material": {"roughness": 0.6, "metallic": 0}},
     {"kind": "cylinder", "center": [-42, 4.83, -59], "size": [1.6, 0.06, 1.6], "color": "#7fd6c8", "yaw": 0, "material": {"roughness": 0.45, "metallic": 0}},
     {"kind": "cylinder", "center": [-44, 0.03, -3], "size": [1.6, 0.06, 1.6], "color": "#7fd6c8", "yaw": 0, "material": {"roughness": 0.45, "metallic": 0}},
-    {"kind": "box", "center": [62, 3.0, -48], "size": [0.8, 6, 16], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.6, "metallic": 0}},
-    {"kind": "box", "center": [67, 3.0, -48], "size": [0.8, 6, 16], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.6, "metallic": 0}},
-    {"kind": "box", "center": [78, 4.0, -48], "size": [0.8, 8, 12], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.6, "metallic": 0}},
-    {"kind": "box", "center": [82, 4.0, -48], "size": [0.8, 8, 12], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.6, "metallic": 0}},
+    {"kind":"box","center":[62,3.0,-48],"size":[0.8,6,16],"color":"#ba76d2","yaw":0,"material":{"roughness":0.6,"metallic":0},"wall_jump":true},
+    {"kind":"box","center":[67,3.0,-48],"size":[0.8,6,16],"color":"#ba76d2","yaw":0,"material":{"roughness":0.6,"metallic":0},"wall_jump":true},
+    {"kind":"box","center":[78,4.0,-48],"size":[0.8,8,12],"color":"#ba76d2","yaw":0,"material":{"roughness":0.6,"metallic":0},"wall_jump":true},
+    {"kind":"box","center":[82,4.0,-48],"size":[0.8,8,12],"color":"#ba76d2","yaw":0,"material":{"roughness":0.6,"metallic":0},"wall_jump":true},
     {"kind": "box", "center": [58, 0.3, -36], "size": [3, 0.6, 3], "color": "#f1ab4a", "yaw": 0, "material": {"roughness": 0.6, "metallic": 0}},
     {"kind": "box", "center": [62, 0.6, -36], "size": [3, 1.2, 3], "color": "#f1ab4a", "yaw": 0, "material": {"roughness": 0.6, "metallic": 0}},
     {"kind": "box", "center": [66, 0.9, -36], "size": [3, 1.8, 3], "color": "#f1ab4a", "yaw": 0, "material": {"roughness": 0.6, "metallic": 0}},
@@ -227,7 +227,11 @@
     {"kind": "cylinder", "center": [58, 2.2, -30], "size": [0.16, 4.4, 0.16], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.35, "metallic": 0.5}},
     {"kind": "cylinder", "center": [60, 2.2, 23], "size": [0.16, 4.4, 0.16], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.35, "metallic": 0.5}},
     {"kind": "cylinder", "center": [13, 2.2, -70], "size": [0.16, 4.4, 0.16], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.35, "metallic": 0.5}},
-    {"kind": "cylinder", "center": [13, 2.2, -102], "size": [0.16, 4.4, 0.16], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.35, "metallic": 0.5}}
+    {"kind": "cylinder", "center": [13, 2.2, -102], "size": [0.16, 4.4, 0.16], "color": "#507b99", "yaw": 0, "material": {"roughness": 0.35, "metallic": 0.5}},
+    {"kind":"box","center":[64.5,5.8,-58],"size":[13,0.4,4],"color":"#42a5a0"},
+    {"kind":"box","center":[80,7.8,-56],"size":[8,0.4,4],"color":"#42a5a0"},
+    {"kind":"cylinder","center":[64.5,6.03,-58],"size":[1.6,0.06,1.6],"color":"#7fd6c8"},
+    {"kind":"cylinder","center":[80,8.03,-56],"size":[1.6,0.06,1.6],"color":"#7fd6c8"}
   ],
   "checkpoints": [
     {"position": [0.0, 0.07000000029802322, 8.0], "yaw": 0.0},
@@ -239,7 +243,9 @@
     {"position": [-42, 4.87, -59], "yaw": 3.141592653589793},
     {"position": [-44, 0.07, -3], "yaw": 0},
     {"position": [60, 0.07, -31], "yaw": 0},
-    {"position": [65, 6.07, 46], "yaw": 0}
+    {"position": [65, 6.07, 46], "yaw": 0},
+    {"position": [64.5, 6.07, -58], "yaw": 3.141592653589793},
+    {"position": [80, 8.07, -56], "yaw": 3.141592653589793}
   ],
   "lights": [
     {"position": [26.5, 3.4000000953674316, 31.5], "color": [1.0, 0.3467040956020355, 0.09084173291921616], "intensity": 30.0, "range": 10.0, "direction": [0.0, -1.0, 0.0], "inner_cone": 3.1415927410125732, "outer_cone": 3.1415927410125732, "orbit_radius": 0.0, "orbit_speed": 0.0, "night_only": false},

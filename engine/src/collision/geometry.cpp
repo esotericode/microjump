@@ -17,7 +17,7 @@ Vec3 closest_point_on_segment(Vec3 point, const Segment &segment) {
 
 // Voronoi-region walk over the triangle's vertices, edges and face.
 Vec3 closest_point_on_triangle(Vec3 point, const Triangle &triangle) {
-    const auto &[a, b, c] = triangle;
+    const Vec3 a = triangle.a, b = triangle.b, c = triangle.c;
     const Vec3 ab = b - a;
     const Vec3 ac = c - a;
     const Vec3 ap = point - a;

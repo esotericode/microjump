@@ -2,7 +2,7 @@
 ## A custom C++ game engine, proven through a 3D platformer
 
 **Document version:** 0.3
-**Status:** M4 first increment: JSON levels and connected playground implemented. M2/M3 owner gates remain open. See Section 15 and `docs/m4-playground.md`.
+**Status:** M4 wall/long-jump increment: designated wall kicks, running long jump and reachable finish decks implemented. M2/M3 owner gates remain open. See Section 15 and `docs/m4-playground.md`.
 **Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
 
 > **Our north star:** Build a high-quality 3D game engine of our own in modern C++, and demonstrate it with a polished, expressive 3D platformer. The engine is the reason for the project; the game is how we prove it works.
@@ -388,10 +388,10 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | Field | Current value |
 | --- | --- |
 | Overall status | **IMPLEMENTING** |
-| Current milestone | **M4 — Full playground** (in progress; JSON level/loading and large layout implemented; wall jumps and momentum move remain). M2/M3 owner checks stay open. |
-| Latest working build | 2026-10-15: JSON playground on native Intel and software Vulkan; evidence in `docs/m4-playground.md`. Reviewed M3 merged in PR #7; current PR records Linux/MSVC checks and downloads. |
+| Current milestone | **M4 — Full playground** (in progress; JSON levels, large layout, designated wall kicks and running long jump implemented; full traversal/playtest remains). M2/M3 owner checks stay open. |
+| Latest working build | 2026-10-15: M4 movement increment; evidence in `docs/m4-moves.md` and `docs/m4-playground.md`. Current PR records Linux/MSVC checks and runtime downloads. |
 | Open owner decisions | None. Owner input needed: M2 playtest, M3 visual review (both PR requests), Windows hardware checks for M0–M3. |
-| Next useful action | Add designated wall-jump surfaces and a momentum move, then full-route replays. Owner can playtest the new JSON playground and review M2/M3 feel/lighting meanwhile. |
+| Next useful action | Complete the remaining platform/corner traversal checklist and owner movement/camera playtest; owner Windows/gamepad checks remain open. |
 
 ### Milestone status tracker
 
@@ -401,7 +401,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | M1 | In progress | 2026-10-15: 3D scene, debug camera, GPU capture and FPS overlay implemented; local evidence/captures in `docs/m1-evidence.md`. Owner Windows run/controls acceptance remains open. |
 | M2 | In progress | 2026-10-15: capsule controller, run/skid/variable jump/coyote/buffer/air steering, follow camera with obstruction, record/replay, live tuning; deterministic tests pass on three Linux configs (`docs/m2-movement.md`). Owner playtest and Windows run remain open. |
 | M3 | In progress | 2026-10-15: HDR forward renderer and tone mapping, texel-snapped sun shadow map with Low/Medium/High PCF presets and bias controls, 16 point/spot lights, GGX materials, sky and day/night, lighting pavilion and moving-light demo; captures and tests in `docs/m3-lighting.md`. Owner visual review and Windows run remain open. |
-| M4 | In progress | 2026-10-15: versioned JSON levels, 230 m connected ground, 40 route platforms, sprint/stair/ramp courses and 10 checkpoints; `docs/m4-playground.md`. Wall jumps, momentum move and full traversal acceptance remain. |
+| M4 | In progress | 2026-10-15: versioned JSON levels, 230 m connected ground, 40 route platforms, sprint/stair/ramp courses, designated wall kicks, running long jump and 12 checkpoints; `docs/m4-moves.md`. Scripted spawn-to-wall-finish replay and focused taller-pair fixture pass. Full traversal/owner acceptance remains. |
 | M5 | Not started | — |
 
 **Allowed states:** Not started · In progress · Blocked · Done · Reopened. State changes require a date and evidence reference (PR, commit, test log, or capture).
@@ -450,6 +450,9 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-038 | Activate charter-approved nlohmann/json 3.12.0, pinned by immutable commit and SHA-256, for version-1 level parsing. Validate schema/types/ranges and return errors before creating a window. | The next engine slice needs authored JSON placements. Rendering/collision still use our generated primitives. Keep the original C++ yard as a regression fixture and a matching JSON file for existing recordings; ship the parser's MIT notice. |
 | 2026-10-15 / D-039 | M4's first increment is a 230 m JSON playground with 40 raised route platforms, 10 checkpoints, seven named diagnostic regions, extended sprint/stair courses and the retained lighting pavilion. | Delivers a reviewable data/loading/layout slice before adding new movement verbs. Ground bypasses and ramp returns connect the zones. Wall jumping, momentum movement and full traversal checks remain required M4 work. |
 
+| 2026-10-15 / D-040 | Add original wall kicks on designated near-vertical triangle faces, with buffered/contact-grace input, fixed outward/upward launch, brief steering recovery and a different-facing-wall requirement before another airborne kick. Purple paired walls end at checkpoint decks. | A contact-based move reuses our capsule sweeps and avoids an invisible proximity/raycast assist. Alternating faces enables climbing; repeated boosts against one face are blocked until landing. Values remain provisional F2 tunables for owner playtest. |
+| 2026-10-15 / D-041 | Add a grounded running long jump with Shift / gamepad left shoulder + jump; lower arc, bounded speed multiplier, retained landing momentum. Write replay version 2 for its modifier bit and continue reading version 1 with the original mask. | Delivers the required expressive momentum verb without a new crouch state or unbounded speed stacking. Keep the existing replay columns and exact tick sampling; old recordings remain regression fixtures. |
+
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
 ### Progress log (append entries)
@@ -484,6 +487,8 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 - **2026-10-15 — M3 review.** Reviewed lighting/resource synchronization and inspected fresh captures. Fixed capture-tick overshoot and interpolation-dependent snapshots. All 17 native Intel CTests pass, including ASan/UBSan, synchronization validation and the new exact-tick regression; 32 doctest cases / 49,824 assertions. Details: `docs/m3-review.md`; owner visual/feel and Windows checks remain open.
 
 - **2026-10-15 — M4 JSON/layout increment.** Runtime levels now load from validated version-1 JSON with materials, lights, named regions and checkpoints; packaged default assets resolve beside the executable. Authored a 230 m playground and preserved the original yard/recordings. All 20 CTests and 37 doctest cases / 50,645 assertions pass on GCC Debug/Release and Clang Debug; zero Vulkan validation errors, formatting and clang-tidy pass. New tests cover malformed input, UTF-8 paths, legacy movement parity, all 10 checkpoints, the extended lane and summit stairs. Native GPU views of spawn, platform field, stairs and prepared wall course were inspected. Evidence and remaining work: `docs/m4-playground.md`; PR records final checks and runtime downloads. M4 remains in progress.
+
+- **2026-10-15 — M4 wall/long-jump increment.** Added original designated wall kicks, buffered contact windows and same-wall repeat prevention; a bounded running long jump; F2 tunables and overlay feedback; purple wall pairs with 6 m / 8 m finish decks and two new checkpoints. Replay version 2 adds the modifier while preserving version-1 reading. All 21 local CTests pass on GCC Debug/Release and Clang Debug, and 46 doctest cases / 89,739 assertions pass. A continuous 2,808-tick spawn-to-finish replay and a focused taller-pair fixture cover actual course exits; real SDL Shift+Space input records/replays identically across native and software Vulkan. Native GPU captures inspected; zero validation errors, formatting and clang-tidy pass. Evidence/playtest request: `docs/m4-moves.md`; current PR records MSVC checks and runtime downloads. M4 stays in progress pending the remaining traversal checklist and owner feel/Windows/gamepad acceptance.
 
 ### Known risks and unanswered questions
 

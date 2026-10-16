@@ -14,9 +14,10 @@ TEST_CASE("replay text round-trips every float bit and compresses repeated ticks
     for (int i = 0; i < 200; ++i)
         ticks.push_back({0, 1, -0.66F, -0.32F, button::jump_held});
     ticks.push_back({0.70710677F, -0.70710677F, 3.1415925F, -1.25F, button::jump_pressed});
-    ticks.push_back({-0.0F, 1.0e-7F, -2.0e-38F, 0.1F, button::reset_pressed});
+    ticks.push_back(
+        {-0.0F, 1.0e-7F, -2.0e-38F, 0.1F, button::reset_pressed | button::long_jump_held});
     const auto text = mj::serialize_replay(ticks);
-    CHECK(text.rfind("microjump-replay 1\ntick-rate 120\n", 0) == 0);
+    CHECK(text.rfind("microjump-replay 2\ntick-rate 120\n", 0) == 0);
     CHECK(std::count(text.begin(), text.end(), '\n') == 6); // Header, comment, 3 runs.
     const auto parsed = mj::parse_replay(text);
     REQUIRE(parsed);
@@ -40,7 +41,7 @@ TEST_CASE("replay text round-trips every float bit and compresses repeated ticks
 TEST_CASE("replay parser rejects malformed, oversized and unknown input") {
     const std::string header = "microjump-replay 1\ntick-rate 120\n";
     CHECK_FALSE(mj::parse_replay(""));
-    CHECK_FALSE(mj::parse_replay("microjump-replay 2\ntick-rate 120\n"));
+    CHECK_FALSE(mj::parse_replay("microjump-replay 3\ntick-rate 120\n"));
     CHECK_FALSE(mj::parse_replay("microjump-replay 1\ntick-rate 60\n"));
     const auto empty = mj::parse_replay(header);
     REQUIRE(empty);

@@ -24,6 +24,7 @@ struct MoveResult {
     Vec3 ground_normal{0, 1, 0};
     bool hit_wall = false;
     Vec3 wall_normal;
+    Vec3 jump_wall_normal; // Nonzero only for a designated, near-vertical face contact.
     bool hit_ceiling = false;
     bool stepped = false;
 };
