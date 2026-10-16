@@ -12,6 +12,7 @@ struct Triangle {
     Vec3 b;
     Vec3 c;
     bool wall_jump = false; // Authored designation; only near-vertical faces can be kicked.
+    float bounce = 0;       // Authored launch speed of a springy floor (m/s); 0 for none.
 };
 struct Segment {
     Vec3 start;

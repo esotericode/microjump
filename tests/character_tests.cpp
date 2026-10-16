@@ -43,6 +43,8 @@ struct Seen {
     float largest_spin = 0;
     float brightest_glow = 0;
     float largest_stride = 0;
+    float largest_flip = 0;
+    float deepest_slide = 0;
     std::size_t most_particles = 0;
 };
 
@@ -69,6 +71,8 @@ Seen animate_replay(const std::string &file) {
         seen.largest_spin = std::max(seen.largest_spin, pose.spin);
         seen.brightest_glow = std::max(seen.brightest_glow, pose.glow);
         seen.largest_stride = std::max(seen.largest_stride, pose.stride);
+        seen.largest_flip = std::max(seen.largest_flip, pose.flip);
+        seen.deepest_slide = std::max(seen.deepest_slide, pose.slide);
         for (const float alpha : {0.0F, 0.5F, 1.0F}) {
             const auto feet = simulation.player.interpolated(alpha);
             parts.clear();
@@ -84,7 +88,8 @@ Seen animate_replay(const std::string &file) {
                 const Vec3 offset = origin(model) - feet.position;
                 CAPTURE(simulation.ticks());
                 CAPTURE(i);
-                CHECK(std::hypot(offset.x, offset.z) < 1.1F);
+                // A somersault swings the antenna tip about 1.15 m out from the feet.
+                CHECK(std::hypot(offset.x, offset.z) < 1.25F);
                 CHECK(offset.y > -0.45F);
                 CHECK(offset.y < 2.0F);
             }
@@ -144,6 +149,13 @@ TEST_CASE("the character performs the committed move tours without leaving its c
     // Clean hops at speed flash the antenna, so kept momentum is visible.
     const auto chain = animate_replay("m4-momentum-chain.mjr");
     CHECK(chain.brightest_glow > 0.9F);
+}
+
+TEST_CASE("triple jumps and rollouts somersault and dives slide, all within the capsule") {
+    const auto moves = animate_replay("sm64-moves.mjr");
+    CHECK(moves.largest_flip > 5.5F);   // Most of a full turn before it wraps.
+    CHECK(moves.deepest_slide > 0.95F); // Flat on the belly.
+    CHECK(moves.deepest_dive > 0.9F);
 }
 
 TEST_CASE("landings squash with the fall height, then the spring settles") {

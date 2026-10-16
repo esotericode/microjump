@@ -93,6 +93,43 @@ def lantern(x, ground, z, color=(1.0, 0.58, 0.22), intensity=14.0, height=2.2):
                    "intensity": intensity, "range": 9})
 
 
+MUSHROOM_CAP = "#f27a9b"
+MUSHROOM_STEM = "#f3e6d2"
+
+
+def mushroom(x, ground, z, bounce, cap=2.4, stem=0.7):
+    """A bounce mushroom: a short stem under a springy cap. Land on it to be thrown up."""
+    shape("cylinder", (x, ground + stem * 0.5, z), (cap * 0.35, stem, cap * 0.35), MUSHROOM_STEM,
+          material={"roughness": 0.8, "metallic": 0})
+    shape("ellipsoid", (x, ground + stem, z), (cap, cap * 0.5, cap), MUSHROOM_CAP, bounce=bounce,
+          material={"roughness": 0.55, "metallic": 0})
+    for i in range(5):  # White spots, drawn only, poking out of the cap.
+        a = i * math.tau / 5 + x
+        shape("ellipsoid", (x + math.cos(a) * cap * 0.27, ground + stem + cap * 0.19,
+                            z + math.sin(a) * cap * 0.27), (cap * 0.16, cap * 0.08, cap * 0.16),
+              "#fff8f0", solid=False, material={"roughness": 0.6, "metallic": 0})
+
+
+def spring_pad(x, ground, z, bounce, diameter=2.0):
+    """A low, springy moss pad: walk onto it (it is a step high) to be thrown up."""
+    shape("cylinder", (x, ground + 0.11, z), (diameter, 0.22, diameter), MUSHROOM_CAP,
+          bounce=bounce, material={"roughness": 0.55, "metallic": 0})
+    for i in range(4):
+        a = i * math.tau / 4 + x
+        shape("ellipsoid", (x + math.cos(a) * diameter * 0.25, ground + 0.22,
+                            z + math.sin(a) * diameter * 0.25),
+              (diameter * 0.14, diameter * 0.06, diameter * 0.14), "#fff8f0", solid=False,
+              material={"roughness": 0.6, "metallic": 0})
+
+
+def home_gate(name, x, ground, z, yaw):
+    """A small gate back to Gate Isle, for places with no walk home."""
+    shape("cylinder", (x, ground + 0.15, z), (3.0, 0.3, 3.0), STONE,
+          material={"roughness": 0.7, "metallic": 0})
+    portals.append({"name": name, "position": [r(x), r(ground + 1.85), r(z)], "radius": 1.1,
+                    "yaw": r(yaw), "level": "lantern-isles.json", "checkpoint": 0})
+
+
 def checkpoint(x, ground, z, yaw=0.0):
     shape("cylinder", (x, ground + 0.03, z), (1.6, 0.06, 1.6), TEAL,
           material={"roughness": 0.6, "metallic": 0})
@@ -258,6 +295,86 @@ for x, top, z in [(-11, -3.2, 49), (-14, -2.4, 43.5), (-14.5, -1.6, 38), (-13, -
 stone(-20, -2.0, 40.5, 3.2, color=STONE_DARK)
 spark("Cloud nook", -20, -1.0, 40.5)
 zone("Cloud Steps", -13, 36, 10)
+
+# ---------------------------------------------------------------------------------------
+# The second wave: places that ask for the triple jump and the dive, and secrets that
+# reward looking around. New checkpoints and sparks come after the originals, so their
+# indices stay put.
+
+# Echo Plateau, north-east of Gate Isle: a proving ground for the new moves. Reached by two
+# stones and a gap a jump alone can't clear (jump and dive, or long jump). A missed leap
+# falls onto a catch islet whose mushroom throws you back up: fail forward, not into the sea.
+EX, ETOP, EZ = 29.0, 0.0, -35.9
+ux, uz = 29.0 / math.hypot(29.0, 35.9), -35.9 / math.hypot(29.0, 35.9)  # Gate Isle -> plateau.
+along = lambda d: (ux * d, uz * d)  # noqa: E731
+for d, top in [(16.5, 0.6), (23.0, 1.2)]:
+    x, z = along(d)
+    stone(x, top, z, 3.4)
+island(EX, ETOP, EZ, 26, depth=13, seed=6)  # Rim at 33 m along: an 8.6 m gap from the last stone.
+gx, gz = along(28.7)
+spark("Over the gap", gx, 4.0, gz)  # Where a jump's arc peaks over the gap.
+cx, cz = along(30.0)
+island(cx, -4.0, cz, 10.0, depth=4, seed=7, grass=GRASS_DARK)  # The catch islet.
+mx, mz = along(26.2)
+mushroom(mx, -4.0, mz, 17)  # Back up to the last stone.
+checkpoint(EX - 6, ETOP, EZ + 7, math.atan2(6, 17))  # 6: facing the Three Steps.
+# The Three Steps: 2.0 m (any jump), 3.2 m (a double jump), 4.4 m (only a triple jump).
+for dx, dz, height, size in [(-6.5, -8.5, 2.0, 3.0), (0, -10, 3.2, 3.2), (6.5, -8.5, 4.4, 4.2)]:
+    shape("box", (EX + dx, ETOP + height * 0.5, EZ + dz), (size, height, size), STONE_DARK,
+          yaw=dx * 0.02, material={"roughness": 0.8, "metallic": 0})
+spark("Third step", EX + 6.5, ETOP + 5.4, EZ - 8.5)
+lantern(EX, ETOP + 3.2, EZ - 10, height=1.4)
+# One slab south-east on to the Old Ruins, closing the loop.
+slab(EX + 0.28 * 19.2, 0.8, EZ + 0.96 * 19.2, 3.4, 0.3)
+flowers(EX, ETOP, EZ + 3, 9, 18, 66)
+zone("Echo Plateau", EX, EZ, 15)
+
+# The grotto, a secret shelf under Gate Isle's south-east rim. Its lantern glows beneath the
+# island, seen from the pier. Step off the rim to drop onto it; the mushroom at its outer
+# edge throws you clear of the overhang and back up.
+ga = math.radians(30)
+# It juts out past the rim, so peering over the edge finds it; its inner end is buried in rock.
+shelf_r, shelf_top = 10.8, -5.0
+sx_, sz_ = math.cos(ga) * shelf_r, math.sin(ga) * shelf_r
+shape("box", (sx_, shelf_top - 0.4, sz_), (8.4, 0.8, 5.0), ROCK, yaw=-ga,
+      material={"roughness": 0.85, "metallic": 0})
+checkpoint(math.cos(ga) * 9.3, shelf_top, math.sin(ga) * 9.3, math.pi / 2 - ga)  # 7
+spark("Grotto glow", math.cos(ga) * 9.0, shelf_top + 1.0, math.sin(ga) * 9.0 + 1.2)
+lantern(math.cos(ga) * 8.6, shelf_top, math.sin(ga) * 8.6 - 1.3, height=1.3)
+# A spring pad off to one side of the drop, so stepping off the rim lands on rock. There's
+# no headroom to jump under the island, so you just walk onto it; it sits clear of the rim.
+tx_, tz_ = -math.sin(ga), math.cos(ga)  # Along the rim.
+spring_pad(math.cos(ga) * 11.4 - tx_ * 1.6, shelf_top, math.sin(ga) * 11.4 - tz_ * 1.6, 24)
+zone("The Grotto", math.cos(ga) * 10, math.sin(ga) * 10, 4)
+
+# Sky Blossom, a secret above the grove: a mushroom tucked behind the climbing trees, on
+# the far west side, throws you up past a canopy floating beyond the island's edge. A
+# bounce keeps the run-in's speed, so you rise beside it and come down on top.
+mushroom(-9, GTOP, -55, 22)
+shape("ellipsoid", (-9, GTOP + 7.9, -60), (5.0, 1.6, 5.0), BLOSSOM_LIGHT,
+      material={"roughness": 0.8, "metallic": 0})
+spark("Sky blossom", -9, GTOP + 9.7, -60)
+zone("Sky Blossom", -9.5, -57, 4)
+
+# Hermit's Rock: seen only from the spire's tower. A long jump off the tower's north end
+# (or a jump and a dive) reaches it; a small gate takes you home.
+HX, HTOP, HZ = TX, 1.0, TZ - 19.5
+island(HX, HTOP, HZ, 7, depth=6, seed=8)
+spark("Hermit's lantern", HX - 1.2, HTOP + 1.0, HZ - 1.2)
+lantern(HX - 1.5, HTOP, HZ + 1.6)
+home_gate("Home from Hermit's Rock", HX + 0.5, HTOP, HZ - 2.0, math.pi)
+zone("Hermit's Rock", HX, HZ, 6)
+
+# Skipping Stones: an expert line east of Lantern Isle. Each pad sits where a clean chained
+# long jump comes down (flights of about 7.9, 9.6 and 10.3 m, then 11.1 m to the far rock),
+# so only long jumps taken the moment you land cross it.
+for x in (LX + 17.2, LX + 26.8, LX + 37.1):
+    stone(x, LTOP, LZ, 3.6, color=STONE_DARK)
+x = LX + 50.5
+island(x, LTOP, LZ, 7, depth=5, seed=9)
+spark("Skipping stones", x - 0.5, LTOP + 1.0, LZ - 1.5)
+home_gate("Home from the far stone", x + 1.2, LTOP, LZ + 1.5, -math.pi / 2)
+zone("Skipping Stones", LX + 30, LZ, 22)
 
 # Far scenery: drawn-only islands drifting in the haze, and a sea of clouds below.
 rng = random.Random(99)

@@ -79,7 +79,8 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
         ImGui::Text("Gamepad: %s", status.gamepad_name.c_str());
         const auto &b = status.gamepad_labels;
         const std::string actions = std::string(b.jump) + " jump  |  " + std::string(b.long_jump) +
-                                    " + jump: long jump  |  " + std::string(b.walk) + " walk";
+                                    " + jump: long jump  |  " + std::string(b.dive) + " dive  |  " +
+                                    std::string(b.walk) + " walk";
         const std::string menus = std::string(b.recenter) + ": center camera  |  " +
                                   std::string(b.respawn) + " respawn  |  " + std::string(b.menu) +
                                   " tuning";
@@ -101,7 +102,8 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
         ImGui::TextUnformatted("FREE CAMERA  WASD/QE fly  Shift fast  Home reset");
     } else {
         ImGui::TextUnformatted("WASD move  |  Space jump / wall kick  |  Ctrl walk");
-        ImGui::TextUnformatted("Shift + jump: long jump  |  R respawn  |  Mouse look");
+        ImGui::TextUnformatted("Shift + jump: long jump  |  E / click: dive  |  R respawn");
+        ImGui::TextUnformatted("Jump again as you land: double, then triple jump");
     }
     ImGui::TextUnformatted("F1 overlay  F2 tuning  F3 free camera  Esc quit");
     if (status.pacing != nullptr && status.pacing->stats().count > 0) {
@@ -222,6 +224,19 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
         slider("Wall kick up speed", t.wall_jump_up_speed, 2, 18);
         slider("Wall contact grace", t.wall_contact_grace, 0, 0.3F, "%.3f s");
         slider("Wall recovery", t.wall_recovery_time, 0, 0.4F, "%.3f s");
+    }
+    if (ImGui::CollapsingHeader("Triple jump / dive", ImGuiTreeNodeFlags_DefaultOpen)) {
+        slider("Chain window", t.jump_chain_window, 0, 0.4F, "%.3f s");
+        slider("Double jump x", t.double_jump_scale, 1, 2);
+        slider("Triple jump x", t.triple_jump_scale, 1, 2.5F);
+        slider("Triple min speed", t.triple_jump_min_speed, 0, 15);
+        slider("Dive min speed", t.dive_min_speed, 0, 15);
+        slider("Dive boost", t.dive_boost, 0, 10);
+        slider("Dive max speed", t.dive_max_speed, 5, 30);
+        slider("Dive lift (ground)", t.dive_up_speed, 0, 8);
+        slider("Dive air control", t.dive_air_control, 0, 1);
+        slider("Slide friction", t.dive_slide_friction, 1, 40);
+        slider("Rollout up speed", t.rollout_up_speed, 2, 14);
     }
     if (ImGui::CollapsingHeader("Collision")) {
         angle_slider("Max slope", t.collision.max_slope, 10, 80);

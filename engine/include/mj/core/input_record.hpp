@@ -17,8 +17,10 @@ inline constexpr std::uint32_t jump_held = 1U << 0U;
 inline constexpr std::uint32_t jump_pressed = 1U << 1U; // Press edge latched until a tick.
 inline constexpr std::uint32_t reset_pressed = 1U << 2U;
 inline constexpr std::uint32_t long_jump_held = 1U << 3U; // Version 2: momentum modifier.
+inline constexpr std::uint32_t dive_pressed = 1U << 4U;   // Version 4: dive / rollout.
 inline constexpr std::uint32_t v1 = jump_held | jump_pressed | reset_pressed;
-inline constexpr std::uint32_t all = v1 | long_jump_held;
+inline constexpr std::uint32_t v3 = v1 | long_jump_held;
+inline constexpr std::uint32_t all = v3 | dive_pressed;
 } // namespace input_button
 
 // Everything the simulation reads for one fixed tick. Replaying the same sequence

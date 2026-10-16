@@ -32,6 +32,7 @@ LevelGeometry build_geometry(const Level &level) {
     LevelGeometry geometry;
     std::vector<bool> wall_flags;
     std::vector<bool> solid_flags;
+    std::vector<float> bounces;
     for (const auto &shape : level.shapes) {
         geometry.mesh.surface = shape.surface;
         switch (shape.kind) {
@@ -55,6 +56,7 @@ LevelGeometry build_geometry(const Level &level) {
         }
         wall_flags.resize(geometry.mesh.vertices.size() / 3, shape.wall_jump);
         solid_flags.resize(geometry.mesh.vertices.size() / 3, shape.solid);
+        bounces.resize(geometry.mesh.vertices.size() / 3, shape.bounce);
     }
     std::vector<Triangle> triangles;
     const auto drawn = geometry.mesh.triangles();
@@ -63,6 +65,7 @@ LevelGeometry build_geometry(const Level &level) {
             continue;
         triangles.push_back(drawn[i]);
         triangles.back().wall_jump = wall_flags[i];
+        triangles.back().bounce = bounces[i];
     }
     geometry.collision = CollisionWorld(triangles);
     return geometry;

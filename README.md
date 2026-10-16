@@ -14,12 +14,13 @@ AI agents build it together: [AGENTS.md](AGENTS.md) guides them, and
   exploring the platform routes, wall decks, summit, sprint lane and pavilion.
 - **The Lantern Isles:** a gate on the plaza leads to floating islands above a sea of
   clouds at golden hour, with a blossom grove to climb, a crystal wall-kick spire,
-  old ruins, and a long pier with a gap only a long jump clears. Ten more sparks are
+  old ruins, a long pier with a gap only a long jump clears, Echo Plateau's Three Steps
+  for the triple jump, bounce mushrooms, and four secrets. Sixteen more sparks are
   hidden there.
 - **A little character:** a procedurally animated creature with squash and stretch, a
   run cycle, a long-jump dive, wall-kick twirls, dust, and a flash for clean hops.
-- **Movement:** running, skids, variable jumps, wall kicks, long jumps, and momentum
-  you build on purpose.
+- **Movement:** running, skids, variable jumps, Super Mario 64-style double and triple
+  jumps, dives with rollouts, wall kicks, long jumps, and momentum you build on purpose.
 - **A renderer:** HDR forward rendering with sun shadows, 16 local lights, GGX
   materials, fading dust and spark particles, and a day/night cycle.
 - **Input:** keyboard/mouse or gamepad, with live tuning of every movement, camera
@@ -69,6 +70,8 @@ notices. A Vulkan 1.3 GPU driver is all a player needs.
 | W A S D | Left stick | Move (camera-relative); a partial tilt walks |
 | Space | South button | Jump (hold for height); press again at a purple wall to kick |
 | Shift + Space | Left shoulder + jump | Long jump while running |
+| Space as you land | South as you land | Double jump, then triple jump while moving |
+| E / left click | West button (X, Square, Y) | Dive from a run or a jump; jump on the belly slide to roll out |
 | Ctrl | Right shoulder | Walk |
 | Mouse | Right stick | Orbit the camera |
 | — | Right-stick click | Recenter the camera |
