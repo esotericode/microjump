@@ -47,12 +47,12 @@ The jump is fast and low on a fixed arc: `run_speed × 1.8` forward and 8.5 m/s 
   launch speed and about 1.9× the height, 5 m. It's a fixed arc with a somersault.
 - Waiting longer, a long jump, a wall kick, a dive or walking off a ledge starts the chain
   over.
-- Standing still, the third jump is another double.
+- Standing still, the third jump starts a new ordinary jump.
 
 **Dive.** Press E, the left mouse button or the West face button.
 - **Where from.** A dive comes from a run of at least 6 m/s, or out of a jump, double,
-  triple, fall or wall kick. Long jumps are committed and can't dive, and there is one
-  dive per airtime.
+  triple, fall or wall kick. Long jumps are committed and can't dive during their whole
+  airtime, including descent or a ceiling hit, and there is one dive per airtime.
 - **Speed.** It lunges along your facing, adding `dive_boost` (4.2 m/s, SM64's 15 of 32)
   up to `dive_max_speed` (13.5 m/s). Faster momentum is never lost.
 - **Arc.** From the ground it lifts 3 m/s. In the air it keeps your vertical speed, so

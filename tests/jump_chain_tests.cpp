@@ -79,7 +79,7 @@ TEST_CASE("the jump chain needs quick takeoffs, and a triple jump needs speed") 
         for (const auto &hop : late)
             CHECK(hop.takeoff == MoveState::jump);
     }
-    SUBCASE("in place, the third jump is another double, not a triple") {
+    SUBCASE("in place, the third jump starts a new ordinary jump") {
         const auto standing = hop_chain(0, 3);
         REQUIRE(standing.size() == 3);
         CHECK(standing[1].takeoff == MoveState::double_jump);
@@ -170,14 +170,39 @@ TEST_CASE("dives come from jumps and kicks once per airtime, never from long jum
         CHECK(d.player.current().state == MoveState::dive);
         CHECK(d.speed() < 13.3F); // A second press does nothing.
     }
-    SUBCASE("not out of a long jump") {
+    SUBCASE("not out of a long jump, even on descent or after hitting a ceiling") {
         DiveRun d;
+        bool ceiling = false;
+        SUBCASE("open sky") {}
+        SUBCASE("a low ceiling ends the ascent early") {
+            ceiling = true;
+            mj::SceneMesh mesh;
+            mesh.add_box({{0, -0.5F, 0}, {400, 1, 400}, {1, 1, 1}, 0});
+            mesh.add_box({{0, 2.7F, 0}, {80, 1, 80}, {1, 1, 1}, 0});
+            d.world = mj::CollisionWorld(mesh.triangles());
+        }
         d.player.place({0, 0.01F, 0}, 0);
         d.run(120);
         d.run(1, button::jump_pressed | button::jump_held | button::long_jump_held);
         REQUIRE(d.player.current().state == MoveState::long_jump);
-        d.run(5, button::dive_pressed);
-        CHECK(d.player.current().state == MoveState::long_jump);
+        bool descended = false;
+        bool hit_ceiling = false;
+        for (int tick = 0; tick < 180 && !d.player.current().grounded; ++tick) {
+            const float previous_up = d.player.current().velocity.y;
+            d.run(1, button::dive_pressed);
+            const auto &state = d.player.current();
+            CHECK(state.state != MoveState::dive);
+            CHECK(state.state != MoveState::dive_slide);
+            descended = descended || state.state == MoveState::fall;
+            hit_ceiling =
+                hit_ceiling || (previous_up > 0.0F && state.velocity.y == 0.0F && !state.grounded);
+        }
+        CHECK(descended);
+        CHECK(hit_ceiling == ceiling);
+        REQUIRE(d.player.current().grounded);
+        // Once this airtime ends, its restriction must not block a new ground dive.
+        d.run(1, button::dive_pressed);
+        CHECK(d.player.current().state == MoveState::dive);
     }
     SUBCASE("not from a walk") {
         DiveRun d;

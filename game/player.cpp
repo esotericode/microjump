@@ -331,6 +331,10 @@ void Player::tick(const TickInput &input, const CollisionWorld &world, float dt)
                   : stage == 3 ? MoveState::triple_jump
                   : stage == 2 ? MoveState::double_jump
                                : MoveState::jump;
+        // The committed long-jump arc remains closed to dives after its state becomes fall,
+        // including an early descent caused by a ceiling. Landing opens diving again.
+        if (long_jump)
+            s.dive_used = true;
         s.jump_chain = long_jump ? 0 : stage;
         s.buffer_timer = 0;
         s.coyote_timer = 0;
