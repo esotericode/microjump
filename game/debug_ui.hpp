@@ -39,6 +39,8 @@ struct DiagnosticsControls {
 
 // Diagnostics overlay lines: movement state, speeds, checkpoint and controls.
 void movement_overlay(const Simulation &simulation, const SessionStatus &status);
+// Gameplay progress stays visible when F1 diagnostics are closed.
+void collectible_hud(const Simulation &simulation, const Level &level);
 // Live tuning window (F2). Movement edits apply from the next tick, lighting immediately.
 struct TuningPanels {
     LightingControls &lighting;

@@ -2,6 +2,7 @@
 #include "level.hpp"
 #include "level_io.hpp"
 #include "simulation.hpp"
+#include "spark_visuals.hpp"
 
 #include <mj/core/fixed_step.hpp>
 #include <mj/core/input_record.hpp>
@@ -26,16 +27,18 @@ namespace {
 constexpr MeshHandle k_world_mesh{0};
 constexpr MeshHandle k_player_mesh{1};
 constexpr MeshHandle k_bulb_mesh{2};
+constexpr MeshHandle k_spark_mesh{3};
 
 std::string describe(const Simulation &simulation) {
     const auto &s = simulation.player.current();
     std::array<char, 256> text{};
-    std::snprintf(text.data(), text.size(),
-                  "tick %llu, feet (%.9g, %.9g, %.9g), state %s, %s, checkpoint %zu",
-                  static_cast<unsigned long long>(simulation.ticks()),
-                  static_cast<double>(s.position.x), static_cast<double>(s.position.y),
-                  static_cast<double>(s.position.z), to_string(s.state),
-                  s.grounded ? "grounded" : "airborne", simulation.active_checkpoint());
+    std::snprintf(
+        text.data(), text.size(),
+        "tick %llu, feet (%.9g, %.9g, %.9g), state %s, %s, checkpoint %zu, sparks %zu/%zu",
+        static_cast<unsigned long long>(simulation.ticks()), static_cast<double>(s.position.x),
+        static_cast<double>(s.position.y), static_cast<double>(s.position.z), to_string(s.state),
+        s.grounded ? "grounded" : "airborne", simulation.active_checkpoint(),
+        simulation.collected_count(), simulation.collectible_count());
     return text.data();
 }
 } // namespace
@@ -95,11 +98,11 @@ int run(const LaunchOptions &options) {
             log(context.error().message);
             return 1;
         }
-        // Order matches k_world_mesh, k_player_mesh, k_bulb_mesh.
+        // Order matches k_world_mesh, k_player_mesh, k_bulb_mesh, k_spark_mesh.
         const std::array meshes{
             geometry.mesh,
             make_player_mesh(simulation.player.tuning.radius, simulation.player.tuning.height),
-            make_bulb_mesh()};
+            make_bulb_mesh(), make_spark_mesh()};
         auto renderer = Renderer::create(**window, **context, meshes);
         if (!renderer) {
             log(renderer.error().message);
@@ -344,6 +347,36 @@ int run(const LaunchOptions &options) {
                                  .receives_blob = true});
             instances.push_back(
                 {.mesh = k_player_mesh, .model = yaw_translation(pose.facing, pose.position)});
+            for (std::size_t i = 0; i < level.collectibles.size(); ++i) {
+                if (simulation.collectible_collected(i))
+                    continue;
+                const float phase = seconds * 2 + static_cast<float>(i) * 1.7F;
+                const Vec3 position =
+                    level.collectibles[i].position + Vec3{0, 0.1F * std::sin(phase), 0};
+                instances.push_back({.mesh = k_spark_mesh,
+                                     .model = yaw_translation(phase * 0.7F, position),
+                                     .casts_shadow = false,
+                                     .emissive = 1.2F});
+            }
+            if (const auto last_spark = simulation.last_collected()) {
+                const float age =
+                    std::max(0.0F, seconds - static_cast<float>(simulation.last_collection_tick()) *
+                                                 static_cast<float>(FixedStep::k_tick));
+                if (age < 0.65F) {
+                    for (int mote = 0; mote < 6; ++mote) {
+                        const float angle = static_cast<float>(mote) * k_tau / 6;
+                        const Vec3 drift{std::cos(angle) * age * 2, age * 1.8F,
+                                         std::sin(angle) * age * 2};
+                        instances.push_back(
+                            {.mesh = k_bulb_mesh,
+                             .model = yaw_translation(0, level.collectibles[*last_spark].position +
+                                                             drift),
+                             .casts_shadow = false,
+                             .tint = {1, 0.65F, 0.15F},
+                             .emissive = (1 - age / 0.65F) * 2});
+                    }
+                }
+            }
             if (lighting.bulbs) {
                 for (const auto &light : lights) {
                     const float peak = std::max({light.color.x, light.color.y, light.color.z});
@@ -372,6 +405,8 @@ int run(const LaunchOptions &options) {
                 movement_overlay(simulation, status);
             };
             const std::function<void()> debug_windows = [&] {
+                if (!options.hide_overlay && !tuning_open)
+                    collectible_hud(simulation, level);
                 tuning_window(simulation, {lighting, (*window)->gamepad_tuning, diagnostics},
                               tuning_open);
             };
@@ -532,7 +567,7 @@ int main(int argc, char *argv[]) {
             "  --level PATH  Load a version-1 JSON level; default is the packaged playground.\n"
             "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
             "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
-            "  --hide-overlay  Start with the F1 overlay hidden (clean captures).\n"
+            "  --hide-overlay  Hide diagnostics and the spark HUD (clean captures).\n"
             "  --capture-tick N  Capture the exact state at simulation tick N.\n"
             "  --frame-log PATH  Write per-frame timing (CSV) for frame-pacing diagnostics.\n"
             "  --resize-test / --camera-test  Scripted render correctness checks.\n"

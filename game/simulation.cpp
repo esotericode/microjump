@@ -1,9 +1,45 @@
 #include "simulation.hpp"
 
 namespace mj::game {
+namespace {
+bool visible(const CollisionWorld &world, Vec3 from, Vec3 to) {
+    const Vec3 delta = to - from;
+    const float distance = length(delta);
+    return distance <= 1.0e-6F || !world.raycast({from, delta * (1.0F / distance), distance});
+}
+
+bool touches(const CollisionWorld &world, const Capsule &capsule, const Collectible &spark) {
+    const Vec3 closest = closest_point_on_segment(spark.position, capsule.segment());
+    const float reach = capsule.radius + spark.radius;
+    return length_squared(spark.position - closest) <= reach * reach &&
+           visible(world, closest, spark.position);
+}
+
+bool swept_touch(const CollisionWorld &world, const Capsule &before, const Capsule &after,
+                 const Collectible &spark) {
+    if (touches(world, before, spark) || touches(world, after, spark))
+        return true;
+    const auto body = before.segment();
+    const Vec3 travel = after.base - before.base;
+    // Relative motion turns the swept vertical segment into a segment/segment query:
+    // one segment follows the bottom cap; the other is the spark minus the body height.
+    const auto [on_path, on_spark] =
+        closest_points_between({{body.start, body.start + travel},
+                                {spark.position - (body.end - body.start), spark.position}});
+    const float reach = before.radius + spark.radius;
+    if (length_squared(on_path - on_spark) > reach * reach)
+        return false;
+    const Vec3 on_body = on_path + (spark.position - on_spark);
+    if (!visible(world, on_body, spark.position))
+        return false;
+    // Sliding and stepping can bend the actual path. Do not award an inferred point
+    // on the straight chord through solid geometry; endpoint overlaps above stay valid.
+    return !world.sweep({before, on_path - body.start, 0});
+}
+} // namespace
 
 Simulation::Simulation(const Level &level, const CollisionWorld &world)
-    : m_level(level), m_world(world) {
+    : m_level(level), m_world(world), m_collected(level.collectibles.size(), false) {
     const auto spawn = level.checkpoints.empty() ? Checkpoint{} : level.checkpoints.front();
     player.place(spawn.position, spawn.yaw);
     camera.snap(player.current(), spawn.yaw);
@@ -24,6 +60,7 @@ void Simulation::tick(const TickInput &input, float dt) {
         respawn();
         return;
     }
+    const auto before = player.capsule();
     player.tick(input, m_world, dt);
     const auto &state = player.current();
     if (state.position.y < m_level.kill_height) {
@@ -37,7 +74,20 @@ void Simulation::tick(const TickInput &input, float dt) {
                 m_checkpoint = i;
         }
     }
+    collect_sparks(before);
     camera.tick(state, m_world, dt);
+}
+
+void Simulation::collect_sparks(const Capsule &before) {
+    const auto after = player.capsule();
+    for (std::size_t i = 0; i < m_collected.size(); ++i) {
+        if (m_collected[i] || !swept_touch(m_world, before, after, m_level.collectibles[i]))
+            continue;
+        m_collected[i] = true;
+        ++m_collected_count;
+        m_last_collected = i;
+        m_last_collection_tick = m_ticks;
+    }
 }
 
 } // namespace mj::game

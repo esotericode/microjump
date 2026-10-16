@@ -10,6 +10,8 @@ AI agents build it together: [AGENTS.md](AGENTS.md) guides them, and
 
 - **A 230 m playground:** a plaza, a sprint lane, 40 route platforms, wall-kick
   towers, a summit stair course, a lighting pavilion and 12 checkpoints.
+- **16 golden sparks to find:** an invitation near spawn, then little rewards for
+  exploring the platform routes, wall decks, summit, sprint lane and pavilion.
 - **Movement:** running, skids, variable jumps, wall kicks, long jumps, and momentum
   you build on purpose.
 - **A renderer:** HDR forward rendering with sun shadows, 16 local lights, GGX
@@ -72,6 +74,12 @@ notices. A Vulkan 1.3 GPU driver is all a player needs.
 
 While F2 is open, a controller drives the menu and the keyboard still plays.
 Tuning values reset when the game restarts.
+
+Walk or jump into golden sparks to collect them. The **SPARKS** counter shows your
+progress and each find's name; finding all 16 completes the hunt. Finds stay collected
+when you return to a checkpoint and reset when you restart the game. F1 toggles the
+diagnostics while keeping spark progress visible; `--hide-overlay` hides both for
+clean captures.
 
 ## Command line
 

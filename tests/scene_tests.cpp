@@ -1,5 +1,7 @@
 #include "test_framework.hpp"
 
+#include <spark_visuals.hpp>
+
 #include <mj/core/fixed_step.hpp>
 #include <mj/core/launch_options.hpp>
 #include <mj/core/png.hpp>
@@ -82,6 +84,24 @@ TEST_CASE("generated primitives have outward unit normals and consistent winding
         CHECK(mj::dot(winding, a.normal) > 0.99F);
         CHECK(mj::dot(a.normal, a.normal) == doctest::Approx(1));
         CHECK(mj::dot(a.position, a.normal) > 0.0F);
+    }
+}
+
+TEST_CASE("spark facets face outward and stay inside the centered visual envelope") {
+    const auto mesh = mj::game::make_spark_mesh();
+    REQUIRE(mesh.vertices.size() == 24);
+    for (std::size_t i = 0; i < mesh.vertices.size(); i += 3) {
+        const auto &a = mesh.vertices[i];
+        const auto &b = mesh.vertices[i + 1];
+        const auto &c = mesh.vertices[i + 2];
+        const auto normal =
+            mj::normalized(mj::cross(b.position - a.position, c.position - a.position));
+        CHECK(mj::dot(normal, a.normal) > 0.99F);
+        CHECK(mj::dot(a.position, normal) > 0.0F);
+        for (const auto *vertex : {&a, &b, &c}) {
+            CHECK(mj::length(vertex->position) <= 0.48F);
+            CHECK(mj::length(vertex->normal) == doctest::Approx(1));
+        }
     }
 }
 

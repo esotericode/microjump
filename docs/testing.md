@@ -123,3 +123,16 @@ reported as leaks.
   acknowledgement. Xvfb resizes synchronously, so CI doesn't hit it.
 - Replays are exact within one build. Committed-replay tests allow tiny tolerances for
   other compilers.
+
+## Spark hunt
+
+The collectible tests cover strict optional JSON data, capsule and swept pickups, wall
+occlusion, respawn retention, and collection determinism across render cadences. They
+also compare movement bit for bit with the same level without collectibles. Content
+tests settle the player at every authored spark and exercise routes to the rewards.
+
+`tests/replays/spark-invitation.mjr` walks from spawn through **First light**. With smoke
+tests enabled, `render_spark_pickup` captures tick 140 with the counter at 1/16 and
+`replay_spark_invitation` checks the completed replay at tick 170. Both require zero
+Vulkan validation errors. F1 can close diagnostics while leaving the hunt HUD visible;
+`--hide-overlay` suppresses both for clean scene captures.

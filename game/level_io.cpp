@@ -50,7 +50,7 @@ class Reader {
             fail(path + "." + std::string(key), "missing field");
         return missing;
     }
-    float number(const Json &value, const std::string &path, float low, float high) {
+    float number(const Json &value, const std::string &path, double low, double high) {
         if (value.is_number()) {
             const double result = value.get<double>();
             if (std::isfinite(result) && result >= low && result <= high)
@@ -58,10 +58,10 @@ class Reader {
         }
         fail(path, "expected a finite number in [" + std::to_string(low) + ", " +
                        std::to_string(high) + "]");
-        return low;
+        return static_cast<float>(low);
     }
-    float scalar(const Json &object, std::string_view key, const std::string &path, float low,
-                 float high, float fallback) {
+    float scalar(const Json &object, std::string_view key, const std::string &path, double low,
+                 double high, float fallback) {
         const auto found = object.find(key);
         return found == object.end() ? fallback
                                      : number(*found, path + "." + std::string(key), low, high);
@@ -156,9 +156,9 @@ std::expected<Level, Error> parse_level(std::string_view text) {
     if (duplicate_key)
         return std::unexpected(Error{"Level contains a duplicate object field"});
     Reader read;
-    if (!read.object(
-            root, "level",
-            {"version", "name", "kill_height", "shapes", "checkpoints", "lights", "zones"}))
+    if (!read.object(root, "level",
+                     {"version", "name", "kill_height", "shapes", "checkpoints", "lights", "zones",
+                      "collectibles"}))
         return std::unexpected(Error{read.error});
     const auto &version = read.member(root, "version", "level");
     if (!version.is_number_integer() || version != 1)
@@ -274,6 +274,26 @@ std::expected<Level, Error> parse_level(std::string_view text) {
                 read.vector(read.member(item, "center", path), path + ".center", -4096, 4096);
             zone.radius = read.scalar(item, "radius", path, 1, 200, 20);
             level.zones.push_back(zone);
+        }
+    }
+    const auto &collectibles = read.member(root, "collectibles", "level", false);
+    if (root.contains("collectibles") && read.array(collectibles, "level.collectibles", 0, 128)) {
+        std::set<std::string> names;
+        for (std::size_t i = 0; i < collectibles.size(); ++i) {
+            const auto &item = collectibles[i];
+            const auto path = "level.collectibles[" + std::to_string(i) + "]";
+            if (!read.object(item, path, {"name", "position", "radius"}))
+                break;
+            Collectible collectible;
+            collectible.name = read.name(read.member(item, "name", path), path + ".name");
+            if (!names.insert(collectible.name).second)
+                read.fail(path + ".name", "collectible names must be unique");
+            collectible.position =
+                read.vector(read.member(item, "position", path), path + ".position", -4096, 4096);
+            collectible.radius = read.scalar(item, "radius", path, 0.1, 2.0, 0.65F);
+            if (collectible.position.y <= level.kill_height)
+                read.fail(path + ".position", "collectible must be above the kill plane");
+            level.collectibles.push_back(collectible);
         }
     }
     if (!read.error.empty())

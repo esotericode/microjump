@@ -5,6 +5,7 @@
 #include "player.hpp"
 
 #include <cstdint>
+#include <optional>
 
 namespace mj::game {
 
@@ -28,13 +29,34 @@ class Simulation {
     [[nodiscard]] std::uint32_t respawns() const {
         return m_respawns;
     }
+    [[nodiscard]] bool collectible_collected(std::size_t index) const {
+        return index < m_collected.size() && m_collected[index];
+    }
+    [[nodiscard]] std::size_t collected_count() const {
+        return m_collected_count;
+    }
+    [[nodiscard]] std::size_t collectible_count() const {
+        return m_collected.size();
+    }
+    [[nodiscard]] std::optional<std::size_t> last_collected() const {
+        return m_last_collected;
+    }
+    [[nodiscard]] std::uint64_t last_collection_tick() const {
+        return m_last_collection_tick;
+    }
 
   private:
+    void collect_sparks(const Capsule &before);
+
     const Level &m_level;
     const CollisionWorld &m_world;
     std::size_t m_checkpoint = 0;
     std::uint64_t m_ticks = 0;
     std::uint32_t m_respawns = 0;
+    std::vector<bool> m_collected; // Survives respawn; a new Simulation starts a new hunt.
+    std::size_t m_collected_count = 0;
+    std::optional<std::size_t> m_last_collected;
+    std::uint64_t m_last_collection_tick = 0;
 };
 
 } // namespace mj::game
