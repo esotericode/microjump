@@ -201,7 +201,7 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
         s.run_phase += speed * dt / (1.2F + 0.1F * speed);
         s.run_phase -= std::floor(s.run_phase);
     }
-    s.stride = smooth(s.stride, grounded ? std::min(speed / 7, 1.0F) : 0.0F, grounded ? 12 : 5, dt);
+    s.stride = smooth(s.stride, grounded ? std::min(speed / 7, 1.0F) : 0.0F, grounded ? 12.0F : 5.0F, dt);
     s.air = grounded ? 0 : smooth(s.air, 1, 9, dt);
     s.rise = smooth(s.rise, std::clamp(player.velocity.y / 10, -1.0F, 1.0F), 20, dt);
 
@@ -209,7 +209,7 @@ void CharacterAnimator::tick(const PlayerState &player, float dt) {
         m_diving = true;
     if (grounded || kicked)
         m_diving = false;
-    s.dive = smooth(s.dive, m_diving ? 1.0F : 0.0F, m_diving ? 18 : 14, dt);
+    s.dive = smooth(s.dive, m_diving ? 1.0F : 0.0F, m_diving ? 18.0F : 14.0F, dt);
     s.skid = smooth(s.skid, player.state == MoveState::skid ? 1.0F : 0.0F, 16, dt);
 
     // Lean grows with speed, more for momentum past a run, and with acceleration.
