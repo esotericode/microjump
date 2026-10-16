@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace mj::game {
@@ -28,13 +29,20 @@ struct Checkpoint {
     float yaw = 0;
 };
 
-// Placement data only; M4 loads the same structure from a versioned JSON level file.
+struct LevelZone {
+    std::string name;
+    Vec3 center;
+    float radius = 20;
+};
+
+// Placement data loaded from a versioned JSON level file.
 struct Level {
     std::string name;
     std::vector<Shape> shapes;
     std::vector<Checkpoint> checkpoints; // [0] is the spawn point.
     std::vector<LightFixture> lights;
     float kill_height = -25;
+    std::vector<LevelZone> zones; // Optional named regions for diagnostics and playtest directions.
 };
 
 struct LevelGeometry {
@@ -51,5 +59,6 @@ struct LevelGeometry {
 // lane, and (M3) a shaded lighting pavilion with material samples plus night lamps.
 // The full 200 m playground is M4.
 [[nodiscard]] Level make_movement_yard();
+[[nodiscard]] std::string_view zone_at(const Level &level, Vec3 position);
 
 } // namespace mj::game

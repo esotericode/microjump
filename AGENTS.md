@@ -2,7 +2,7 @@
 ## A custom C++ game engine, proven through a 3D platformer
 
 **Document version:** 0.3
-**Status:** M3 lighting slice implemented; awaiting owner review (M2 playtest also open). Gates in Section 15, `docs/m2-movement.md`, `docs/m3-lighting.md`
+**Status:** M4 first increment: JSON levels and connected playground implemented. M2/M3 owner gates remain open. See Section 15 and `docs/m4-playground.md`.
 **Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
 
 > **Our north star:** Build a high-quality 3D game engine of our own in modern C++, and demonstrate it with a polished, expressive 3D platformer. The engine is the reason for the project; the game is how we prove it works.
@@ -38,7 +38,7 @@ cmake --build --preset linux-debug    # build
 ctest --preset linux-debug            # run all automated tests
 ./build/linux-debug/game/microjump    # movement yard: WASD/Space/mouse, F1 overlay, F2 tuning
 ./build/linux-debug/game/microjump --capture-frame 12 --capture-out captures/scene.png
-./build/linux-debug/game/microjump --replay tests/replays/m2-input-smoke.mjr
+./build/linux-debug/game/microjump --level assets/levels/movement-yard.json --replay tests/replays/m2-input-smoke.mjr
 # Add -DMJ_SMOKE_TESTS=ON at configure time to include GPU/capture tests in CTest.
 ```
 
@@ -52,7 +52,8 @@ Runtime flags (all available):
 | `--camera-test` / `--resize-test` | Scripted render correctness fixtures (not input replay). | M1 |
 | `--record PATH` / `--replay PATH` | Record every tick's input on exit / replay it instead of live input, then exit. Format: `docs/m2-movement.md`. | M2 |
 | `--time-of-day H` / `--shadow-quality low\|medium\|high` | Start time (hours) and sun shadow preset. | M3 |
-| `--capture-tick N` / `--hide-overlay` | Capture the first frame after simulation tick N (frame-rate independent); start with the overlay hidden. | M3 |
+| `--capture-tick N` / `--hide-overlay` | Capture the exact state at simulation tick N; start with the overlay hidden. | M3 |
+| `--level PATH` | Load a version-1 JSON level. Default: packaged `assets/levels/playground.json`; legacy replays use `movement-yard.json`. | M4 |
 
 ### Local development environment
 
@@ -387,10 +388,10 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | Field | Current value |
 | --- | --- |
 | Overall status | **IMPLEMENTING** |
-| Current milestone | **M3 — Lighting slice** (in progress; implemented, awaiting owner review). M2 implemented, awaiting playtest. |
-| Latest working build | 2026-10-15: M3 on Linux GCC Debug/Release + Clang Debug, native Intel and software Vulkan; see `docs/m3-lighting.md`. Windows CI results/downloads are recorded in the PR. |
+| Current milestone | **M4 — Full playground** (in progress; JSON level/loading and large layout implemented; wall jumps and momentum move remain). M2/M3 owner checks stay open. |
+| Latest working build | 2026-10-15: JSON playground on native Intel and software Vulkan; evidence in `docs/m4-playground.md`. Reviewed M3 merged in PR #7; current PR records Linux/MSVC checks and downloads. |
 | Open owner decisions | None. Owner input needed: M2 playtest, M3 visual review (both PR requests), Windows hardware checks for M0–M3. |
-| Next useful action | Owner playtests M2 and reviews M3 (look, shadow presets, frame rate); then M4 full JSON playground with wall jumps and checkpoints. |
+| Next useful action | Add designated wall-jump surfaces and a momentum move, then full-route replays. Owner can playtest the new JSON playground and review M2/M3 feel/lighting meanwhile. |
 
 ### Milestone status tracker
 
@@ -400,7 +401,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | M1 | In progress | 2026-10-15: 3D scene, debug camera, GPU capture and FPS overlay implemented; local evidence/captures in `docs/m1-evidence.md`. Owner Windows run/controls acceptance remains open. |
 | M2 | In progress | 2026-10-15: capsule controller, run/skid/variable jump/coyote/buffer/air steering, follow camera with obstruction, record/replay, live tuning; deterministic tests pass on three Linux configs (`docs/m2-movement.md`). Owner playtest and Windows run remain open. |
 | M3 | In progress | 2026-10-15: HDR forward renderer and tone mapping, texel-snapped sun shadow map with Low/Medium/High PCF presets and bias controls, 16 point/spot lights, GGX materials, sky and day/night, lighting pavilion and moving-light demo; captures and tests in `docs/m3-lighting.md`. Owner visual review and Windows run remain open. |
-| M4 | Not started | — |
+| M4 | In progress | 2026-10-15: versioned JSON levels, 230 m connected ground, 40 route platforms, sprint/stair/ramp courses and 10 checkpoints; `docs/m4-playground.md`. Wall jumps, momentum move and full traversal acceptance remain. |
 | M5 | Not started | — |
 
 **Allowed states:** Not started · In progress · Blocked · Done · Reopened. State changes require a date and evidence reference (PR, commit, test log, or capture).
@@ -445,6 +446,9 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-034 | Keep the player's contact (blob) shadow alongside sun shadows (35% default, toggle + strength in F2). | It shows the landing spot straight down when the sun's shadow falls sideways or the player is in shade. Supersedes D-028's "temporary" note; the owner's playtest decides. |
 | 2026-10-15 / D-035 | Ignore relative mouse motion for 150 ms after capture engages; never capture the mouse during `--replay`. Add `--capture-tick` and switch replay capture tests to it. | Wayland pointer lock delivered a one-off camera jump that made captures irreproducible. Frame-numbered replay captures failed on slow software Vulkan once frames got heavier. |
 | 2026-10-15 / D-036 | Tick captures stop at the exact simulation tick and render its current state without interpolation; light animation uses the same time. | M3 review reproduced tick 1 capturing tick 3. An integration regression now verifies exact tick-1 output and clean shutdown. Implicit fixture frame limits cannot end tick captures early. Evidence: `docs/m3-review.md`. |
+| 2026-10-15 / D-037 | Proceed with M4's JSON/layout increment while the M2/M3 owner playtests and Windows GPU gates remain open. | Owner explicitly asked to check the other agent's work and continue. M3 was reviewed, corrected and merged after all five CI jobs passed. No prior gate is waived. |
+| 2026-10-15 / D-038 | Activate charter-approved nlohmann/json 3.12.0, pinned by immutable commit and SHA-256, for version-1 level parsing. Validate schema/types/ranges and return errors before creating a window. | The next engine slice needs authored JSON placements. Rendering/collision still use our generated primitives. Keep the original C++ yard as a regression fixture and a matching JSON file for existing recordings; ship the parser's MIT notice. |
+| 2026-10-15 / D-039 | M4's first increment is a 230 m JSON playground with 40 raised route platforms, 10 checkpoints, seven named diagnostic regions, extended sprint/stair courses and the retained lighting pavilion. | Delivers a reviewable data/loading/layout slice before adding new movement verbs. Ground bypasses and ramp returns connect the zones. Wall jumping, momentum movement and full traversal checks remain required M4 work. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -478,6 +482,8 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
 
 - **2026-10-15 — M3 review.** Reviewed lighting/resource synchronization and inspected fresh captures. Fixed capture-tick overshoot and interpolation-dependent snapshots. All 17 native Intel CTests pass, including ASan/UBSan, synchronization validation and the new exact-tick regression; 32 doctest cases / 49,824 assertions. Details: `docs/m3-review.md`; owner visual/feel and Windows checks remain open.
+
+- **2026-10-15 — M4 JSON/layout increment.** Runtime levels now load from validated version-1 JSON with materials, lights, named regions and checkpoints; packaged default assets resolve beside the executable. Authored a 230 m playground and preserved the original yard/recordings. All 20 CTests and 37 doctest cases / 50,645 assertions pass on GCC Debug/Release and Clang Debug; zero Vulkan validation errors, formatting and clang-tidy pass. New tests cover malformed input, UTF-8 paths, legacy movement parity, all 10 checkpoints, the extended lane and summit stairs. Native GPU views of spawn, platform field, stairs and prepared wall course were inspected. Evidence and remaining work: `docs/m4-playground.md`; PR records final checks and runtime downloads. M4 remains in progress.
 
 ### Known risks and unanswered questions
 

@@ -1,6 +1,9 @@
 # PASS_REGULAR_EXPRESSION ignores the process exit code, including a normal LSan
 # failure after successful rendering. Require both the output and a clean exit.
 set(capture_args)
+if(DEFINED LEVEL)
+    list(APPEND capture_args --level "${LEVEL}")
+endif()
 if(DEFINED CAPTURE_TICK)
     list(APPEND capture_args --capture-tick "${CAPTURE_TICK}" --capture-out "${CAPTURE_OUT}")
 endif()

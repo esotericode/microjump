@@ -119,6 +119,14 @@ int check_lighting(const char *day_path, const char *night_path, const char *pav
 }
 
 int main(int argc, char *argv[]) {
+    if (argc == 3 && std::string_view(argv[1]) == "--scene") {
+        if (!scene_pixels(load(argv[2]), 16.0 / 9)) {
+            std::cerr << "Invalid/empty playground GPU capture\n";
+            return 1;
+        }
+        std::cout << "Playground scene pixels verified\n";
+        return 0;
+    }
     if (argc == 5 && std::string_view(argv[1]) == "--lighting")
         return check_lighting(argv[2], argv[3], argv[4]);
     if (argc != 5) {

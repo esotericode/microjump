@@ -1,10 +1,24 @@
 #include "level.hpp"
 
 #include <array>
+#include <limits>
 #include <optional>
 #include <utility>
 
 namespace mj::game {
+
+std::string_view zone_at(const Level &level, Vec3 position) {
+    std::string_view name = "Connections";
+    float closest = std::numeric_limits<float>::max();
+    for (const auto &zone : level.zones) {
+        const float distance = length_squared(horizontal(position - zone.center));
+        if (distance <= zone.radius * zone.radius && distance < closest) {
+            closest = distance;
+            name = zone.name;
+        }
+    }
+    return name;
+}
 
 Vec3 linear_color(unsigned int srgb) {
     auto channel = [](unsigned int value) {

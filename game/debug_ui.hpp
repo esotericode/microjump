@@ -11,6 +11,8 @@ struct SessionStatus {
     bool free_camera = false;
     bool gamepad = false;
     std::string input_mode; // "Live", "Recording: path" or "Replay: n/m".
+    std::string level;
+    std::string_view zone;
     float hours = 12;
     bool day_animating = false;
 };
