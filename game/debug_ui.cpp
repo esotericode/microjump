@@ -47,6 +47,18 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
         ImGui::TextUnformatted("Shift + jump: long jump  |  R respawn  |  Mouse look");
     }
     ImGui::TextUnformatted("F1 overlay  F2 tuning  F3 free camera  Esc quit");
+    if (status.pacing != nullptr && status.pacing->stats().count > 0) {
+        const auto stats = status.pacing->stats();
+        ImGui::Separator();
+        ImGui::Text("Frame %.2f ms  jitter %.2f ms  range %.1f-%.1f ms", stats.mean_ms,
+                    stats.deviation_ms, stats.min_ms, stats.max_ms);
+        ImGui::Text("Long frames %u  uneven tick frames %u  (last %zu)", stats.long_frames,
+                    stats.uneven_ticks, stats.count);
+        const auto &values = status.pacing->intervals();
+        ImGui::PlotLines("##frames", values.data(), static_cast<int>(values.size()),
+                         static_cast<int>(status.pacing->offset()), nullptr, 0.0F,
+                         static_cast<float>(std::max(40.0, stats.mean_ms * 2.5)), ImVec2(380, 50));
+    }
 }
 
 namespace {
@@ -84,8 +96,9 @@ void lighting_section(LightingControls &lighting) {
 }
 } // namespace
 
-void tuning_window(Simulation &simulation, LightingControls &lighting, GamepadTuning &gamepad,
-                   bool &open) {
+void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &open) {
+    auto &lighting = panels.lighting;
+    auto &gamepad = panels.gamepad;
     if (!open)
         return;
     ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x - 420, 18), ImGuiCond_FirstUseEver);
@@ -178,6 +191,22 @@ void tuning_window(Simulation &simulation, LightingControls &lighting, GamepadTu
         slider("Air half-life", c.air_half_life, 0, 2, "%.3f s");
         slider("Air window", c.air_window, 0, 5);
         slider("Recover half-life", c.recover_half_life, 0, 2, "%.3f s");
+    }
+    if (ImGui::CollapsingHeader("Diagnostics: frame pacing")) {
+        auto &d = panels.diagnostics;
+        ImGui::Text("Display refresh: %.2f Hz", static_cast<double>(d.refresh_hz));
+        ImGui::Checkbox("Snap frame time to refresh", &d.snap_to_refresh);
+        ImGui::TextUnformatted("Experiments (each is logged):");
+        d.wait_idle = ImGui::Button("Wait for GPU idle");
+        ImGui::SameLine();
+        d.rebuild_shadow_map = ImGui::Button("Rebuild shadow map");
+        ImGui::SameLine();
+        d.rebuild_swapchain = ImGui::Button("Recreate swapchain");
+        d.toggle_log = ImGui::Button(d.logging ? "Stop frame log" : "Start frame log");
+        if (!d.log_path.empty()) {
+            ImGui::SameLine();
+            ImGui::TextUnformatted(d.log_path.c_str());
+        }
     }
     ImGui::End();
 }

@@ -1,5 +1,5 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
-    movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp)
+    movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp frame_pacing_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"

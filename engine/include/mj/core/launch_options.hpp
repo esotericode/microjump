@@ -18,6 +18,7 @@ struct LaunchOptions {
     bool resize_test = false;
     bool camera_test = false;
     bool hide_overlay = false;
+    bool pacing_test = false; // Scripted shadow/stall/swapchain sequence with timing summaries.
     std::optional<std::uint32_t> frames;
     std::optional<std::uint32_t> capture_frame;
     std::optional<std::uint32_t> capture_tick; // Exact simulation state, without interpolation.
@@ -25,6 +26,7 @@ struct LaunchOptions {
     std::filesystem::path record;
     std::filesystem::path replay;
     std::filesystem::path level; // Empty uses assets/levels/playground.json beside the executable.
+    std::filesystem::path frame_log;  // Per-frame timing CSV (frame-pacing diagnostics).
     std::optional<float> time_of_day; // Hours, 0..24.
     std::optional<ShadowQuality> shadow_quality;
 };

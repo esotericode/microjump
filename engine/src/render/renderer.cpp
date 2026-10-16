@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -278,6 +279,7 @@ struct Renderer::Impl {
         Buffer uniforms;
         VkDescriptorSet frame_set = VK_NULL_HANDLE; // Uniforms + shadow map.
         VkDescriptorSet post_set = VK_NULL_HANDLE;  // HDR image for tone mapping.
+        bool timestamps_written = false;
     };
     struct MeshRange {
         std::uint32_t first = 0;
@@ -318,6 +320,12 @@ struct Renderer::Impl {
     bool imgui_renderer = false;
     bool recreate = false;
     double smoothed_seconds = 1.0 / 60;
+    VkQueryPool timestamps = VK_NULL_HANDLE; // Two per frame slot; null when unsupported.
+    double timestamp_period_ns = 0;
+    std::uint64_t timestamp_mask = 0;
+    FrameTiming timing;
+    bool action_wait_idle = false;
+    bool action_rebuild_shadow = false;
 
     ~Impl();
     std::expected<void, Error> initialize(std::span<const SceneMesh> scene_meshes);
@@ -383,6 +391,26 @@ std::expected<void, Error> Renderer::Impl::initialize(std::span<const SceneMesh>
     semaphore_info.pNext = &type;
     MJ_VK_TRY(vkCreateSemaphore(vk.device, &semaphore_info, nullptr, &timeline));
     semaphore_info.pNext = nullptr;
+    // GPU timestamps are diagnostics only: without queue support they are simply skipped.
+    std::uint32_t family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(vk.physical, &family_count, nullptr);
+    std::vector<VkQueueFamilyProperties> families(family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(vk.physical, &family_count, families.data());
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(vk.physical, &properties);
+    const std::uint32_t valid_bits =
+        vk.queue_family < family_count ? families[vk.queue_family].timestampValidBits : 0;
+    if (valid_bits > 0 && properties.limits.timestampPeriod > 0) {
+        VkQueryPoolCreateInfo query_info{};
+        query_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        query_info.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        query_info.queryCount = static_cast<std::uint32_t>(k_frame_count * 2);
+        MJ_VK_TRY(vkCreateQueryPool(vk.device, &query_info, nullptr, &timestamps));
+        timestamp_period_ns = properties.limits.timestampPeriod;
+        timestamp_mask = valid_bits >= 64 ? ~0ULL : (1ULL << valid_bits) - 1;
+    }
+    log(timestamps != VK_NULL_HANDLE ? "GPU frame timestamps: available"
+                                     : "GPU frame timestamps: unsupported on this queue");
     for (auto &frame : frames) {
         MJ_VK_TRY(vkCreateSemaphore(vk.device, &semaphore_info, nullptr, &frame.acquired));
         VkCommandBufferAllocateInfo allocation{};
@@ -681,6 +709,9 @@ std::expected<void, Error> Renderer::Impl::create_swapchain(PixelSize size) {
     MJ_VK_TRY(vkGetSwapchainImagesKHR(vk.device, swapchain, &count, nullptr));
     swap_images.resize(count);
     MJ_VK_TRY(vkGetSwapchainImagesKHR(vk.device, swapchain, &count, swap_images.data()));
+    log("Swapchain: " + std::to_string(extent.width) + "x" + std::to_string(extent.height) + ", " +
+        std::to_string(count) + " images (min " + std::to_string(capabilities.minImageCount) +
+        "), FIFO");
     presented.resize(count, VK_NULL_HANDLE);
     VkSemaphoreCreateInfo semaphore_info{};
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -824,13 +855,23 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     const auto size = window->pixel_size();
     if (size.width == 0 || size.height == 0)
         return false;
+    using Clock = std::chrono::steady_clock;
+    const auto milliseconds = [](Clock::time_point from, Clock::time_point to) {
+        return std::chrono::duration<double, std::milli>(to - from).count();
+    };
+    timing = {};
+    const auto started = Clock::now();
     const bool resized =
         recreate || size.width != requested_size.width || size.height != requested_size.height;
     // The shadow map is created on first use, at the requested quality.
-    const bool shadow_changed =
-        shadow_map.handle == VK_NULL_HANDLE || view.shadows.quality != shadow_quality;
-    if (resized || shadow_changed) {
+    const bool shadow_changed = shadow_map.handle == VK_NULL_HANDLE ||
+                                view.shadows.quality != shadow_quality || action_rebuild_shadow;
+    if (resized || shadow_changed || action_wait_idle) {
         MJ_VK_TRY(vkDeviceWaitIdle(vk.device));
+        action_wait_idle = false;
+        action_rebuild_shadow = false;
+        timing.shadow_rebuilt = shadow_changed;
+        timing.swapchain_rebuilt = resized;
         if (shadow_changed) {
             if (auto result = create_shadow_map(view.shadows.quality); !result)
                 return std::unexpected(result.error());
@@ -846,9 +887,22 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
                 return std::unexpected(result.error());
         }
     }
+    timing.rebuild_ms = milliseconds(started, Clock::now());
     auto &frame = frames[frame_index];
+    const auto wait_started = Clock::now();
     if (auto result = wait(frame.completion); !result)
         return std::unexpected(result.error());
+    timing.wait_ms = milliseconds(wait_started, Clock::now());
+    if (timestamps != VK_NULL_HANDLE && frame.timestamps_written) {
+        std::array<std::uint64_t, 2> ticks{};
+        const auto first = static_cast<std::uint32_t>(frame_index * 2);
+        if (vkGetQueryPoolResults(vk.device, timestamps, first, 2, sizeof(ticks), ticks.data(),
+                                  sizeof(std::uint64_t), VK_QUERY_RESULT_64_BIT) == VK_SUCCESS) {
+            const auto elapsed =
+                ((ticks[1] & timestamp_mask) - (ticks[0] & timestamp_mask)) & timestamp_mask;
+            timing.gpu_ms = static_cast<double>(elapsed) * timestamp_period_ns / 1.0e6;
+        }
+    }
     if (capture != nullptr && frame.readback.handle == VK_NULL_HANDLE) {
         auto buffer =
             Buffer::create(vk.device, vk.physical,
@@ -859,8 +913,13 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
         frame.readback = std::move(*buffer);
     }
     std::uint32_t image_index = 0;
+    const auto acquire_started = Clock::now();
     const auto acquire = vkAcquireNextImageKHR(vk.device, swapchain, 1'000'000'000ULL,
                                                frame.acquired, VK_NULL_HANDLE, &image_index);
+    const auto acquired = Clock::now();
+    timing.acquire_ms = milliseconds(acquire_started, acquired);
+    timing.image = image_index;
+    timing.swapchain_images = static_cast<std::uint32_t>(swap_images.size());
     if (acquire == VK_ERROR_OUT_OF_DATE_KHR) {
         recreate = true;
         return false;
@@ -871,6 +930,7 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
         return std::unexpected(vulkan_error("vkAcquireNextImageKHR", acquire));
     }
     recreate = acquire == VK_SUBOPTIMAL_KHR;
+    timing.suboptimal = recreate;
     auto &io = ImGui::GetIO();
     if ((SDL_GetWindowFlags(window->native_handle()) & SDL_WINDOW_INPUT_FOCUS) != 0)
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
@@ -925,6 +985,11 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     MJ_VK_TRY(vkBeginCommandBuffer(command, &begin));
+    const auto query = static_cast<std::uint32_t>(frame_index * 2);
+    if (timestamps != VK_NULL_HANDLE) {
+        vkCmdResetQueryPool(command, timestamps, query, 2);
+        vkCmdWriteTimestamp2(command, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, timestamps, query);
+    }
     const VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(command, 0, 1, &vertices.handle, &offset);
 
@@ -1109,11 +1174,16 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
                    .source_access = VK_ACCESS_2_TRANSFER_WRITE_BIT,
                    .destination_stage = VK_PIPELINE_STAGE_2_NONE,
                    .destination_access = 0});
+    if (timestamps != VK_NULL_HANDLE) {
+        vkCmdWriteTimestamp2(command, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT, timestamps,
+                             query + 1);
+        frame.timestamps_written = true;
+    }
     MJ_VK_TRY(vkEndCommandBuffer(command));
-    VkSemaphoreSubmitInfo acquired{};
-    acquired.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-    acquired.semaphore = frame.acquired;
-    acquired.stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    VkSemaphoreSubmitInfo acquired_wait{};
+    acquired_wait.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
+    acquired_wait.semaphore = frame.acquired;
+    acquired_wait.stageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     std::array<VkSemaphoreSubmitInfo, 2> signals{};
     for (auto &signal : signals) {
         signal.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -1129,7 +1199,7 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     VkSubmitInfo2 submit{};
     submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
     submit.waitSemaphoreInfoCount = 1;
-    submit.pWaitSemaphoreInfos = &acquired;
+    submit.pWaitSemaphoreInfos = &acquired_wait;
     submit.commandBufferInfoCount = 1;
     submit.pCommandBufferInfos = &command_info;
     submit.signalSemaphoreInfoCount = 2;
@@ -1143,10 +1213,14 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     present.swapchainCount = 1;
     present.pSwapchains = &swapchain;
     present.pImageIndices = &image_index;
+    const auto present_started = Clock::now();
+    timing.record_ms = milliseconds(acquired, present_started);
     const auto result = vkQueuePresentKHR(vk.queue, &present);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    timing.present_ms = milliseconds(present_started, Clock::now());
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         recreate = true;
-    else if (result != VK_SUCCESS)
+        timing.suboptimal = true;
+    } else if (result != VK_SUCCESS)
         return std::unexpected(vulkan_error("vkQueuePresentKHR", result));
     if (capture != nullptr) {
         if (auto ready = wait(frame.completion); !ready)
@@ -1186,6 +1260,8 @@ Renderer::Impl::~Impl() {
     }
     if (timeline != VK_NULL_HANDLE)
         vkDestroySemaphore(vk.device, timeline, nullptr);
+    if (timestamps != VK_NULL_HANDLE)
+        vkDestroyQueryPool(vk.device, timestamps, nullptr);
     for (const auto pipeline : {shadow_pipeline, sky_pipeline, scene_pipeline, tonemap_pipeline}) {
         if (pipeline != VK_NULL_HANDLE)
             vkDestroyPipeline(vk.device, pipeline, nullptr);
@@ -1228,6 +1304,22 @@ void Renderer::process_event(const SDL_Event &event) {
 }
 bool Renderer::ui_wants_mouse() const {
     return m_impl->imgui_context && ImGui::GetIO().WantCaptureMouse;
+}
+const FrameTiming &Renderer::last_timing() const {
+    return m_impl->timing;
+}
+void Renderer::request(RenderAction action) {
+    switch (action) {
+    case RenderAction::wait_idle:
+        m_impl->action_wait_idle = true;
+        break;
+    case RenderAction::rebuild_shadow_map:
+        m_impl->action_rebuild_shadow = true;
+        break;
+    case RenderAction::rebuild_swapchain:
+        m_impl->recreate = true;
+        break;
+    }
 }
 bool Renderer::ui_wants_keyboard() const {
     return m_impl->imgui_context && ImGui::GetIO().WantCaptureKeyboard;

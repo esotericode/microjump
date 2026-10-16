@@ -54,6 +54,7 @@ Runtime flags (all available):
 | `--time-of-day H` / `--shadow-quality low\|medium\|high` | Start time (hours) and sun shadow preset. | M3 |
 | `--capture-tick N` / `--hide-overlay` | Capture the exact state at simulation tick N; start with the overlay hidden. | M3 |
 | `--level PATH` | Load a version-1 JSON level. Default: packaged `assets/levels/playground.json`; legacy replays use `movement-yard.json`. | M4 |
+| `--frame-log PATH` / `--pacing-test` | Per-frame timing CSV; scripted shadow/stall/swapchain sequence with per-phase pacing summaries (`docs/frame-pacing.md`). | Diagnostics |
 
 ### Local development environment
 
@@ -501,6 +502,13 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
   - Replay format 3 records the level name and rejects a mismatch before any window opens; the new `cli_rejects_replay_level_mismatch` test covers it.
   - Controller prompts use per-family button names, and level names reject control characters.
   - Windows Sticky Keys note added for the Shift long jump.
+
+- **2026-10-16 — Frame-pacing diagnostics.** The owner reported that on Windows, changing the shadow quality leaves the game no longer smooth at 60 FPS until restart; this does not reproduce on the Linux laptop. Added:
+  - per-frame CPU blocking times and GPU timestamps;
+  - a pacing graph and statistics in the overlay;
+  - a CSV frame log with events, including mouse deltas and capture state;
+  - experiment buttons, an optional refresh-snapped frame clock, and a scripted `--pacing-test`.
+  Locally, steady state is unchanged after every rebuild, with zero validation errors. The cause stays open pending Windows logs; see `docs/frame-pacing.md`.
 
 ### Known risks and unanswered questions
 
