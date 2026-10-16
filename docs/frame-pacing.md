@@ -153,9 +153,28 @@ validation errors.
 Phases 1, 6 and 8 each had one or two single 33 ms frames, the same random compositor
 hiccups as before the fix.
 
-Still to confirm on Windows: every phase except 9 should show low jitter. Phase 9
-shows whether the driver still pairs frames when unpaced; that is useful to know, but not
-a failure.
+**Windows result with the fix** (owner, NVIDIA GeForce RTX 4070 SUPER, 60 Hz, 1280×720,
+Release build, 3 swapchain images, present wait available). The logs were read and then
+removed from the repository.
+
+| Phases | Jitter | Long frames | Ticks per frame | Image reacquired |
+| --- | --- | --- | --- | --- |
+| 1–8 (pacing on: every shadow change, idle wait, swapchain recreate) | 0.85–0.92 ms | 0 | always 2 | 22–80% of frames |
+| 9 (pacing off, GPU idle wait) | 0.32 ms | 0 | 2 (one 1/3 pair) | never |
+
+- No phase paired. Every frame started 15–19 ms after the last, and each one ran exactly
+  two 120 Hz ticks.
+- With pacing on, the driver often handed back the image it had just shown (it appears to
+  copy the image out on present). Before the fix, that reuse came with paired frames.
+  With frames following the display, it has no effect on cadence.
+- Phase 9 did not pair either: the driver did not enter the paired state on this run, so
+  the run does not compare paced and unpaced frames under the original fault. The fix
+  does not rely on that comparison. A frame cannot start until a frame has been shown
+  since the previous start, so two frames per refresh cannot occur.
+- The remaining ~0.9 ms of jitter is the wake-up time of `vkWaitForPresentKHR`. Intervals
+  fall in 0.5 ms steps (16.0, 16.5, 17.0 …), which looks like Windows timer granularity.
+  The display itself still flips once per refresh. Only the clock sample moves, by up to
+  about 1.5 cm of interpolated position at 16 m/s.
 
 ## Original request to the owner (Windows)
 

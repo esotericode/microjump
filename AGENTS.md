@@ -515,7 +515,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
   - Frames are now paced to the display with `VK_KHR_present_wait` where available, so frame starts and game time follow shown refreshes rather than the driver's image handling.
   - Shadow changes avoid device-wide waits (0.1 ms instead of 5–9 ms locally, validation clean).
   - Local `--pacing-test` (Intel, Debug, validation): 0.12–0.14 ms jitter in every shadow, idle-wait and swapchain phase; with pacing off after an idle wait, intervals spread from 1.8 to 47 ms.
-  - Windows confirmation is pending.
+  - Windows confirmed (owner run, RTX 4070 SUPER): phases 1–8 had 0.85–0.92 ms jitter, no long frames, and exactly 2 ticks every frame. The driver often reacquired the image just shown, without effect. Pairing did not recur in the unpaced phase this run.
 
 ### Known risks and unanswered questions
 
