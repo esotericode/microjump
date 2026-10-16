@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lighting.hpp"
 #include "simulation.hpp"
 
 #include <string>
@@ -10,11 +11,13 @@ struct SessionStatus {
     bool free_camera = false;
     bool gamepad = false;
     std::string input_mode; // "Live", "Recording: path" or "Replay: n/m".
+    float hours = 12;
+    bool day_animating = false;
 };
 
 // Diagnostics overlay lines: movement state, speeds, checkpoint and controls.
 void movement_overlay(const Simulation &simulation, const SessionStatus &status);
-// Live tuning window (F2). Edits apply from the next tick.
-void tuning_window(Simulation &simulation, bool &open);
+// Live tuning window (F2). Movement edits apply from the next tick, lighting immediately.
+void tuning_window(Simulation &simulation, LightingControls &lighting, bool &open);
 
 } // namespace mj::game

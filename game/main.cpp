@@ -22,6 +22,7 @@ namespace mj::game {
 namespace {
 constexpr MeshHandle k_world_mesh{0};
 constexpr MeshHandle k_player_mesh{1};
+constexpr MeshHandle k_bulb_mesh{2};
 
 std::string describe(const Simulation &simulation) {
     const auto &s = simulation.player.current();
@@ -67,8 +68,11 @@ int run(const LaunchOptions &options) {
             log(context.error().message);
             return 1;
         }
-        const std::array meshes{geometry.mesh, make_player_mesh(simulation.player.tuning.radius,
-                                                                simulation.player.tuning.height)};
+        // Order matches k_world_mesh, k_player_mesh, k_bulb_mesh.
+        const std::array meshes{
+            geometry.mesh,
+            make_player_mesh(simulation.player.tuning.radius, simulation.player.tuning.height),
+            make_bulb_mesh()};
         auto renderer = Renderer::create(**window, **context, meshes);
         if (!renderer) {
             log(renderer.error().message);
@@ -76,7 +80,7 @@ int run(const LaunchOptions &options) {
         }
         DebugCamera free_camera;
         FixedStep fixed;
-        bool show_overlay = true;
+        bool show_overlay = !options.hide_overlay;
         bool tuning_open = false;
         bool use_free_camera = options.camera_test;
         bool first_resize = false, second_resize = false;
@@ -87,10 +91,17 @@ int run(const LaunchOptions &options) {
         std::optional<std::uint32_t> scripted_frame;
         SessionStatus status;
         auto last = std::chrono::steady_clock::now();
-        log("M2 ready: WASD move, Space jump, mouse look, R respawn, F1 overlay, F2 tuning, "
+        LightingControls lighting;
+        if (options.time_of_day)
+            lighting.cycle.hours = *options.time_of_day;
+        if (options.shadow_quality)
+            lighting.shadows.quality = *options.shadow_quality;
+        std::vector<DrawInstance> instances;
+        log("M3 ready: WASD move, Space jump, mouse look, R respawn, F1 overlay, F2 tuning, "
             "F3 free camera.");
         while (true) {
-            const bool capture_mouse = !tuning_open && !options.camera_test;
+            // Replays ignore live look input, so they never grab the cursor.
+            const bool capture_mouse = !tuning_open && !options.camera_test && !replaying;
             const auto input = (*window)->poll_events(
                 [&](const SDL_Event &event) { (*renderer)->process_event(event); },
                 capture_mouse && !(*renderer)->ui_wants_mouse());
@@ -182,12 +193,37 @@ int run(const LaunchOptions &options) {
                 if (!options.record.empty())
                     recording.push_back(tick);
                 simulation.tick(tick, dt);
+                lighting.cycle.advance(dt); // Visual only; never feeds back into gameplay.
             });
 
             const auto pose = simulation.player.interpolated(alpha);
-            const std::array instances{
-                DrawInstance{k_world_mesh, yaw_translation(0, {}), 1, true},
-                DrawInstance{k_player_mesh, yaw_translation(pose.facing, pose.position), 0, false}};
+            const float seconds = (static_cast<float>(simulation.ticks()) + alpha) *
+                                  static_cast<float>(FixedStep::k_tick);
+            const auto lights = lighting.local_lights
+                                    ? animate_lights(level.lights, {seconds, lighting.cycle.hours})
+                                    : std::vector<LocalLight>{};
+            instances.clear();
+            instances.push_back({.mesh = k_world_mesh,
+                                 .model = yaw_translation(0, {}),
+                                 .grid = 1,
+                                 .receives_blob = true});
+            instances.push_back(
+                {.mesh = k_player_mesh, .model = yaw_translation(pose.facing, pose.position)});
+            if (lighting.bulbs) {
+                for (const auto &light : lights) {
+                    const float peak = std::max({light.color.x, light.color.y, light.color.z});
+                    if (peak <= 0)
+                        continue;
+                    instances.push_back(
+                        {.mesh = k_bulb_mesh,
+                         .model = yaw_translation(0, light.position),
+                         .casts_shadow = false,
+                         .tint = light.color * (1 / peak),
+                         .emissive = std::min(peak, 2.5F)}); // Keeps hue after tone mapping.
+                }
+            }
+            status.hours = lighting.cycle.hours;
+            status.day_animating = lighting.cycle.animate;
             status.free_camera = use_free_camera;
             status.gamepad = input.gamepad_connected;
             status.input_mode = replaying ? "Replay " + std::to_string(replay_index) + "/" +
@@ -198,14 +234,22 @@ int run(const LaunchOptions &options) {
                 movement_overlay(simulation, status);
             };
             const std::function<void()> debug_windows = [&] {
-                tuning_window(simulation, tuning_open);
+                tuning_window(simulation, lighting, tuning_open);
             };
-            const bool capture = options.capture_frame && rendered + 1 == *options.capture_frame;
+            const bool capture =
+                (options.capture_frame && rendered + 1 == *options.capture_frame) ||
+                (options.capture_tick && !captured && simulation.ticks() >= *options.capture_tick);
             FrameView view;
             view.camera = use_free_camera ? free_camera.interpolated(alpha)
                                           : simulation.camera.pose(alpha, geometry.collision);
             view.instances = instances;
-            view.blob = {pose.position, simulation.player.tuning.radius * 1.35F};
+            view.blob = {pose.position,
+                         lighting.blob ? simulation.player.tuning.radius * 1.35F : 0.0F,
+                         lighting.blob_strength};
+            view.environment = environment_at(lighting.cycle);
+            view.lights = lights;
+            view.shadows = lighting.shadows;
+            view.shadows.focus = pose.position;
             view.elapsed = elapsed;
             view.overlay = show_overlay;
             view.overlay_lines = &overlay_lines;
@@ -228,9 +272,9 @@ int run(const LaunchOptions &options) {
             if (replay_finished)
                 break;
         }
-        if (options.frames || options.capture_frame)
+        if (options.frames || options.capture_frame || options.capture_tick)
             log("Rendered frames: " + std::to_string(rendered));
-        if (options.capture_frame && !captured) {
+        if ((options.capture_frame || options.capture_tick) && !captured) {
             log("Window closed before the requested capture");
             return 1;
         }
@@ -269,6 +313,10 @@ int main(int argc, char *argv[]) {
                 "  --smoke-test  Render 12 frames and exit.\n"
                 "  --record PATH  Save every simulation tick's input on exit.\n"
                 "  --replay PATH  Play recorded input instead of live input, then exit.\n"
+                "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
+                "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
+                "  --hide-overlay  Start with the F1 overlay hidden (clean captures).\n"
+                "  --capture-tick N  Capture the first frame after simulation tick N.\n"
                 "  --resize-test / --camera-test  Scripted render correctness checks.\n"
                 "  Debug builds require Vulkan validation layers.\n"
                 "  WASD move, Space jump, Ctrl walk, mouse look, R respawn, F1 overlay,\n"

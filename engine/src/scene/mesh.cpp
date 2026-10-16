@@ -5,6 +5,10 @@
 
 namespace mj {
 
+void SceneMesh::emit(Vec3 position, Vec3 normal, Vec3 color) {
+    vertices.push_back({position, normal, color, surface});
+}
+
 void SceneMesh::add_box(const Box &box) {
     const auto &[center, size, color, yaw] = box;
     std::array<Vec3, 8> points;
@@ -21,7 +25,7 @@ void SceneMesh::add_box(const Box &box) {
         const Vec3 normal =
             normalized(cross(points[face[1]] - points[face[0]], points[face[2]] - points[face[0]]));
         for (const auto index : std::array{face[0], face[1], face[2], face[0], face[2], face[3]}) {
-            vertices.push_back({points[index], normal, color});
+            emit(points[index], normal, color);
         }
     }
 }
@@ -37,13 +41,13 @@ void SceneMesh::add_cylinder(Vec3 center, float radius, float height, Vec3 color
         const Vec3 p3 = p0 + Vec3{0, height, 0};
         const Vec3 normal = normalized(Vec3{std::cos((a + b) * 0.5F), 0, std::sin((a + b) * 0.5F)});
         for (const Vec3 p : std::array{p0, p3, p2, p0, p2, p1})
-            vertices.push_back({p, normal, color});
-        vertices.push_back({center + Vec3{0, height * 0.5F, 0}, {0, 1, 0}, color});
-        vertices.push_back({p2, {0, 1, 0}, color});
-        vertices.push_back({p3, {0, 1, 0}, color});
-        vertices.push_back({center + Vec3{0, -height * 0.5F, 0}, {0, -1, 0}, color});
-        vertices.push_back({p0, {0, -1, 0}, color});
-        vertices.push_back({p1, {0, -1, 0}, color});
+            emit(p, normal, color);
+        emit(center + Vec3{0, height * 0.5F, 0}, {0, 1, 0}, color);
+        emit(p2, {0, 1, 0}, color);
+        emit(p3, {0, 1, 0}, color);
+        emit(center + Vec3{0, -height * 0.5F, 0}, {0, -1, 0}, color);
+        emit(p0, {0, -1, 0}, color);
+        emit(p1, {0, -1, 0}, color);
     }
 }
 
@@ -71,7 +75,7 @@ void SceneMesh::add_ramp(const Ramp &ramp) {
         }
         for (std::size_t i = 1; i + 1 < polygon.size(); ++i) {
             for (const auto &point : {polygon[0], polygon[i], polygon[i + 1]})
-                vertices.push_back({point, normal, color});
+                emit(point, normal, color);
         }
     };
     face({0, 1, 2, 3}); // Bottom.
@@ -97,7 +101,8 @@ void SceneMesh::add_capsule(const CapsuleMesh &capsule) {
         const float longitude = k_tau * static_cast<float>(side) / k_sides;
         const Vec3 normal{std::cos(latitude) * std::cos(longitude), std::sin(latitude),
                           std::cos(latitude) * std::sin(longitude)};
-        return Vertex{bottom + Vec3{0, lift, 0} + normal * capsule.radius, normal, capsule.color};
+        return Vertex{bottom + Vec3{0, lift, 0} + normal * capsule.radius, normal, capsule.color,
+                      surface};
     };
     for (std::size_t row = 0; row + 1 < rows.size(); ++row) {
         for (int side = 0; side < k_sides; ++side) {

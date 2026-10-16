@@ -95,14 +95,20 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     const bool capture = focused && capture_mouse;
     const bool changed = capture != m_mouse_captured;
     if (changed) {
-        if (!SDL_SetWindowRelativeMouseMode(m_window, capture))
+        if (!SDL_SetWindowRelativeMouseMode(m_window, capture)) {
             log(SDL_GetError());
-        else
+        } else {
             m_mouse_captured = capture;
+            m_capture_started_ns = SDL_GetTicksNS();
+        }
     }
     float dx = 0, dy = 0;
     SDL_GetRelativeMouseState(&dx, &dy);
-    if (capture && !changed) {
+    // Engaging the pointer lock can report a one-off jump (seen ~10 frames later on Wayland),
+    // sized by wherever the cursor was. Ignore motion briefly so the camera never twitches.
+    constexpr std::uint64_t k_capture_settle_ns = 150'000'000;
+    const bool settled = SDL_GetTicksNS() - m_capture_started_ns >= k_capture_settle_ns;
+    if (capture && !changed && settled) {
         input.look_x = dx;
         input.look_y = dy;
     }

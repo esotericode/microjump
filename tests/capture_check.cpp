@@ -5,11 +5,13 @@
 
 #include <mj/core/png.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <fstream>
 #include <iostream>
 #include <set>
+#include <string_view>
 #include <vector>
 
 struct Pixels {
@@ -60,7 +62,65 @@ bool scene_pixels(const Pixels &image, double aspect) {
     return colors.size() > 64; // A clear-only image or overlay-only capture fails.
 }
 
+struct LightingStats {
+    double mean_luminance = 0;
+    double warm = 0;  // Fraction of warm, bright pixels (street-lamp pools).
+    double vivid = 0; // Fraction of strongly colored pixels (colored local lights).
+};
+LightingStats lighting_stats(const Pixels &image) {
+    LightingStats stats;
+    const auto count = static_cast<double>(image.width) * image.height;
+    for (std::size_t i = 0; i + 3 < image.rgba.size(); i += 4) {
+        const int r = image.rgba[i];
+        const int g = image.rgba[i + 1];
+        const int b = image.rgba[i + 2];
+        stats.mean_luminance += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        stats.warm += r > 120 && r - b > 40 ? 1 : 0;
+        stats.vivid += std::max({r, g, b}) - std::min({r, g, b}) > 100 ? 1 : 0;
+    }
+    stats.mean_luminance /= count;
+    stats.warm /= count;
+    stats.vivid /= count;
+    return stats;
+}
+
+// Day/night and local-light evidence: thresholds sit well inside the margins measured on
+// Intel and software Vulkan (day 182 vs night 84 luminance; 10.7% warm lamp pixels at
+// night vs 2.2% by day; 10.5% vivid pixels in the pavilion at night).
+int check_lighting(const char *day_path, const char *night_path, const char *pavilion_path) {
+    const auto day = load(day_path);
+    const auto night = load(night_path);
+    const auto pavilion = load(pavilion_path);
+    if (!scene_pixels(day, 16.0 / 9) || !scene_pixels(night, 16.0 / 9) ||
+        !scene_pixels(pavilion, 16.0 / 9)) {
+        std::cerr << "Invalid or empty lighting capture\n";
+        return 1;
+    }
+    const auto d = lighting_stats(day);
+    const auto n = lighting_stats(night);
+    const auto p = lighting_stats(pavilion);
+    std::cout << "day luminance " << d.mean_luminance << ", night " << n.mean_luminance
+              << "; warm day " << d.warm << ", night " << n.warm << "; pavilion vivid " << p.vivid
+              << "\n";
+    if (d.mean_luminance < n.mean_luminance + 40) {
+        std::cerr << "Night is not clearly darker than day\n";
+        return 1;
+    }
+    if (n.warm < 0.03 || n.warm < d.warm * 2) {
+        std::cerr << "Street lamps do not visibly light the night scene\n";
+        return 1;
+    }
+    if (p.vivid < 0.04) {
+        std::cerr << "Colored pavilion lights are not visible\n";
+        return 1;
+    }
+    std::cout << "Lighting captures: day/night contrast, lamp pools and colored lights verified\n";
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
+    if (argc == 5 && std::string_view(argv[1]) == "--lighting")
+        return check_lighting(argv[2], argv[3], argv[4]);
     if (argc != 5) {
         std::cerr << "Expected baseline, camera, resized and replay captures\n";
         return 1;

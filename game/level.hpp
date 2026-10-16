@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lighting.hpp"
+
 #include <mj/collision/collision_world.hpp>
 #include <mj/scene/mesh.hpp>
 
@@ -18,6 +20,7 @@ struct Shape {
     Vec3 size;
     Vec3 color;
     float yaw = 0;
+    Surface surface;
 };
 
 struct Checkpoint {
@@ -30,6 +33,7 @@ struct Level {
     std::string name;
     std::vector<Shape> shapes;
     std::vector<Checkpoint> checkpoints; // [0] is the spawn point.
+    std::vector<LightFixture> lights;
     float kill_height = -25;
 };
 
@@ -41,8 +45,11 @@ struct LevelGeometry {
 [[nodiscard]] Vec3 linear_color(unsigned int srgb);
 [[nodiscard]] LevelGeometry build_geometry(const Level &level);
 [[nodiscard]] SceneMesh make_player_mesh(float radius, float height);
-// Compact M2 test yard: slopes, stairs, step blocks, platforms, walls, a low ceiling and a
-// sprint lane. The full 200 m playground is M4.
+// Small sphere drawn (tinted and emissive) at each local light.
+[[nodiscard]] SceneMesh make_bulb_mesh();
+// Compact test yard: slopes, stairs, step blocks, platforms, walls, a low ceiling, a sprint
+// lane, and (M3) a shaded lighting pavilion with material samples plus night lamps.
+// The full 200 m playground is M4.
 [[nodiscard]] Level make_movement_yard();
 
 } // namespace mj::game

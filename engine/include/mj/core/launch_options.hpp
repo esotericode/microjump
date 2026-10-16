@@ -1,6 +1,7 @@
 #pragma once
 
 #include <mj/core/error.hpp>
+#include <mj/render/lighting.hpp>
 
 #include <cstdint>
 #include <expected>
@@ -16,11 +17,15 @@ struct LaunchOptions {
     bool smoke_test = false;
     bool resize_test = false;
     bool camera_test = false;
+    bool hide_overlay = false;
     std::optional<std::uint32_t> frames;
     std::optional<std::uint32_t> capture_frame;
+    std::optional<std::uint32_t> capture_tick; // First frame after this simulation tick.
     std::filesystem::path capture_out;
     std::filesystem::path record;
     std::filesystem::path replay;
+    std::optional<float> time_of_day; // Hours, 0..24.
+    std::optional<ShadowQuality> shadow_quality;
 };
 
 [[nodiscard]] std::expected<LaunchOptions, Error>

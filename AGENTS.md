@@ -2,7 +2,7 @@
 ## A custom C++ game engine, proven through a 3D platformer
 
 **Document version:** 0.3
-**Status:** M2 movement slice implemented; awaiting owner playtest. Acceptance gates in Section 15 and `docs/m2-movement.md`
+**Status:** M3 lighting slice implemented; awaiting owner review (M2 playtest also open). Gates in Section 15, `docs/m2-movement.md`, `docs/m3-lighting.md`
 **Authority:** This file is the authoritative project charter and the operating guide for AI programming agents. Read it fully before planning any work.
 
 > **Our north star:** Build a high-quality 3D game engine of our own in modern C++, and demonstrate it with a polished, expressive 3D platformer. The engine is the reason for the project; the game is how we prove it works.
@@ -51,6 +51,8 @@ Runtime flags (all available):
 | `--frames N` | Render N frames then exit cleanly. | M1 |
 | `--camera-test` / `--resize-test` | Scripted render correctness fixtures (not input replay). | M1 |
 | `--record PATH` / `--replay PATH` | Record every tick's input on exit / replay it instead of live input, then exit. Format: `docs/m2-movement.md`. | M2 |
+| `--time-of-day H` / `--shadow-quality low\|medium\|high` | Start time (hours) and sun shadow preset. | M3 |
+| `--capture-tick N` / `--hide-overlay` | Capture the first frame after simulation tick N (frame-rate independent); start with the overlay hidden. | M3 |
 
 ### Local development environment
 
@@ -385,10 +387,10 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | Field | Current value |
 | --- | --- |
 | Overall status | **IMPLEMENTING** |
-| Current milestone | **M2 — Movement slice** (in progress; implemented, awaiting owner playtest) |
-| Latest working build | 2026-10-15: M2 on Linux GCC Debug/Release + Clang Debug, native Intel and software Vulkan; see `docs/m2-movement.md`. Windows CI results/downloads are recorded in the PR. |
-| Open owner decisions | None. Owner input needed: M2 playtest request (PR), Windows hardware checks for M0–M2. |
-| Next useful action | Owner playtests M2 (keyboard/mouse and gamepad) and reports tuning; then M3 lighting slice (shadow maps replace the blob shadow). |
+| Current milestone | **M3 — Lighting slice** (in progress; implemented, awaiting owner review). M2 implemented, awaiting playtest. |
+| Latest working build | 2026-10-15: M3 on Linux GCC Debug/Release + Clang Debug, native Intel and software Vulkan; see `docs/m3-lighting.md`. Windows CI results/downloads are recorded in the PR. |
+| Open owner decisions | None. Owner input needed: M2 playtest, M3 visual review (both PR requests), Windows hardware checks for M0–M3. |
+| Next useful action | Owner playtests M2 and reviews M3 (look, shadow presets, frame rate); then M4 full JSON playground with wall jumps and checkpoints. |
 
 ### Milestone status tracker
 
@@ -397,7 +399,7 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | M0 | In progress | 2026-10-15: merged PR #3; all five Linux/MSVC CI jobs passed and Windows zip inspected. Owner Windows GPU check remains open. |
 | M1 | In progress | 2026-10-15: 3D scene, debug camera, GPU capture and FPS overlay implemented; local evidence/captures in `docs/m1-evidence.md`. Owner Windows run/controls acceptance remains open. |
 | M2 | In progress | 2026-10-15: capsule controller, run/skid/variable jump/coyote/buffer/air steering, follow camera with obstruction, record/replay, live tuning; deterministic tests pass on three Linux configs (`docs/m2-movement.md`). Owner playtest and Windows run remain open. |
-| M3 | Not started | — |
+| M3 | In progress | 2026-10-15: HDR forward renderer and tone mapping, texel-snapped sun shadow map with Low/Medium/High PCF presets and bias controls, 16 point/spot lights, GGX materials, sky and day/night, lighting pavilion and moving-light demo; captures and tests in `docs/m3-lighting.md`. Owner visual review and Windows run remain open. |
 | M4 | Not started | — |
 | M5 | Not started | — |
 
@@ -437,6 +439,11 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 | 2026-10-15 / D-028 | Renderer: per-frame uniform buffer (view-projection, sun, camera, blob shadow) plus 64-byte per-draw push constants (rigid model rows, material); back-face culling; world-space 1 m grid; a blob contact shadow under the player as a depth cue until M3 shadow maps. | Keeps push constants within the guaranteed 128 bytes and gives M3 lights a home. The blob shadow is explicitly temporary, not a substitute for the M3 lighting target. |
 | 2026-10-15 / D-029 | M2 level is a compact code-defined test yard in the `Level` struct (primitives, checkpoints, kill height); JSON loading and the 200 m playground stay in M4. Gamepad input uses the approved SDL3 gamepad API. | Smallest increment that exercises every collision case M2 needs. The `Level` struct is the future JSON schema's in-memory form. The gamepad path is implemented but untested on hardware. |
 | 2026-10-15 / D-030 | M2 review preserves immediate jumps and floor contact when optional grace/snap values are zero; camera obstruction takes precedence over preferred boom length. Replay limits use overflow-safe arithmetic, and empty recordings finish at tick zero. | Confirmed edge cases have regression coverage. Replay integration checks require a clean process exit as well as success text, so shutdown sanitizer failures cannot be hidden by CTest's output matching. Historical libdecor failure analysis and remaining gates: `docs/m2-review.md`. |
+| 2026-10-15 / D-031 | Proceed with M3 while M2's owner playtest and M0–M2 Windows GPU checks remain open. | Owner reviewed the merged M2 work and asked to continue with the next part. No gate is waived; milestones stay *In progress* until checked. |
+| 2026-10-15 / D-032 | Lighting pipeline: HDR `RGBA16F` forward pass (sky, then lit geometry) → exposure + Khronos PBR Neutral tone map → sRGB target. One D16 sun shadow map, orthographic, centered on the player and snapped to texels, with presets Low/Medium/High (1024/2048/4096², 60/80/90 m, 1/9/25 bilinear PCF taps). Constant + slope depth bias and texel-scaled normal offset are runtime-adjustable. The moon is the shadowed light at night. | Smallest pipeline meeting Section 8. Cascaded shadows and AO stay stretch goals, so distant objects are unshadowed. Tone map chosen to keep the graybox palette faithful; ACES-style curves shift hues. |
+| 2026-10-15 / D-033 | Materials are per-vertex roughness/metallic with GGX/Smith/Schlick specular + Lambert diffuse and hemisphere + sky-reflection ambient. Up to 16 forward-shaded point/spot lights with windowed inverse-square falloff, placed as level `LightFixture` data (orbiting or night-only). Local lights cast no shadows. | Gives readable material response on primitives without textures or a material graph. Fixtures are level data so M4's JSON can place them. |
+| 2026-10-15 / D-034 | Keep the player's contact (blob) shadow alongside sun shadows (35% default, toggle + strength in F2). | It shows the landing spot straight down when the sun's shadow falls sideways or the player is in shade. Supersedes D-028's "temporary" note; the owner's playtest decides. |
+| 2026-10-15 / D-035 | Ignore relative mouse motion for 150 ms after capture engages; never capture the mouse during `--replay`. Add `--capture-tick` and switch replay capture tests to it. | Wayland pointer lock delivered a one-off camera jump that made captures irreproducible. Frame-numbered replay captures failed on slow software Vulkan once frames got heavier. |
 
 **New entry template:** `YYYY-MM-DD / D-### — Decision — Alternatives considered — Reason — Consequences — Owner approval (if required)`.
 
@@ -460,12 +467,20 @@ A feature is **Done** only when it is implemented in project-owned code, builds 
 
 - **2026-10-15 — M2 review and crash investigation.** Recovered the historical 96-byte libdecor/Wayland shutdown leak trace; D-024 suppresses that external leak rather than repairing the plugin. Fixed a separately reproduced replay-count overflow abort, empty-replay live-input fallback, disabled-grace jumping, disabled-snap floor contact, and close-wall camera clipping. Replay checks now require clean exit status. Evidence: `docs/m2-review.md`; 12/12 CTests and 26 doctest cases / 4,828 assertions pass on GCC Debug/Release and Clang Debug; formatting and clang-tidy pass. Owner feel/gamepad/Windows acceptance and the previously reported intermittent resize fixture concern remain open.
 
+- **2026-10-15 — M3 lighting slice.**
+  - What works: an HDR forward renderer with tone mapping; a texel-snapped sun shadow map (Low/Medium/High PCF, bias controls); up to 16 point/spot lights; GGX roughness/metallic materials; sky, fog and a day/night cycle where the moon takes over at night; a lighting pavilion with material samples and orbiting lights; street lamps that switch on at dusk; and F2 lighting controls.
+  - Fixed along the way: a startup camera nudge from Wayland pointer lock, and frame-rate-dependent replay captures.
+  - Evidence: `docs/m3-lighting.md`. 16/16 CTests on GCC Debug and Release (native Intel) and on Clang Debug (Xvfb/lavapipe). 32 doctest cases. Day/night/pavilion GPU captures pass decoded-pixel lighting checks. Zero validation errors.
+  - Open issues: owner visual review and frame-rate check, Windows run, no AO or local-light shadows, limited shadow coverage, camera collapsing behind waist-high obstacles (playtest note).
+  - Next step: owner review, then M4.
+
 **New entry template:** `YYYY-MM-DD — Milestone / change — What works — Evidence (PR/commit/test/capture) — Open issues — Next step`.
 
 ### Known risks and unanswered questions
 
 - **Character feel:** Requires iterative playtesting on keyboard/mouse and gamepad by the owner; not solvable from code inspection alone. M2 defaults are first guesses.
 - **Gamepad:** Implemented via SDL3 but never exercised with a physical controller on the agent machine.
+- **Lighting cost:** Not measured by agents (D-004). High shadows (4096², 25 taps) and many overlapping lights in the pavilion are the heaviest cases; the owner should compare presets.
 - **Replay portability:** Replays are bit-identical within one build; across compilers/OSes the last float bits may differ, so committed-replay tests use small tolerances.
 - **Windows drift:** Only Linux is available locally. Keep the Windows CI build green on every PR so portability bugs surface immediately.
 - **Vulkan complexity:** Vulkan is verbose; keep the renderer minimal and rely on validation layers to catch mistakes early.

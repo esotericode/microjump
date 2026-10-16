@@ -1,6 +1,8 @@
 #include "level.hpp"
 
 #include <array>
+#include <optional>
+#include <utility>
 
 namespace mj::game {
 
@@ -15,6 +17,7 @@ Vec3 linear_color(unsigned int srgb) {
 LevelGeometry build_geometry(const Level &level) {
     LevelGeometry geometry;
     for (const auto &shape : level.shapes) {
+        geometry.mesh.surface = shape.surface;
         switch (shape.kind) {
         case ShapeKind::box:
             geometry.mesh.add_box({shape.center, shape.size, shape.color, shape.yaw});
@@ -34,19 +37,50 @@ LevelGeometry build_geometry(const Level &level) {
 
 SceneMesh make_player_mesh(float radius, float height) {
     SceneMesh mesh;
+    mesh.surface = {0.35F, 0}; // Glossy plastic.
     mesh.add_capsule({{0, 0, 0}, radius, height, linear_color(0xe8704a)});
     // A visor marks the facing direction (local -Z).
+    mesh.surface = {0.15F, 0};
     mesh.add_box({{0, height - radius * 1.25F, -radius * 0.78F},
                   {radius * 1.15F, radius * 0.42F, radius * 0.5F},
                   linear_color(0x23313a)});
     return mesh;
 }
 
+SceneMesh make_bulb_mesh() {
+    SceneMesh mesh;
+    mesh.add_capsule({{0, -0.12F, 0}, 0.12F, 0.24F, {1, 1, 1}});
+    return mesh;
+}
+
 namespace {
 struct YardBuilder {
     Level level;
+    std::optional<Surface> override_surface; // Replaces the palette's default while set.
+
+    // Default material response per palette color, so light reads differently on each.
+    [[nodiscard]] Surface surface_for(unsigned int color) const {
+        if (override_surface)
+            return *override_surface;
+        switch (color) {
+        case 0xc2cac6: // Ground: matte.
+            return {0.85F, 0};
+        case 0x42a5a0: // Teal: satin paint.
+            return {0.45F, 0};
+        case 0x507b99: // Blue walls: semi-gloss.
+            return {0.4F, 0};
+        default:
+            return {0.6F, 0};
+        }
+    }
+    void push(ShapeKind kind, const Shape &shape) {
+        Shape placed = shape;
+        placed.kind = kind;
+        level.shapes.push_back(placed);
+    }
     void box(Vec3 center, Vec3 size, unsigned int color, float yaw = 0) {
-        level.shapes.push_back({ShapeKind::box, center, size, linear_color(color), yaw});
+        push(ShapeKind::box,
+             {ShapeKind::box, center, size, linear_color(color), yaw, surface_for(color)});
     }
     // Solid block standing on the ground (y = 0) with its top at `top`.
     void block(float x, float z, Vec3 footprint_top, unsigned int color) {
@@ -54,11 +88,29 @@ struct YardBuilder {
         box({x, top * 0.5F, z}, {footprint_top.x, top, footprint_top.z}, color);
     }
     void ramp(Vec3 center, Vec3 size, unsigned int color, float yaw = 0) {
-        level.shapes.push_back({ShapeKind::ramp, center, size, linear_color(color), yaw});
+        push(ShapeKind::ramp,
+             {ShapeKind::ramp, center, size, linear_color(color), yaw, surface_for(color)});
     }
     void cylinder(Vec3 center, float diameter, float height, unsigned int color) {
-        level.shapes.push_back(
-            {ShapeKind::cylinder, center, {diameter, height, diameter}, linear_color(color)});
+        push(ShapeKind::cylinder, {ShapeKind::cylinder,
+                                   center,
+                                   {diameter, height, diameter},
+                                   linear_color(color),
+                                   0,
+                                   surface_for(color)});
+    }
+    // A street lamp that switches on at dusk.
+    void lamp(float x, float z) {
+        override_surface = Surface{0.35F, 1};
+        cylinder({x, 1.6F, z}, 0.18F, 3.2F, 0x3a3f44);
+        override_surface.reset();
+        LightFixture light;
+        light.position = {x, 3.35F, z};
+        light.color = linear_color(0xffc890);
+        light.intensity = 18;
+        light.range = 11;
+        light.night_only = true;
+        level.lights.push_back(light);
     }
     // A 6 cm pad; the respawn point sits just above it.
     void checkpoint(Vec3 ground, float yaw) {
@@ -66,6 +118,71 @@ struct YardBuilder {
         cylinder(ground + Vec3{0, 0.03F, 0}, 1.6F, 0.06F, 0x7fd6c8);
     }
 };
+// Lighting showcase: a roofed pavilion walled on its sunny sides, so it stays in shade. Inside:
+// a polished dark floor, brushed-steel pillars, dielectric samples from glossy to matte, metal
+// samples, a warm fixed light, a spot light and two orbiting colored lights.
+void add_lighting_pavilion(YardBuilder &yard) {
+    constexpr float k_x = 30;
+    constexpr float k_z = 30;
+    yard.override_surface = Surface{0.12F, 0};
+    yard.box({k_x, 0.15F, k_z}, {12, 0.3F, 12}, 0x2b3036);
+    yard.override_surface = Surface{0.3F, 1};
+    for (const float dx : {-5.5F, 5.5F}) {
+        for (const float dz : {-5.5F, 5.5F})
+            yard.cylinder({k_x + dx, 2.3F, k_z + dz}, 0.7F, 4, 0xc8ccd0);
+    }
+    yard.override_surface.reset();
+    yard.box({k_x, 4.5F, k_z}, {13, 0.4F, 13}, 0xe7e2d3);
+    yard.box({k_x, 2.3F, k_z + 6.2F}, {12, 4, 0.4F}, 0x8a97a3);
+    yard.box({k_x + 6.2F, 2.3F, k_z}, {0.4F, 4, 12}, 0x8a97a3);
+    // Dielectric roughness ramp on a shelf: 0.05, 0.25, 0.45, 0.7, 0.95.
+    yard.box({k_x, 0.65F, k_z + 3.5F}, {10, 0.7F, 1.4F}, 0x5c636b);
+    const std::array<float, 5> roughness{0.05F, 0.25F, 0.45F, 0.7F, 0.95F};
+    for (std::size_t i = 0; i < roughness.size(); ++i) {
+        yard.override_surface = Surface{roughness[i], 0};
+        yard.box({k_x - 3.6F + static_cast<float>(i) * 1.8F, 1.4F, k_z + 3.5F}, {0.8F, 0.8F, 0.8F},
+                 0xe7e2d3);
+    }
+    // Metals: gold, copper, steel.
+    const std::array<std::pair<unsigned int, float>, 3> metals{
+        {{0xffc35a, 0.25F}, {0xf09a6b, 0.4F}, {0xd0d4d8, 0.12F}}};
+    for (std::size_t i = 0; i < metals.size(); ++i) {
+        yard.override_surface = Surface{metals[i].second, 1};
+        yard.cylinder({k_x - 2.5F + static_cast<float>(i) * 2.5F, 0.9F, k_z - 2.5F}, 0.9F, 1.2F,
+                      metals[i].first);
+    }
+    yard.override_surface.reset();
+    yard.checkpoint({k_x - 3.5F, 0.3F, k_z - 4.5F}, k_pi);
+
+    LightFixture warm;
+    warm.position = {k_x - 3.5F, 3.4F, k_z + 1.5F};
+    warm.color = linear_color(0xff9f55);
+    warm.intensity = 30;
+    warm.range = 10;
+    LightFixture spot;
+    spot.position = {k_x, 4.15F, k_z + 1.8F};
+    spot.direction = normalized(Vec3{0, -1, 0.55F});
+    spot.color = linear_color(0xfff2dc);
+    spot.intensity = 90;
+    spot.range = 9;
+    spot.inner_cone = 0.35F;
+    spot.outer_cone = 0.55F;
+    LightFixture cyan;
+    cyan.position = {k_x, 2.0F, k_z};
+    cyan.color = linear_color(0x4cc8ff);
+    cyan.intensity = 24;
+    cyan.range = 8;
+    cyan.orbit_radius = 3.2F;
+    cyan.orbit_speed = 0.7F;
+    LightFixture magenta = cyan;
+    magenta.position = {k_x, 1.1F, k_z - 1};
+    magenta.color = linear_color(0xff4fb8);
+    magenta.intensity = 14;
+    magenta.range = 6;
+    magenta.orbit_radius = 2;
+    magenta.orbit_speed = -1.1F;
+    yard.level.lights.insert(yard.level.lights.end(), {warm, spot, cyan, magenta});
+}
 } // namespace
 
 Level make_movement_yard() {
@@ -160,6 +277,11 @@ Level make_movement_yard() {
     yard.box({6.5F, 2.3F, 15}, {4.6F, 0.6F, 6}, k_white);
     // A floating slab with an underside to hit.
     yard.box({-5, 3.2F, 9}, {4, 0.3F, 4}, k_white);
+
+    add_lighting_pavilion(yard);
+    for (const auto &[x, z] : std::array<std::pair<float, float>, 6>{
+             {{7, 10}, {-9, 10}, {11, -20}, {13, 8}, {-12, 4}, {24, 22}}})
+        yard.lamp(x, z);
     return yard.level;
 }
 
