@@ -63,6 +63,7 @@ class PauseMenu {
     bool m_focus = false; // Focus the page's first item on its next draw.
     bool m_sync_display = true;
     bool m_scroll_to_top = true;
+    bool m_focus_quit = false;
     DisplayOptions m_display;
 };
 

@@ -291,10 +291,11 @@ actual dive without any ImGui navigation overlay and captures `dive-held.png`.
 `travel_gates` also travels to the garden and back through the menu's world-replacement
 path, catching same-frame dangling references under ASan.
 
-`pause_menu_window` draws the real menu at 640×360 and 1280×720, crosses from sidebar
+`pause_menu_window` draws the real menu at 640×360, 960×540 and 1280×720, crosses from sidebar
 to content with keyboard and virtual-controller navigation, changes/applies a frame cap,
-adjusts sound/camera options and checks confirmed quit. It captures Display and Controls
-at both sizes. Runtime packages include the pinned ImGui archive's Roboto font and its
+adjusts sound/camera options and checks that Quit starts on Keep playing, requiring an
+explicit controller Down/confirm to exit. It captures Display and Controls at every size.
+Runtime packages include the pinned ImGui archive's Roboto font and its
 Apache license; no system font is required.
 
 ## Saved expeditions

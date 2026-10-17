@@ -89,6 +89,7 @@ void PauseMenu::open(MenuPage page) {
     m_focus = true;
     m_sync_display = true;
     m_scroll_to_top = true;
+    m_focus_quit = page == Page::quit;
 }
 
 void PauseMenu::close() {
@@ -138,6 +139,7 @@ MenuChoice PauseMenu::draw(const MenuView &view, PlayerOptions &options, AudioCo
         if (ImGui::Selectable(label, m_page == page, 0, ImVec2(0, 36))) {
             m_page = page;
             m_scroll_to_top = true;
+            m_focus_quit = page == Page::quit;
         }
         ImGui::PopStyleVar();
     };
@@ -324,6 +326,8 @@ MenuChoice PauseMenu::draw(const MenuView &view, PlayerOptions &options, AudioCo
     case Page::quit:
         section("Done exploring?", view.saving ? "Your sparks and checkpoints are kept."
                                                : "This run's finds will be lost when you quit.");
+        if (std::exchange(m_focus_quit, false))
+            ImGui::SetKeyboardFocusHere();
         if (button("Keep playing"))
             choice.kind = MenuChoice::Kind::resume;
         ImGui::Spacing();
@@ -339,7 +343,7 @@ MenuChoice PauseMenu::draw(const MenuView &view, PlayerOptions &options, AudioCo
                             ": choose   /   " + std::string(view.labels.menu) + ": resume";
         hint(prompt);
     } else {
-        hint("Arrow keys: navigate   /   Enter: choose   /   Escape: resume");
+        hint("Arrows: move   /   Tab: next   /   Enter: choose   /   Esc: resume");
     }
     ImGui::End();
     ImGui::PopStyleVar(4);

@@ -1127,3 +1127,18 @@ Claude's [lift fix #24](https://github.com/esotericode/microjump/pull/24) and
 with all five Linux/Windows CI jobs green on each reviewed head. The menu merge is
 `94e4356`. The separate display/UI PR carries the held-dive and navigation regressions,
 preference persistence, and final runtime checks.
+
+### 2026-10-17 · ChatGPT (Codex coordinator) · actual restart and quit checks
+
+All 37 local checks passed, and two actual restarts with an isolated profile opened at
+960×540 with VSync off (IMMEDIATE), kept the preference file unchanged and exited with
+zero validation errors. A later real-keyboard check found that spatial Right navigation
+from the Quit sidebar row could miss the confirmation buttons at that size. Opening
+Quit now explicitly focuses Keep playing, so Down then confirm chooses Quit and a repeat
+confirm safely resumes. The keyboard hint also names Tab.
+
+The menu regression now covers 640×360, 960×540 and 1280×720, requiring the safe default
+and an explicit virtual-controller Down/South to quit at every size. Its updated checks,
+the held-dive/window regression and menu render all pass under validation. The final
+menu source passes clang-tidy. [PR #26](https://github.com/esotericode/microjump/pull/26)
+will wait for fresh Linux/Windows checks on this last focus repair before merging.

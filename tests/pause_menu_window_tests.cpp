@@ -37,7 +37,7 @@ struct MenuHarness {
         {"clockwork-garden.json", "clockwork-garden", "The Clockwork Garden", 16}};
     const std::vector<mj::game::PlaceStatus> status{
         {.visited = true, .here = true, .found = 3}, {.visited = true, .found = 8}, {}};
-    const std::array<mj::PixelSize, 2> resolutions{mj::PixelSize{640, 360},
+    const std::array<mj::PixelSize, 3> resolutions{mj::PixelSize{640, 360}, mj::PixelSize{960, 540},
                                                    mj::PixelSize{1280, 720}};
     mj::GamepadLabels labels;
 
@@ -289,15 +289,16 @@ TEST_CASE(
             ui.choice = {};
             ui.focus(MenuHarness::item("Navigation", "Quit game"), "Quit sidebar");
             ui.key(ImGuiKey_Enter);
+            ui.settle();
             CHECK(ui.choice.kind == mj::game::MenuChoice::Kind::none);
-            if (size.width == 640) {
-                // This row is below the initial fold; a controller must still be able
-                // to leave the sidebar after navigation has scrolled it into view.
-                ui.controller(SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
-                REQUIRE(ImGui::GetCurrentContext()->NavWindow == MenuHarness::child("Content"));
-            }
-            ui.focus(MenuHarness::item("Content", "Quit microjump"), "Confirm quit");
-            ui.key(ImGuiKey_Enter);
+            // Quit opens on the safe choice without depending on the sidebar row's
+            // vertical alignment with a content control at this window size.
+            REQUIRE(ImGui::GetCurrentContext()->NavId ==
+                    MenuHarness::item("Content", "Keep playing"));
+            ui.controller(SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+            REQUIRE(ImGui::GetCurrentContext()->NavId ==
+                    MenuHarness::item("Content", "Quit microjump"));
+            ui.controller(SDL_GAMEPAD_BUTTON_SOUTH);
             CHECK(ui.choice.kind == mj::game::MenuChoice::Kind::quit);
         }
     }
