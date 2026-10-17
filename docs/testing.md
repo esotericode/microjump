@@ -254,6 +254,10 @@ and death intervals. See [particles](particles.md) for renderer and timing detai
 - **Launch options:** only play makes sound; scripted checks and captures stay silent.
 - **The output:** SDL's dummy device runs the mixer on the audio thread.
 
+CTest runs every test with `SDL_AUDIO_DRIVER=dummy`, so no test touches a real sound
+device. On a machine without one, such as CI, probing ALSA leaks inside libasound and
+LeakSanitizer would fail the run. The game itself just plays silently there.
+
 `replay_with_sound` replays `sm64-moves.mjr` through the whole game on the dummy device.
 It checks that sound starts and that the replay ends exactly where it does in silence.
 

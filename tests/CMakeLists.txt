@@ -129,7 +129,6 @@ if(MJ_SMOKE_TESTS)
         "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/sm64-moves.mjr" "-DEXTRA=--no-save"
         "-DEXPECTED=Audio: dummy.*Replay finished: tick 1126, feet [(]7[.]05[0-9]*, [^,]*, -63[.][0-9]*[)], state Idle"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
-    set_tests_properties(replay_with_sound PROPERTIES ENVIRONMENT_MODIFICATION "SDL_AUDIO_DRIVER=set:dummy")
     # The pier's long leap through the whole game, landing on Lantern Isle with its spark.
     add_test(NAME replay_isles_leap COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>"
@@ -163,3 +162,7 @@ if(MJ_SMOKE_TESTS)
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()
 endif()
+# Tests never touch a real sound device: on a machine without one, probing ALSA leaks
+# inside libasound. SDL's dummy driver still runs the whole audio path, in silence.
+get_property(audio_quiet_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${audio_quiet_tests} PROPERTIES ENVIRONMENT_MODIFICATION "SDL_AUDIO_DRIVER=set:dummy")
