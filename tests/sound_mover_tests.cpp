@@ -41,7 +41,7 @@ TEST_CASE("a takeoff from a descending lift sounds once even with downward world
     };
     // At 3.75 seconds the return leg is halfway done. Its eased 20 m leg takes 2.5 s,
     // giving peak speed pi * 20 / (2 * 2.5), about 12.6 m/s: below the parser's 20 m/s
-    // cap but faster than a standing jump's upward launch, so leaving still travels down.
+    // cap and faster than a standing jump's upward launch.
     for (int i = 0; i < 450; ++i)
         tick({});
     REQUIRE(simulation.player.current().grounded);
@@ -50,7 +50,11 @@ TEST_CASE("a takeoff from a descending lift sounds once even with downward world
     tick({0, 0, 0, 0, mj::input_button::jump_pressed | mj::input_button::jump_held});
     REQUIRE_FALSE(simulation.player.current().grounded);
     REQUIRE(simulation.player.current().state == mj::game::MoveState::jump);
-    REQUIRE(simulation.player.current().velocity.y < 0.0F);
+    // A sinking lift lends no downward speed: the jump rises as from still ground, less
+    // the one tick of gravity it has already felt.
+    const auto &tuning = simulation.player.tuning;
+    CHECK(simulation.player.current().velocity.y ==
+          doctest::Approx(tuning.jump_velocity() - tuning.gravity() * dt).epsilon(0.001));
     const auto jumps = [&] {
         return std::count_if(heard.begin(), heard.end(),
                              [](const auto &event) { return event.cue == mj::game::Cue::jump; });

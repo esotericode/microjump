@@ -259,7 +259,8 @@ void Player::tick(const TickInput &input, const CollisionScene &world, float dt)
     auto &s = m_current;
     s.landed = false;
     // A moving platform carries its rider through its last step and turns them with it,
-    // unless something solid is in the way. Leaving it keeps the platform's velocity.
+    // unless something solid is in the way. Leaving it keeps the platform's sideways and
+    // rising velocity; a sinking lift never drags a jump down.
     Vec3 platform_velocity{};
     const bool riding = s.grounded && s.ground_body;
     if (riding) {
@@ -452,7 +453,8 @@ void Player::tick(const TickInput &input, const CollisionScene &world, float dt)
         s.ground_body.reset();
     }
     if (riding && !s.grounded)
-        s.velocity += platform_velocity;
+        s.velocity +=
+            Vec3{platform_velocity.x, std::max(platform_velocity.y, 0.0F), platform_velocity.z};
     if (s.grounded) {
         s.wall_timer = 0;
         s.recovery_timer = 0;
