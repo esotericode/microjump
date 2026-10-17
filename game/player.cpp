@@ -453,8 +453,8 @@ void Player::tick(const TickInput &input, const CollisionScene &world, float dt)
         s.ground_body.reset();
     }
     if (riding && !s.grounded)
-        s.velocity += Vec3{platform_velocity.x, std::max(platform_velocity.y, 0.0F),
-                           platform_velocity.z};
+        s.velocity +=
+            Vec3{platform_velocity.x, std::max(platform_velocity.y, 0.0F), platform_velocity.z};
     if (s.grounded) {
         s.wall_timer = 0;
         s.recovery_timer = 0;
