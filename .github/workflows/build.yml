@@ -22,7 +22,7 @@ jobs:
       - name: Install platform SDK and development tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers mesa-vulkan-drivers vulkan-tools pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev xvfb xauth
+          sudo apt-get install -y cmake ninja-build g++ clang libclang-rt-21-dev llvm-21 clang-format clang-tidy glslc libvulkan-dev vulkan-validationlayers mesa-vulkan-drivers vulkan-tools pkg-config libwayland-dev libxkbcommon-dev libx11-dev libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-x11-dev libdecor-0-dev libasound2-dev libpulse-dev libpipewire-0.3-dev xvfb xauth
       - name: Check formatting
         run: find engine game tests -type f \( -name '*.cpp' -o -name '*.hpp' \) -print0 | xargs -0 clang-format --dry-run --Werror
       - name: Configure

@@ -71,5 +71,5 @@ cadences.
 ## Ideas for later
 
 - A walk cycle for partial stick tilts, and idle fidgets after a while.
-- Spark-colored trails at top speed. A sound for clean hops, once there is audio.
+- Spark-colored trails at top speed. (Clean hops now have a sound: see [engine](engine.md#audio).)
 - Live F2 sliders for the animation constants.

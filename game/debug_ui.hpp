@@ -57,6 +57,13 @@ struct ProgressControls {
     bool confirm_reset = false;
     std::string message;
 };
+// Sound settings for the F2 panel. Without a device, the panel says so.
+struct AudioControls {
+    bool available = false;
+    std::string driver;
+    float volume = 0.8F;
+    bool muted = false;
+};
 // Brief save/resume feedback; main decides when the message expires.
 void progress_hud(const ProgressControls &progress);
 // Live tuning window (F2). Movement edits apply from the next tick, lighting immediately.
@@ -65,6 +72,7 @@ struct TuningPanels {
     GamepadTuning &gamepad;
     DiagnosticsControls &diagnostics;
     ProgressControls *progress = nullptr;
+    AudioControls *audio = nullptr;
 };
 void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &open);
 

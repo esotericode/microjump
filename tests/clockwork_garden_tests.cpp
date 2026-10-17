@@ -55,6 +55,9 @@ TEST_CASE("the Clockwork Garden loads, and every checkpoint stands still") {
     CHECK(level.collectibles.size() == 16);
     CHECK(level.movers.size() == 22);
     CHECK(garden_geometry().collision.body_count() == level.movers.size());
+    CHECK(level.movers[mover("Carousel")].sound == mj::game::MoverSound::music);
+    CHECK(level.movers[mover("Minute hand")].sound == mj::game::MoverSound::tick);
+    CHECK(level.movers[mover("Gondola 1")].sound == mj::game::MoverSound::none);
     for (std::size_t i = 0; i < level.checkpoints.size(); ++i) {
         CAPTURE(i);
         auto simulation = start(i);

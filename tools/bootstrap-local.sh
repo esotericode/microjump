@@ -9,7 +9,7 @@ apt-get download cmake cmake-data ninja-build clang-21 clang-format-21 clang-tid
     glslc libshaderc1 vulkan-validationlayers vulkan-tools libvulkan-dev \
     pkgconf-bin libpkgconf7 libwayland-dev libwayland-bin libxkbcommon-dev libx11-dev \
     libxext-dev libxrandr-dev libxrender-dev libxcursor-dev libxi-dev libxfixes-dev \
-    libxss-dev libxtst-dev libdecor-0-dev x11proto-dev xorg-sgml-doctools libxau-dev \
+    libxss-dev libxtst-dev libdecor-0-dev libasound2-dev libpulse-dev libpipewire-0.3-dev libspa-0.2-dev x11proto-dev xorg-sgml-doctools libxau-dev \
     libxdmcp-dev libxcb1-dev libxkbcommon-x11-dev libffi-dev libegl-dev libgl-dev \
     libglx-dev libgles-dev libopengl-dev libjsoncpp26 librhash1 libxss1 \
     xvfb xauth libxfont2 x11-xkb-utils xserver-common xdotool libxdo3

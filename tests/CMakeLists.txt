@@ -1,10 +1,11 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
     movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp frame_pacing_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp
-    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp lantern_isles_tests.cpp surface_tests.cpp jump_chain_tests.cpp progress_tests.cpp progress_options_tests.cpp mover_tests.cpp clockwork_garden_tests.cpp)
+    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp lantern_isles_tests.cpp surface_tests.cpp jump_chain_tests.cpp progress_tests.cpp progress_options_tests.cpp mover_tests.cpp clockwork_garden_tests.cpp audio_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
-    MJ_TEST_LEVELS="${PROJECT_SOURCE_DIR}/assets/levels")
+    MJ_TEST_LEVELS="${PROJECT_SOURCE_DIR}/assets/levels"
+    MJ_TEST_OUTPUT="${CMAKE_CURRENT_BINARY_DIR}")
 mj_project_options(microjump_tests)
 add_executable(microjump_capture_check capture_check.cpp)
 target_link_libraries(microjump_capture_check PRIVATE mj::engine)
@@ -121,6 +122,14 @@ if(MJ_SMOKE_TESTS)
         "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/sm64-moves.mjr"
         "-DEXPECTED=Replay finished: tick 1126, feet [(]7[.]05[0-9]*, [^,]*, -63[.][0-9]*[)], state Idle, grounded, checkpoint 0"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
+    # A replay is watched with sound: SDL's silent dummy device runs the whole audio path,
+    # and the replay still ends exactly where it did without it.
+    add_test(NAME replay_with_sound COMMAND ${CMAKE_COMMAND}
+        "-DGAME=$<TARGET_FILE:microjump>"
+        "-DREPLAY=${CMAKE_CURRENT_SOURCE_DIR}/replays/sm64-moves.mjr" "-DEXTRA=--no-save"
+        "-DEXPECTED=Audio: dummy.*Replay finished: tick 1126, feet [(]7[.]05[0-9]*, [^,]*, -63[.][0-9]*[)], state Idle"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
+    set_tests_properties(replay_with_sound PROPERTIES ENVIRONMENT_MODIFICATION "SDL_AUDIO_DRIVER=set:dummy")
     # The pier's long leap through the whole game, landing on Lantern Isle with its spark.
     add_test(NAME replay_isles_leap COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>"
@@ -145,12 +154,12 @@ if(MJ_SMOKE_TESTS)
         "${captures}/resized.png" "${captures}/replay.png")
     set_tests_properties(render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick capture_pixels
         render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
-        render_spark_pickup replay_spark_invitation render_isles isles_pixels render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
+        render_spark_pickup replay_spark_invitation render_isles isles_pixels render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
     set_tests_properties(capture_pixels PROPERTIES DEPENDS "render_capture;render_camera;render_resize;render_replay")
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         set_tests_properties(progress_runtime gamepad_window vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
             capture_pixels render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
-            render_spark_pickup replay_spark_invitation particle_render render_isles isles_pixels render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves PROPERTIES ENVIRONMENT
+            render_spark_pickup replay_spark_invitation particle_render render_isles isles_pixels render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()
 endif()

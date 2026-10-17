@@ -103,7 +103,7 @@ Vec3 path_offset(const Motion &motion, double time) {
         if (clock < motion.pause)
             return from;
         clock -= motion.pause;
-        const double duration = total > 0 ? moving * length(to - from) / total : 0;
+        const double duration = total > 0 ? moving * length(to - from) / total : 0.0;
         if (clock < duration)
             return lerp(from, to, ease(clock / duration));
         clock -= duration;

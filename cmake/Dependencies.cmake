@@ -8,7 +8,7 @@ set(SDL_TESTS OFF CACHE BOOL "" FORCE)
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
 set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(SDL_INSTALL OFF CACHE BOOL "" FORCE)
-set(SDL_AUDIO OFF CACHE BOOL "" FORCE) # Audio is outside the prototype until M4.
+set(SDL_AUDIO ON CACHE BOOL "" FORCE) # Output only; the mixing and synthesis are ours.
 if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # Keep Xlib's process-global locale/resource caches visible to LeakSanitizer.
     # SDL's dlclose path otherwise unmaps their roots before the leak check.
