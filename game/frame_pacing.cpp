@@ -7,6 +7,12 @@
 
 namespace mj::game {
 
+double frame_interval(int frames_per_second) {
+    return frames_per_second == 30 || frames_per_second == 60 || frames_per_second == 120
+               ? 1.0 / frames_per_second
+               : 0;
+}
+
 double snap_to_refresh(double elapsed, const RefreshSnap &snap) {
     if (!std::isfinite(elapsed) || !(snap.refresh_hz > 0) || elapsed <= 0)
         return elapsed;

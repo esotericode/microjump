@@ -19,14 +19,17 @@
 
 #include <SDL3/SDL_main.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <format>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 namespace mj::game {
@@ -134,7 +137,8 @@ struct Expedition {
         }
         dirty = false;
         log("Progress saved");
-        message("Progress saved");
+        if (controls.error)
+            message("Progress saved"); // Show recovery; ordinary finds already have a toast.
     }
 
     void describe(std::string_view phase, const LoadedLevel &world) const {
@@ -228,6 +232,70 @@ int run(const LaunchOptions &options) {
             log(window.error().message);
             return 1;
         }
+        UserSettings settings;
+        std::filesystem::path settings_path;
+        std::string settings_status = "Preferences last for this session.";
+        if (uses_saved_settings(options)) {
+            if (auto folder = Window::preference_directory()) {
+                settings_path = *folder / "settings.json";
+                if (auto loaded = load_settings(settings_path)) {
+                    settings = *loaded;
+                    settings_status = "Preferences save automatically.";
+                } else {
+                    log("Settings: " + loaded.error().message);
+                    settings_status = "Saved preferences could not be read. The file is preserved; "
+                                      "changes last for this session.";
+                    settings_path.clear();
+                }
+            } else {
+                settings_status = "Preferences could not be saved. Changes last for this session.";
+            }
+        }
+        const auto apply_window = [&](DisplayOptions &display) -> std::expected<void, Error> {
+            if ((*window)->fullscreen() && !display.fullscreen) {
+                if (auto result = (*window)->set_fullscreen(false); !result)
+                    return result;
+            }
+            if (!display.fullscreen) {
+                const auto sizes = (*window)->available_resolutions();
+                if (!sizes.empty()) {
+                    // A saved window from another monitor must still fit this desktop.
+                    const auto nearest = std::ranges::min_element(sizes, {}, [&](PixelSize size) {
+                        return std::abs(static_cast<int>(size.width) - display.width) +
+                               std::abs(static_cast<int>(size.height) - display.height);
+                    });
+                    display.width = static_cast<int>(nearest->width);
+                    display.height = static_cast<int>(nearest->height);
+                }
+                if (auto result = (*window)->resize(display.width, display.height); !result)
+                    return result;
+            }
+            return (*window)->set_fullscreen(display.fullscreen);
+        };
+        if (auto applied = apply_window(settings.display); !applied) {
+            log("Display settings: " + applied.error().message);
+            settings_status = "The display change failed. Your current window is still available.";
+            settings.display.fullscreen = (*window)->fullscreen();
+            const auto size = (*window)->size();
+            settings.display.width = static_cast<int>(size.width);
+            settings.display.height = static_cast<int>(size.height);
+        }
+        DisplayOptions applied_display = settings.display;
+        UserSettings saved_settings = settings;
+        UserSettings observed_settings = settings;
+        auto settings_changed = std::chrono::steady_clock::now();
+        const auto persist_settings = [&] {
+            if (settings_path.empty() || settings == saved_settings)
+                return;
+            if (auto saved = save_settings(settings_path, settings)) {
+                saved_settings = settings;
+                settings_status = "Preferences saved.";
+            } else {
+                log("Settings: " + saved.error().message);
+                settings_status = "Preferences could not be saved. Changes last for this session.";
+                settings_path.clear(); // Keep playing; don't retry an unavailable path every frame.
+            }
+        };
         auto context = VulkanContext::create(**window, validation);
         if (!context) {
             log(context.error().message);
@@ -249,9 +317,10 @@ int run(const LaunchOptions &options) {
             log(renderer.error().message);
             return 1;
         }
+        (*renderer)->set_vsync(settings.display.vsync);
         DebugCamera free_camera;
         FixedStep fixed;
-        bool show_overlay = !options.hide_overlay;
+        bool show_overlay = false; // F1 diagnostics are optional; the game starts with its HUD.
         bool tuning_open = false;
         bool use_free_camera = options.camera_test;
         bool first_resize = false, second_resize = false;
@@ -329,6 +398,8 @@ int run(const LaunchOptions &options) {
         std::unique_ptr<audio::Mixer> mixer;
         std::unique_ptr<audio::AudioOutput> speaker; // Feeds the mixer; closes first.
         AudioControls audio_controls;
+        audio_controls.volume = settings.volume;
+        audio_controls.muted = settings.muted;
         if (uses_audio(options)) {
             mixer = std::make_unique<audio::Mixer>(make_sound_bank());
             if (auto opened = audio::AudioOutput::open(*mixer)) {
@@ -405,13 +476,14 @@ int run(const LaunchOptions &options) {
         };
         // The pause menu: places to travel to, the player's options, and a quit that asks.
         const bool interactive = is_interactive(options);
-        const auto places = interactive || options.show_menu ? discover_places(starting_path)
-                                                             : std::vector<Place>{};
+        const auto places = interactive || options.show_menu || options.travel_test
+                                ? discover_places(starting_path)
+                                : std::vector<Place>{};
         PauseMenu menu;
         if (options.show_menu)
             menu.open(*options.show_menu);
         MenuChoice choice;
-        PlayerOptions player_options;
+        auto &player_options = settings.player;
         bool was_paused = menu.is_open();
         PlayerOptions applied_options;
         const Simulation *applied_to = nullptr; // A new world starts with default camera tuning.
@@ -421,6 +493,32 @@ int run(const LaunchOptions &options) {
             "F2 tuning, F3 free camera, Escape pause.");
         expedition.controls.reset_requested = options.progress_test == ProgressTest::reset;
         while (true) {
+            settings.volume = audio_controls.volume;
+            settings.muted = audio_controls.muted;
+            if (applied_display != settings.display) {
+                const bool window_changed =
+                    applied_display.width != settings.display.width ||
+                    applied_display.height != settings.display.height ||
+                    applied_display.fullscreen != settings.display.fullscreen;
+                if (auto applied = window_changed ? apply_window(settings.display)
+                                                  : std::expected<void, Error>{};
+                    !applied) {
+                    log("Display settings: " + applied.error().message);
+                    settings.display = applied_display;
+                    if (auto restored_window = apply_window(settings.display); !restored_window)
+                        log("Display restore: " + restored_window.error().message);
+                    settings_status = "The display change failed; previous settings restored.";
+                }
+                (*renderer)->set_vsync(settings.display.vsync);
+                applied_display = settings.display;
+            }
+            const auto preferences_now = std::chrono::steady_clock::now();
+            if (observed_settings != settings) {
+                observed_settings = settings;
+                settings_changed = preferences_now;
+            } else if (preferences_now - settings_changed >= std::chrono::milliseconds(350)) {
+                persist_settings();
+            }
             if (expedition.controls.reset_requested) {
                 expedition.controls.reset_requested = expedition.controls.confirm_reset = false;
                 auto fresh = load_level(starting_path);
@@ -453,6 +551,11 @@ int run(const LaunchOptions &options) {
                 pending_travel.reset();
             }
             // Input and time are sampled once the display has caught up (docs/engine.md).
+            if (rendered > 0 && settings.display.frame_limit > 0) {
+                const auto interval =
+                    std::chrono::duration<double>(frame_interval(settings.display.frame_limit));
+                std::this_thread::sleep_until(last + interval);
+            }
             if (auto paced = (*renderer)->wait_for_display(diagnostics.display_pacing); !paced) {
                 log(paced.error().message);
                 return 1;
@@ -468,6 +571,12 @@ int run(const LaunchOptions &options) {
                  .gamepad_gameplay = !tuning_open && !menu.is_open()});
             if (input.quit || choice.kind == MenuChoice::Kind::quit)
                 break;
+            if (input.toggle_tuning) {
+                tuning_open = !tuning_open;
+                if (tuning_open)
+                    menu.close();
+                note(tuning_open ? "tuning_open" : "tuning_closed");
+            }
             if (interactive && input.toggle_menu) {
                 if (menu.is_open())
                     menu.close();
@@ -495,6 +604,8 @@ int run(const LaunchOptions &options) {
                 }
             }
             choice = {};
+            if (menu.is_open())
+                tuning_open = false; // Only one interactive panel owns navigation at a time.
             // Menu travel can replace the world above. Bind only after every replacement.
             Simulation &simulation = world->simulation;
             const Level &level = world->level;
@@ -518,10 +629,6 @@ int run(const LaunchOptions &options) {
             }
             if (input.toggle_overlay)
                 show_overlay = !show_overlay;
-            if (input.toggle_tuning) {
-                tuning_open = !tuning_open;
-                note(tuning_open ? "tuning_open" : "tuning_closed");
-            }
             if (input.mouse_captured != was_captured) {
                 note(input.mouse_captured ? "mouse_captured" : "mouse_released");
                 was_captured = input.mouse_captured;
@@ -800,7 +907,7 @@ int run(const LaunchOptions &options) {
                                                       : "Gates rest while recording or replaying";
             }
             const std::function<void()> debug_windows = [&] {
-                if (!options.hide_overlay && !tuning_open) {
+                if (!options.hide_overlay && !tuning_open && !menu.is_open()) {
                     collectible_hud(simulation, level);
                     travel_hud(travel_note);
                     if (expedition.controls.error ||
@@ -826,10 +933,13 @@ int run(const LaunchOptions &options) {
                         if (place.here)
                             place.found = simulation.collected_count();
                     }
+                    const auto resolutions = (*window)->available_resolutions();
                     choice = menu.draw({places, place_status, input.gamepad_labels,
                                         input.gamepad_connected, travel_allowed,
-                                        expedition.controls.enabled && expedition.writable},
-                                       player_options, audio_controls);
+                                        expedition.controls.enabled && expedition.writable,
+                                        level.title, resolutions,
+                                        (*renderer)->vsync_off_supported(), settings_status},
+                                       player_options, audio_controls, settings.display);
                 }
             };
             if (options.pacing_test) {
@@ -873,6 +983,8 @@ int run(const LaunchOptions &options) {
             view.instances = instances;
             view.particles = particles;
             view.keyboard_navigation = menu.is_open();
+            view.gamepad_navigation = menu.is_open() || tuning_open;
+            view.frame_limit = static_cast<std::uint32_t>(settings.display.frame_limit);
             view.blob = {pose.position,
                          lighting.blob ? simulation.player.tuning.radius * 1.35F : 0.0F,
                          lighting.blob_strength};
@@ -889,7 +1001,7 @@ int run(const LaunchOptions &options) {
             view.shadows = lighting.shadows;
             view.shadows.focus = pose.position;
             view.elapsed = elapsed;
-            view.overlay = show_overlay;
+            view.overlay = show_overlay && !options.hide_overlay && !menu.is_open();
             view.overlay_lines = &overlay_lines;
             view.debug_windows = &debug_windows;
             view.capture = capture ? &options.capture_out : nullptr;
@@ -968,6 +1080,9 @@ int run(const LaunchOptions &options) {
             // --travel-test: out through the first gate, then back through the far side's.
             if (options.travel_test && (rendered == 4 || rendered == 10) && !level.portals.empty())
                 pending_travel = 0;
+            // Then exercise the menu's between-frame replacement path as well as both gates.
+            if (options.travel_test && (rendered == 16 || rendered == 22) && places.size() >= 3)
+                choice = {MenuChoice::Kind::travel, rendered == 16 ? 2U : 0U};
             if (options.frames && rendered >= *options.frames)
                 break;
             if (replay_finished)
@@ -976,6 +1091,9 @@ int run(const LaunchOptions &options) {
                 (options.progress_test != ProgressTest::collect || progress_test_ticks >= 240))
                 break;
         }
+        settings.volume = audio_controls.volume;
+        settings.muted = audio_controls.muted;
+        persist_settings();
         if (expedition.remember(*world))
             expedition.flush();
         expedition.describe("end", *world);

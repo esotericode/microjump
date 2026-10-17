@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <vector>
 
 struct SDL_Window;
 union SDL_Event;
@@ -68,7 +69,14 @@ class Window {
     [[nodiscard]] InputState poll_events(const std::function<void(const SDL_Event &)> &handler,
                                          PollOptions options);
     [[nodiscard]] PixelSize pixel_size() const;
+    // Window coordinates, which can differ from drawable pixels on a high-density display.
+    [[nodiscard]] PixelSize size() const;
+    // Common window sizes that fit the current desktop, plus its usable size and this window.
+    [[nodiscard]] std::vector<PixelSize> available_resolutions() const;
     [[nodiscard]] std::expected<void, Error> resize(int width, int height);
+    // Borderless desktop fullscreen; leaving it restores the previous windowed size.
+    [[nodiscard]] std::expected<void, Error> set_fullscreen(bool enabled);
+    [[nodiscard]] bool fullscreen() const;
     [[nodiscard]] static std::filesystem::path executable_directory();
     [[nodiscard]] static std::expected<std::filesystem::path, Error> preference_directory();
     // Refresh rate of the display showing the window, in Hz; 0 when unknown.

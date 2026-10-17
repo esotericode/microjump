@@ -2,6 +2,7 @@
 
 #include <frame_pacing.hpp>
 
+#include <mj/core/fixed_step.hpp>
 #include <mj/core/launch_options.hpp>
 #include <mj/render/pacing.hpp>
 
@@ -116,4 +117,16 @@ TEST_CASE("display pacing waits for the newest present the queue depth allows") 
           40U); // Out-of-range depths are clamped to 1..2.
     CHECK(display_wait_target(40, {.queued_frames = 9}) == 39U);
     static_assert(mj::DisplayPacing{}.enabled && mj::DisplayPacing{}.queued_frames == 2);
+}
+
+TEST_CASE("presentation caps leave simulation time independent of the display") {
+    for (const int fps : {30, 60, 120}) {
+        mj::FixedStep fixed;
+        unsigned ticks = 0;
+        for (int frame = 0; frame < fps * 2; ++frame)
+            fixed.advance(mj::game::frame_interval(fps), [&](float) { ++ticks; });
+        CHECK(ticks == 240);
+    }
+    CHECK(mj::game::frame_interval(0) == 0);
+    CHECK(mj::game::frame_interval(-1) == 0);
 }

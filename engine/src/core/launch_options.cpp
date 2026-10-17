@@ -154,7 +154,7 @@ parse_launch_options(std::span<const std::string_view> arguments) {
         if (options.resize_test || options.camera_test)
             options.frames = 36;
         else if (options.travel_test)
-            options.frames = 16;
+            options.frames = 28;
         else if (options.smoke_test)
             options.frames = 12;
     }

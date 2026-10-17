@@ -18,9 +18,23 @@ void collectible_hud(const Simulation &simulation, const Level &level) {
     ImGui::SetNextWindowPos(ImVec2(display.x - 18, 18), ImGuiCond_Always, ImVec2(1, 0));
     ImGui::SetNextWindowBgAlpha(0.88F);
     ImGui::Begin("Sparks", nullptr, flags);
+    ImGui::SetWindowFontScale(1.2F);
     ImGui::TextColored(gold, "SPARKS  %zu / %zu", simulation.collected_count(),
                        simulation.collectible_count());
-    ImGui::TextUnformatted(complete ? "Every spark found!" : "Explore. Climb. Follow the gold.");
+    if (complete)
+        ImGui::TextUnformatted("Every spark found!");
+    ImGui::SetWindowFontScale(1);
+    ImGui::End();
+
+    ImGui::SetNextWindowPos(ImVec2(18, 18), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.8F);
+    ImGui::Begin("Place", nullptr, flags);
+    ImGui::SetWindowFontScale(1.2F);
+    ImGui::TextUnformatted(level.title.c_str());
+    ImGui::SetWindowFontScale(1);
+    const auto zone = zone_at(level, simulation.player.current().position);
+    ImGui::TextDisabled("%.*s", static_cast<int>(zone.size()), zone.data());
+    ImGui::TextDisabled("Escape / Start: pause");
     ImGui::End();
 
     const auto last = simulation.last_collected();
@@ -102,7 +116,7 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
                                     std::string(b.walk) + " walk";
         const std::string menus = std::string(b.recenter) + ": center camera  |  " +
                                   std::string(b.respawn) + " respawn  |  " + std::string(b.menu) +
-                                  " tuning";
+                                  " pause";
         ImGui::TextUnformatted(actions.c_str());
         ImGui::TextUnformatted(menus.c_str());
     }
@@ -124,7 +138,7 @@ void movement_overlay(const Simulation &simulation, const SessionStatus &status)
         ImGui::TextUnformatted("Shift + jump: long jump  |  E / click: dive  |  R respawn");
         ImGui::TextUnformatted("Jump again as you land: double, then triple jump");
     }
-    ImGui::TextUnformatted("F1 overlay  F2 tuning  F3 free camera  Esc quit");
+    ImGui::TextUnformatted("F1 overlay  F2 tuning  F3 free camera  Esc pause");
     if (status.pacing != nullptr && status.pacing->stats().count > 0) {
         const auto stats = status.pacing->stats();
         ImGui::Separator();
@@ -267,7 +281,7 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
         slider("Move dead zone", gamepad.move_dead_zone, 0, 0.5F);
         slider("Look dead zone", gamepad.look_dead_zone, 0, 0.5F);
         ImGui::TextUnformatted("D-pad / left stick: navigate; South: select; East: back.");
-        ImGui::TextUnformatted("Start closes tuning. Camera sensitivity is below.");
+        ImGui::TextUnformatted("F2 closes tuning. Start opens the pause menu.");
     }
     if (ImGui::CollapsingHeader("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
         slider("Distance", c.distance, 2, 16);

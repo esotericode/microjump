@@ -89,10 +89,13 @@ notices. A Vulkan 1.3 GPU driver is all a player needs.
 
 Escape or Start pauses the game. The pause menu works with the mouse, the arrow keys and
 Enter, or a controller. **Places** lists every place you've found, with your sparks there,
-and takes you back to your last checkpoint in any of them. **Options** has the sound
-volume, mouse and stick look speeds and an inverted camera. Leaving the window pauses
+and takes you back to your last checkpoint in any of them. **Options** has display, sound
+volume, mouse and stick look speeds and an inverted camera. Display offers windowed
+resolutions, borderless fullscreen, VSync on/off, and **30, 60, 120 FPS or Unlimited**.
+Choose **Apply display settings** to use a new display setup. Preferences save between
+normal play sessions, separately from expedition progress. Leaving the window pauses
 too. While F2 is open, a controller drives that panel and the keyboard still plays.
-Tuning values reset when the game restarts.
+Advanced F2 tuning values reset when the game restarts. Diagnostics start hidden.
 
 Walk into a glowing gate to travel between the playground, the Lantern Isles and the
 Clockwork Garden. Moving platforms carry you; jumping off keeps their speed. Every move,
@@ -124,7 +127,7 @@ start fresh and leave your expedition untouched.
 | `--hide-overlay` | Start with the overlay hidden. |
 | `--frames N` / `--smoke-test` | Render N frames (or 12) and exit. |
 | `--frame-log PATH` / `--pacing-test` | Per-frame timing CSV; scripted frame-pacing test. |
-| `--camera-test` / `--resize-test` / `--travel-test` | Scripted rendering fixtures used by the tests (`--travel-test` goes through the first gate and back). |
+| `--camera-test` / `--resize-test` / `--travel-test` | Scripted rendering fixtures (`--travel-test` goes through gates and exercises menu travel). |
 
 ## Checks
 
