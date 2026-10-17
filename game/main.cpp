@@ -452,9 +452,6 @@ int run(const LaunchOptions &options) {
                 }
                 pending_travel.reset();
             }
-            // Bound per frame: traveling replaces them, but only between frames.
-            Simulation &simulation = world->simulation;
-            const Level &level = world->level;
             // Input and time are sampled once the display has caught up (docs/engine.md).
             if (auto paced = (*renderer)->wait_for_display(diagnostics.display_pacing); !paced) {
                 log(paced.error().message);
@@ -469,7 +466,6 @@ int run(const LaunchOptions &options) {
                 [&](const SDL_Event &event) { (*renderer)->process_event(event); },
                 {.capture_mouse = capture_mouse && !(*renderer)->ui_wants_mouse(),
                  .gamepad_gameplay = !tuning_open && !menu.is_open()});
-            const bool gameplay_input = input.focused && !(*renderer)->ui_wants_keyboard();
             if (input.quit || choice.kind == MenuChoice::Kind::quit)
                 break;
             if (interactive && input.toggle_menu) {
@@ -499,6 +495,11 @@ int run(const LaunchOptions &options) {
                 }
             }
             choice = {};
+            // Menu travel can replace the world above. Bind only after every replacement.
+            Simulation &simulation = world->simulation;
+            const Level &level = world->level;
+            const bool gameplay_input =
+                input.focused && !menu.is_open() && !(*renderer)->ui_wants_keyboard();
             if (menu.is_open() != was_paused) {
                 was_paused = menu.is_open();
                 log(was_paused ? "Paused" : "Resumed");
