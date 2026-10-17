@@ -137,7 +137,7 @@ void Gamepad::process_event(const SDL_Event &event) {
     m_pending.reset_pressed = m_pending.reset_pressed || button == SDL_GAMEPAD_BUTTON_BACK;
     m_pending.recenter_pressed =
         m_pending.recenter_pressed || button == SDL_GAMEPAD_BUTTON_RIGHT_STICK;
-    m_pending.toggle_tuning = m_pending.toggle_tuning || button == SDL_GAMEPAD_BUTTON_START;
+    m_pending.toggle_menu = m_pending.toggle_menu || button == SDL_GAMEPAD_BUTTON_START;
     m_pending.toggle_overlay = m_pending.toggle_overlay || button == SDL_GAMEPAD_BUTTON_NORTH;
 }
 GamepadFrame Gamepad::sample(const GamepadTuning &tuning, bool focused) {

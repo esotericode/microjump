@@ -2,6 +2,7 @@
 #include "debug_ui.hpp"
 #include "level.hpp"
 #include "level_io.hpp"
+#include "pause_menu.hpp"
 #include "portal_visuals.hpp"
 #include "progress.hpp"
 #include "simulation.hpp"
@@ -365,6 +366,26 @@ int run(const LaunchOptions &options) {
                 lighting.cycle.hours = world->level.atmosphere.time_of_day;
             return {};
         };
+        // Swaps in another level, keeping its finds, at `checkpoint` or else where its saved
+        // expedition last stood. Gates and the pause menu both arrive this way.
+        const auto arrive = [&](const std::filesystem::path &path, Level loaded,
+                                std::optional<std::size_t> checkpoint,
+                                const std::string &how) -> std::expected<void, Error> {
+            describe_level(loaded);
+            expedition.remember(*world);
+            const auto kept = restore_progress(expedition.saved, loaded);
+            auto next = std::make_unique<LoadedLevel>(path, std::move(loaded),
+                                                      checkpoint.value_or(kept.checkpoint));
+            next->simulation.restore_collected(kept.collected);
+            if (auto replaced = replace_world(std::move(next)); !replaced)
+                return replaced;
+            if (expedition.remember(*world))
+                expedition.flush();
+            arrived = std::chrono::steady_clock::now();
+            cues.push_back({Cue::gate});
+            log("Traveled " + how + " to " + world->level.name);
+            return {};
+        };
         // Swaps in the gate's level at its arrival checkpoint. A level that fails to load
         // keeps you where you are; only a renderer failure ends the game.
         const auto travel = [&](std::size_t gate) -> std::expected<void, Error> {
@@ -378,24 +399,26 @@ int run(const LaunchOptions &options) {
                 log("The gate '" + portal.name + "' is closed: " + loaded.error().message);
                 return {};
             }
-            describe_level(*loaded);
-            expedition.remember(*world);
-            auto next = std::make_unique<LoadedLevel>(path, std::move(*loaded), portal.checkpoint);
-            // The gate owns the arrival point. A saved checkpoint is used only at startup.
-            next->simulation.restore_collected(
-                restore_progress(expedition.saved, next->level).collected);
-            if (auto replaced = replace_world(std::move(next)); !replaced)
-                return replaced;
-            if (expedition.remember(*world))
-                expedition.flush();
-            arrived = std::chrono::steady_clock::now();
-            cues.push_back({Cue::gate});
-            log("Traveled through '" + portal.name + "' to " + world->level.name);
-            return {};
+            // The gate owns the arrival point. A saved checkpoint is used only otherwise.
+            return arrive(path, std::move(*loaded), portal.checkpoint,
+                          "through '" + portal.name + "'");
         };
+        // The pause menu: places to travel to, the player's options, and a quit that asks.
+        const bool interactive = is_interactive(options);
+        const auto places = interactive || options.show_menu ? discover_places(starting_path)
+                                                             : std::vector<Place>{};
+        PauseMenu menu;
+        if (options.show_menu)
+            menu.open(*options.show_menu);
+        MenuChoice choice;
+        PlayerOptions player_options;
+        bool was_paused = menu.is_open();
+        PlayerOptions applied_options;
+        const Simulation *applied_to = nullptr; // A new world starts with default camera tuning.
+        std::vector<PlaceStatus> place_status;
         log("Ready: WASD move, Space jump (again on landing: double, triple)/wall kick, "
             "Shift+jump long jump, E or click dive (jump to roll out), R respawn, F1 overlay, "
-            "F2 tuning, F3 free camera.");
+            "F2 tuning, F3 free camera, Escape pause.");
         expedition.controls.reset_requested = options.progress_test == ProgressTest::reset;
         while (true) {
             if (expedition.controls.reset_requested) {
@@ -438,17 +461,60 @@ int run(const LaunchOptions &options) {
                 return 1;
             }
             // Replays ignore live look input, so they never grab the cursor.
-            const bool capture_mouse =
-                !tuning_open && !options.camera_test && !replaying && !options.progress_test;
+            const bool capture_mouse = !tuning_open && !menu.is_open() && !options.camera_test &&
+                                       !replaying && !options.progress_test;
             // While tuning is open a controller drives the menu, so its gameplay input is
             // withheld; the keyboard keeps moving the player unless ImGui is taking text.
             const auto input = (*window)->poll_events(
                 [&](const SDL_Event &event) { (*renderer)->process_event(event); },
                 {.capture_mouse = capture_mouse && !(*renderer)->ui_wants_mouse(),
-                 .gamepad_gameplay = !tuning_open});
+                 .gamepad_gameplay = !tuning_open && !menu.is_open()});
             const bool gameplay_input = input.focused && !(*renderer)->ui_wants_keyboard();
-            if (input.quit)
+            if (input.quit || choice.kind == MenuChoice::Kind::quit)
                 break;
+            if (interactive && input.toggle_menu) {
+                if (menu.is_open())
+                    menu.close();
+                else
+                    menu.open();
+            }
+            // Leaving the window pauses live play, so nothing happens while you're away.
+            if (interactive && !replaying && was_focused && !input.focused && !menu.is_open())
+                menu.open();
+            if (choice.kind == MenuChoice::Kind::resume) {
+                menu.close();
+            } else if (choice.kind == MenuChoice::Kind::tuning) {
+                menu.close();
+                tuning_open = true;
+            } else if (choice.kind == MenuChoice::Kind::travel && choice.place < places.size()) {
+                menu.close();
+                const auto &place = places[choice.place];
+                if (auto loaded = load_level(place.path); !loaded) {
+                    log("Cannot travel to " + place.title + ": " + loaded.error().message);
+                } else if (auto traveled =
+                               arrive(place.path, std::move(*loaded), std::nullopt, "by the menu");
+                           !traveled) {
+                    log(traveled.error().message);
+                    return 1;
+                }
+            }
+            choice = {};
+            if (menu.is_open() != was_paused) {
+                was_paused = menu.is_open();
+                log(was_paused ? "Paused" : "Resumed");
+            }
+            if (applied_options != player_options || applied_to != &world->simulation) {
+                // The camera belongs to the simulation, so a new world needs them again.
+                const FollowCameraTuning defaults;
+                auto &camera = world->simulation.camera.tuning;
+                camera.mouse_sensitivity =
+                    defaults.mouse_sensitivity * player_options.mouse_sensitivity;
+                camera.stick_yaw_speed = defaults.stick_yaw_speed * player_options.stick_speed;
+                camera.stick_pitch_speed = defaults.stick_pitch_speed * player_options.stick_speed;
+                camera.invert_y = player_options.invert_y;
+                applied_options = player_options;
+                applied_to = &world->simulation;
+            }
             if (input.toggle_overlay)
                 show_overlay = !show_overlay;
             if (input.toggle_tuning) {
@@ -546,6 +612,10 @@ int run(const LaunchOptions &options) {
                     pending_buttons |= input_button::reset_pressed;
                 if (input.dive_pressed)
                     pending_buttons |= input_button::dive_pressed;
+            }
+            if (menu.is_open()) { // Paused: the world waits, and so do presses made meanwhile.
+                simulation_elapsed = 0;
+                pending_buttons = 0;
             }
             std::uint32_t frame_ticks = 0;
             bool progress_changed = false;
@@ -740,6 +810,26 @@ int run(const LaunchOptions &options) {
                               {lighting, (*window)->gamepad_tuning, diagnostics,
                                &expedition.controls, &audio_controls},
                               tuning_open);
+                if (menu.is_open()) {
+                    place_status.assign(places.size(), {});
+                    for (std::size_t i = 0; i < places.size(); ++i) {
+                        auto &place = place_status[i];
+                        place.here = places[i].name == level.name;
+                        for (const auto &saved : expedition.saved.levels) {
+                            if (saved.name == places[i].name) {
+                                place.visited = true;
+                                place.found = saved.sparks.size();
+                            }
+                        }
+                        place.visited = place.visited || place.here;
+                        if (place.here)
+                            place.found = simulation.collected_count();
+                    }
+                    choice = menu.draw({places, place_status, input.gamepad_labels,
+                                        input.gamepad_connected, travel_allowed,
+                                        expedition.controls.enabled && expedition.writable},
+                                       player_options, audio_controls);
+                }
             };
             if (options.pacing_test) {
                 status.input_mode +=
@@ -766,7 +856,9 @@ int run(const LaunchOptions &options) {
             if (mixer) { // Heard from the camera; far-off machines aren't worth a voice.
                 const Vec3 ear = view.camera.position;
                 mixer->set_listener({ear, yaw_right(view.camera.yaw)});
-                mixer->set_volume(audio_controls.muted ? 0.0F : audio_controls.volume);
+                mixer->set_volume(audio_controls.muted
+                                      ? 0.0F
+                                      : audio_controls.volume * (menu.is_open() ? 0.35F : 1.0F));
                 for (const auto &cue : cues) {
                     if (!cue.position || length(*cue.position - ear) < cue.reach)
                         mixer->play({static_cast<std::uint32_t>(cue.cue), cue.gain, cue.pitch,
@@ -779,6 +871,7 @@ int run(const LaunchOptions &options) {
             cues.clear();
             view.instances = instances;
             view.particles = particles;
+            view.keyboard_navigation = menu.is_open();
             view.blob = {pose.position,
                          lighting.blob ? simulation.player.tuning.radius * 1.35F : 0.0F,
                          lighting.blob_strength};
@@ -931,6 +1024,7 @@ int main(int argc, char *argv[]) {
             "  --save PATH  Use a separate expedition profile (also enables custom-level saves).\n"
             "  --no-save  Keep this expedition in memory only.\n"
             "  --no-audio  Play without sound.\n"
+            "  --show-menu PAGE  Open the pause menu (main, places, options, controls, quit).\n"
             "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
             "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
             "  --hide-overlay  Hide diagnostics and the spark HUD (clean captures).\n"
@@ -940,9 +1034,9 @@ int main(int argc, char *argv[]) {
             "  Debug builds require Vulkan validation layers.\n"
             "  WASD move, Space jump/wall kick, Shift+jump long jump, E or left click dive, Ctrl "
             "walk, mouse look,\n"
-            "  R respawn, F1 overlay, F2 tuning, F3 free camera, Escape exit. Gamepad: sticks, "
+            "  R respawn, F1 overlay, F2 tuning, F3 free camera, Escape pause. Gamepad: sticks, "
             "South jump, West dive,\n"
-            "  LB+jump long jump, R3 center, Back respawn, Start tuning.");
+            "  LB+jump long jump, R3 center, Back respawn, Start pause.");
         return 0;
     }
     return mj::game::run(*options);

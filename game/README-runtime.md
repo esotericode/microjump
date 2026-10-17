@@ -18,9 +18,9 @@ Vulkan 1.3; nothing else to install.
 | Mouse | Right stick | Camera; click the right stick to recenter |
 | R | Back | Back to the last checkpoint (teal pads) |
 | F1 | North button | Diagnostics overlay |
-| F2 | Start | Tuning: movement, camera, lighting, gamepad |
+| Escape | Start | Pause: resume, travel to places you've found, options, controls, quit |
+| F2 | — | Tuning: movement, camera, lighting, gamepad |
 | F3 | — | Free-flight camera |
-| Escape | — | Quit |
 
 On Windows, pressing Shift five times can open the Sticky Keys prompt. You can turn
 that shortcut off in Settings › Accessibility › Keyboard.

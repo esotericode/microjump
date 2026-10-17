@@ -43,7 +43,7 @@ struct GamepadFrame {
     bool walk_held = false;
     bool reset_pressed = false;
     bool recenter_pressed = false;
-    bool toggle_tuning = false;
+    bool toggle_menu = false; // Start: pause.
     bool toggle_overlay = false;
     std::string name;
     GamepadLabels labels;

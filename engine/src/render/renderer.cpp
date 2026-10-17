@@ -1062,6 +1062,10 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     else
         io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
+    if (view.keyboard_navigation)
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    else
+        io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();

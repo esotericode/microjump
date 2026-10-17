@@ -1,6 +1,6 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
     movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp frame_pacing_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp
-    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp lantern_isles_tests.cpp surface_tests.cpp jump_chain_tests.cpp progress_tests.cpp progress_options_tests.cpp mover_tests.cpp clockwork_garden_tests.cpp audio_tests.cpp sound_mover_tests.cpp)
+    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp lantern_isles_tests.cpp surface_tests.cpp jump_chain_tests.cpp progress_tests.cpp progress_options_tests.cpp mover_tests.cpp clockwork_garden_tests.cpp audio_tests.cpp sound_mover_tests.cpp menu_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
@@ -105,6 +105,9 @@ if(MJ_SMOKE_TESTS)
     add_test(NAME render_isles COMMAND microjump --level "${PROJECT_SOURCE_DIR}/assets/levels/lantern-isles.json"
         --capture-tick 60 --capture-out "${captures}/isles.png")
     add_test(NAME isles_pixels COMMAND microjump_capture_check --scene "${captures}/isles.png")
+    # The pause menu over the paused playground: ImGui pages draw under validation.
+    add_test(NAME render_menu COMMAND microjump --show-menu places --hide-overlay
+        --capture-frame 20 --capture-out "${captures}/menu.png")
     set_tests_properties(isles_pixels PROPERTIES DEPENDS render_isles)
     # Four seconds in, every machine in the garden is part-way through its motion.
     add_test(NAME render_garden COMMAND microjump --level "${PROJECT_SOURCE_DIR}/assets/levels/clockwork-garden.json"
@@ -153,12 +156,12 @@ if(MJ_SMOKE_TESTS)
         "${captures}/resized.png" "${captures}/replay.png")
     set_tests_properties(render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick capture_pixels
         render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
-        render_spark_pickup replay_spark_invitation render_isles isles_pixels render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
+        render_spark_pickup replay_spark_invitation render_isles isles_pixels render_menu render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
     set_tests_properties(capture_pixels PROPERTIES DEPENDS "render_capture;render_camera;render_resize;render_replay")
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
         set_tests_properties(progress_runtime gamepad_window vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
             capture_pixels render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
-            render_spark_pickup replay_spark_invitation particle_render render_isles isles_pixels render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES ENVIRONMENT
+            render_spark_pickup replay_spark_invitation particle_render render_isles isles_pixels render_menu render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")
     endif()
 endif()

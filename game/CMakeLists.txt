@@ -4,7 +4,7 @@ target_include_directories(microjump_gameplay PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(microjump_gameplay PUBLIC mj::engine)
 target_link_libraries(microjump_gameplay PRIVATE nlohmann_json::nlohmann_json)
 mj_project_options(microjump_gameplay)
-add_executable(microjump main.cpp debug_ui.cpp)
+add_executable(microjump main.cpp debug_ui.cpp pause_menu.cpp)
 target_link_libraries(microjump PRIVATE microjump_gameplay mj_imgui)
 mj_project_options(microjump)
 set(mj_shader_outputs)
