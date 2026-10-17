@@ -21,9 +21,10 @@ class Simulation {
 
     // The world with its movers where this tick left them.
     [[nodiscard]] CollisionScene scene() const {
-        return {m_world, m_poses, m_previous_poses};
+        return {m_world, {m_poses, m_previous_poses}};
     }
     // Mover i between the last two ticks, for drawing.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an index and a 0..1 blend.
     [[nodiscard]] BodyPose mover_pose(std::size_t index, float alpha) const;
     [[nodiscard]] double seconds() const {
         return m_seconds;

@@ -124,17 +124,21 @@ struct BodyCarry {
     float turn = 0; // Yaw change, to turn a rider with a turntable.
 };
 
+// Where each body is now and where it was a step ago (for carrying riders): one pose per
+// body, or empty spans for rest poses.
+struct BodyPoses {
+    std::span<const BodyPose> now;
+    std::span<const BodyPose> before;
+};
+
 // The static world plus its moving bodies, each at a pose. Queries report the body they
 // hit. A plain CollisionWorld converts to a scene with every body at its rest pose.
 class CollisionScene {
   public:
-    // NOLINTNEXTLINE(google-explicit-constructor): every static world is a still scene.
+    // Implicit: every static world is a still scene.
     CollisionScene(const CollisionWorld &world) : m_world(&world) {}
-    // `poses` and `previous` hold one pose per body (or are empty for rest poses). The
-    // previous poses are where the bodies were a step ago, for carrying riders.
-    CollisionScene(const CollisionWorld &world, std::span<const BodyPose> poses,
-                   std::span<const BodyPose> previous)
-        : m_world(&world), m_poses(poses), m_previous(previous) {}
+    CollisionScene(const CollisionWorld &world, BodyPoses poses)
+        : m_world(&world), m_poses(poses.now), m_previous(poses.before) {}
 
     [[nodiscard]] std::optional<RayHit> raycast(const Ray &ray) const;
     [[nodiscard]] std::optional<SweepHit> sweep(const SweepQuery &query) const;

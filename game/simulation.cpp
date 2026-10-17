@@ -75,6 +75,7 @@ void Simulation::respawn() {
     ++m_respawns;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an index and a 0..1 blend.
 BodyPose Simulation::mover_pose(std::size_t index, float alpha) const {
     const auto &from = m_previous_poses[index];
     const auto &to = m_poses[index];

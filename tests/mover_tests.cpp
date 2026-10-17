@@ -76,7 +76,7 @@ TEST_CASE("a scene finds moving bodies at their poses") {
     mj::CollisionWorld world;
     world.add_body(slab.triangles(), {{0, 0, 0}, 0});
     const std::array poses{mj::BodyPose{{10, 2, 0}, std::numbers::pi_v<float> / 2}};
-    const mj::CollisionScene scene(world, poses, poses);
+    const mj::CollisionScene scene(world, {poses, poses});
 
     // Turned a quarter, the slab runs along world Z through (10, 2, 0).
     const auto down = scene.raycast({{10, 5, 3}, {0, -1, 0}, 10});

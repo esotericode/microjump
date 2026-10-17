@@ -192,20 +192,33 @@ TEST_CASE("the z-fighting check sees coplanar overlaps that show, and ignores bu
           doctest::Approx(3 + 1.5F + 1.5F).epsilon(0.01)); // Top, front, back.
 }
 
+namespace {
+void check_no_fights(const mj::game::Level &level) {
+    for (const auto &fight : z_fights(level)) {
+        const auto &a = level.shapes[fight.first];
+        const auto &b = level.shapes[fight.second];
+        CAPTURE(fight.first);
+        CAPTURE(a.center);
+        CAPTURE(fight.second);
+        CAPTURE(b.center);
+        CHECK(fight.area == 0.0F); // Fails with the two shapes that z-fight.
+    }
+}
+} // namespace
+
 TEST_CASE("shipped levels have no visible z-fighting") {
     for (const std::string_view name :
-         {"playground.json", "lantern-isles.json", "movement-yard.json"}) {
+         {"playground.json", "lantern-isles.json", "movement-yard.json", "clockwork-garden.json"}) {
         CAPTURE(name);
         const auto level = mj::game::load_level(std::filesystem::path(MJ_TEST_LEVELS) / name);
         REQUIRE(level);
-        for (const auto &fight : z_fights(*level)) {
-            const auto &a = level->shapes[fight.first];
-            const auto &b = level->shapes[fight.second];
-            CAPTURE(fight.first);
-            CAPTURE(a.center);
-            CAPTURE(fight.second);
-            CAPTURE(b.center);
-            CHECK(fight.area == 0.0F); // Fails with the two shapes that z-fight.
+        check_no_fights(*level);
+        // Each mover's shapes move together, so they are checked against each other.
+        for (const auto &mover : level->movers) {
+            CAPTURE(mover.name);
+            mj::game::Level body = *level;
+            body.shapes = mover.shapes;
+            check_no_fights(body);
         }
     }
 }

@@ -67,6 +67,22 @@ The jump is fast and low on a fixed arc: `run_speed × 1.8` forward and 8.5 m/s 
 
 ![A triple jump's somersault, a rollout, a dive out of a jump and a belly slide](captures/sm64-moves.png)
 
+## Moving platforms
+
+The simulation steps every mover before the player each tick. Then:
+
+- **Riding.** Standing on a mover carries you through its step, sweeping so a wall can
+  scrape you off, and a turning mover turns your facing with it.
+- **Leaving.** Jumping, walking or bouncing off adds the platform's velocity at your
+  feet, so you keep moving with it.
+- **Landing.** Landing on a mover counts only your velocity relative to it, so a hop in
+  place on a moving platform lands in place. On a mover you keep only your forward
+  speed and never turn round: dropping onto a turntable lands you standing on it.
+- **Pushing.** A mover that runs into you pushes you out, through the mover's usual
+  depenetration. Nothing crushes: lay movers out so they can't pin you.
+
+None of this touches a level without movers, so every recording keeps its bits.
+
 ## Momentum
 
 Speed above `run_speed` is **momentum**. You build it on purpose, and it isn't free.

@@ -127,6 +127,15 @@ one CSV row per frame. See [testing](testing.md).
     steeper than a walkable slope, the crease counts as flat ground, so you can jump
     out. A steeper crease, like a corner between walls, still lets you fall.
   - Faces can carry a wall-kick designation from the level.
+- **Moving bodies.** A collision world can also hold bodies: each a BVH of its own
+  triangles in body space. A body's pose is a translation plus a turn about +Y, never a
+  tilt, so an upright capsule stays upright in body space and every query (ray, sweep,
+  depenetration) runs unchanged there. `CollisionScene` pairs the static world with
+  the bodies' current and previous poses, answers queries against all of them, reports
+  which body a hit belongs to, and tells a rider how a point on a body moved during
+  its last step. A plain `CollisionWorld` converts to a scene with every body at rest.
+  - The mover and camera take a scene. A body is treated as still during one move;
+    the simulation steps the bodies first, then carries riders, then moves the player.
 
 ## Platform and input
 
@@ -148,6 +157,11 @@ are smooth, with normals scaled by the inverse of their radii. Cones are faceted
 twelve flat sides that read as cut rock. The game turns a JSON level into one world mesh
 plus collision triangles from its solid shapes. Drawn-only shapes, like clouds and grass,
 add only to the mesh. See [levels](levels.md).
+
+A level's [moving platforms](levels.md#moving-platforms) each get their own mesh, built
+in body space and drawn with the pose interpolated between the last two ticks, like the
+player. Their collision is added to the world as bodies. Movers skip the graybox grid,
+whose world-space lines would swim across them.
 
 Gates swap the whole level at runtime. `main.cpp` keeps the level, its geometry and the
 simulation together in one object, and replaces it between frames. A travel loads the
