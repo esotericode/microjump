@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <thread>
 
@@ -185,6 +186,57 @@ TEST_CASE("the mixer plays at pitch, steals the oldest voice and eases its loops
     out = mixed(mixer, 12000);
     CHECK(roughest(out, 2) < 0.08F);
     CHECK(mixer.active_voices() == 0);
+}
+
+TEST_CASE("a pitched loop can wrap more than once between output samples") {
+    const audio::Sound short_loop{{0.2F, -0.4F, 0.6F}, true};
+    audio::Mixer fast({short_loop});
+    audio::Mixer equivalent({short_loop});
+    fast.set_loop({.sound = 0, .pitch = 8});
+    equivalent.set_loop({.sound = 0, .pitch = 2});
+    // Eight samples forward in a three-sample loop is the same as two. Both
+    // callbacks must stay inside the loop, including across consecutive mixes.
+    for (int i = 0; i < 3; ++i) {
+        const auto out = mixed(fast, 64);
+        CHECK(out == mixed(equivalent, 64));
+        CHECK(std::all_of(out.begin(), out.end(), [](float s) { return std::isfinite(s); }));
+    }
+    CHECK(fast.active_voices() == 1);
+
+    audio::Mixer shortest({audio::Sound{{0.2F, -0.4F}, true}});
+    shortest.set_loop({.sound = 0, .pitch = 8});
+    const auto out = mixed(shortest, 64);
+    CHECK(peak(out) > 0.0F);
+    CHECK(std::all_of(out.begin(), out.end(), [](float s) { return std::isfinite(s); }));
+    CHECK(shortest.active_voices() == 1);
+}
+
+TEST_CASE("loop pitch stays safe both when starting and when changing a voice") {
+    const auto sound = audio::make_loop(tone(220, 0.1F), 0.01F);
+    const std::array pitches{std::array{-1.0F, 0.1F}, std::array{100.0F, 8.0F},
+                             std::array{std::numeric_limits<float>::quiet_NaN(), 1.0F},
+                             std::array{std::numeric_limits<float>::infinity(), 1.0F},
+                             std::array{-std::numeric_limits<float>::infinity(), 1.0F}};
+    for (const auto &pitch : pitches) {
+        CAPTURE(pitch[0]);
+        for (const bool existing : {false, true}) {
+            CAPTURE(existing);
+            audio::Mixer mixer({sound});
+            audio::Mixer reference({sound});
+            if (existing) {
+                mixer.set_loop({.sound = 0});
+                reference.set_loop({.sound = 0});
+                mixed(mixer, 512);
+                mixed(reference, 512);
+            }
+            mixer.set_loop({.sound = 0, .pitch = pitch[0]});
+            reference.set_loop({.sound = 0, .pitch = pitch[1]});
+            const auto out = mixed(mixer, 2048);
+            CHECK(out == mixed(reference, 2048));
+            CHECK(std::all_of(out.begin(), out.end(), [](float s) { return std::isfinite(s); }));
+            CHECK(mixer.active_voices() == 1);
+        }
+    }
 }
 
 TEST_CASE("every game sound bakes quiet at its ends and loud enough to hear") {

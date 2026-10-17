@@ -9,6 +9,10 @@ namespace {
 // Loops ease to a new level over this long, so changes never click.
 constexpr float k_loop_ease_seconds = 0.1F;
 
+float playback_pitch(float pitch) {
+    return std::isfinite(pitch) ? std::clamp(pitch, 0.1F, 8.0F) : 1.0F;
+}
+
 // Leaves quiet signals alone and bends peaks smoothly under full scale.
 float limit(float x) {
     constexpr float knee = 0.8F;
@@ -53,7 +57,7 @@ void Mixer::apply(const Pending &command) {
         for (auto &voice : m_voices) {
             if (voice.active && voice.loop && voice.sound == play.sound) {
                 voice.target = std::max(play.gain, 0.0F);
-                voice.pitch = play.pitch;
+                voice.pitch = playback_pitch(play.pitch);
                 voice.position = play.position;
                 voice.reach = play.reach;
                 return;
@@ -75,7 +79,7 @@ void Mixer::apply(const Pending &command) {
     if (slot == nullptr)
         return;
     *slot = Voice{.sound = play.sound,
-                  .pitch = std::clamp(play.pitch, 0.1F, 8.0F),
+                  .pitch = playback_pitch(play.pitch),
                   .gain = command.loop ? 0.0F : play.gain,
                   .target = play.gain,
                   .loop = command.loop,
@@ -142,7 +146,8 @@ void Mixer::mix(std::span<float> stereo) {
                     voice.active = false;
                     break;
                 }
-                voice.cursor -= size;
+                // A short loop can wrap more than once at a high playback rate.
+                voice.cursor = std::fmod(voice.cursor, size);
             }
         }
         if (voice.loop && voice.gain <= 0 && voice.target <= 0)

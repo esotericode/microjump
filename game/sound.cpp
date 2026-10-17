@@ -362,8 +362,14 @@ void SoundDirector::tick(const PlayerState &before, const Simulation &simulation
         sounds.push_back({cue, gain, pitch, std::nullopt, 30});
     };
 
-    // Takeoffs: an upward kick in velocity, named by the move that made it.
-    const bool launched = after.velocity.y > before.velocity.y + 2.5F && !after.grounded;
+    // A grounded takeoff is still a jump when a descending lift leaves its world-space
+    // velocity pointing down. Airborne takeoffs (coyote jumps and bounces) have a kick.
+    const bool takeoff_state =
+        after.state == MoveState::jump || after.state == MoveState::double_jump ||
+        after.state == MoveState::triple_jump || after.state == MoveState::long_jump ||
+        after.state == MoveState::rollout || after.state == MoveState::bounce;
+    const bool launched = takeoff_state && !after.grounded &&
+                          (before.grounded || after.velocity.y > before.velocity.y + 2.5F);
     const bool kicked =
         after.state == MoveState::wall_jump &&
         (before.state != MoveState::wall_jump ||
