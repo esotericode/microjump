@@ -294,6 +294,8 @@
   ],
   "portals": [
     {"name": "To the Lantern Isles", "position": [6.5, 1.6, 4.5], "radius": 1.1, "yaw": -2.06,
-     "level": "lantern-isles.json", "checkpoint": 0}
+     "level": "lantern-isles.json", "checkpoint": 0},
+    {"name": "To the Clockwork Garden", "position": [-6.5, 1.6, 4.5], "radius": 1.1, "yaw": 2.06,
+     "level": "clockwork-garden.json", "checkpoint": 0}
   ]
 }

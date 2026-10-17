@@ -4,20 +4,20 @@
 
 namespace mj::game {
 namespace {
-bool visible(const CollisionWorld &world, Vec3 from, Vec3 to) {
+bool visible(const CollisionScene &world, Vec3 from, Vec3 to) {
     const Vec3 delta = to - from;
     const float distance = length(delta);
     return distance <= 1.0e-6F || !world.raycast({from, delta * (1.0F / distance), distance});
 }
 
-bool touches(const CollisionWorld &world, const Capsule &capsule, const Collectible &spark) {
+bool touches(const CollisionScene &world, const Capsule &capsule, const Collectible &spark) {
     const Vec3 closest = closest_point_on_segment(spark.position, capsule.segment());
     const float reach = capsule.radius + spark.radius;
     return length_squared(spark.position - closest) <= reach * reach &&
            visible(world, closest, spark.position);
 }
 
-bool swept_touch(const CollisionWorld &world, const Capsule &before, const Capsule &after,
+bool swept_touch(const CollisionScene &world, const Capsule &before, const Capsule &after,
                  const Collectible &spark) {
     if (touches(world, before, spark) || touches(world, after, spark))
         return true;
@@ -51,6 +51,9 @@ Simulation::Simulation(const Level &level, const CollisionWorld &world, std::siz
       m_checkpoint(level.checkpoints.empty() ? 0
                                              : std::min(checkpoint, level.checkpoints.size() - 1)),
       m_collected(level.collectibles.size(), false) {
+    for (const auto &mover : level.movers)
+        m_poses.push_back(game::mover_pose(mover, 0));
+    m_previous_poses = m_poses;
     const auto spawn = level.checkpoints.empty() ? Checkpoint{} : level.checkpoints[m_checkpoint];
     player.place(spawn.position, spawn.yaw);
     camera.snap(player.current(), spawn.yaw);
@@ -72,8 +75,20 @@ void Simulation::respawn() {
     ++m_respawns;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an index and a 0..1 blend.
+BodyPose Simulation::mover_pose(std::size_t index, float alpha) const {
+    const auto &from = m_previous_poses[index];
+    const auto &to = m_poses[index];
+    return {lerp(from.position, to.position, alpha), lerp_angle(from.yaw, to.yaw, alpha)};
+}
+
 void Simulation::tick(const TickInput &input, float dt) {
     ++m_ticks;
+    // Movers step first, so a rider is carried through this tick's motion.
+    m_seconds += dt;
+    m_previous_poses = m_poses;
+    for (std::size_t i = 0; i < m_poses.size(); ++i)
+        m_poses[i] = game::mover_pose(m_level.movers[i], m_seconds);
     m_portal_entered.reset();
     camera.set_orientation({input.camera_yaw, input.camera_pitch});
     if (input.held(input_button::reset_pressed)) {
@@ -81,7 +96,7 @@ void Simulation::tick(const TickInput &input, float dt) {
         return;
     }
     const auto before = player.capsule();
-    player.tick(input, m_world, dt);
+    player.tick(input, scene(), dt);
     const auto &state = player.current();
     if (state.position.y < m_level.kill_height) {
         respawn();
@@ -96,7 +111,7 @@ void Simulation::tick(const TickInput &input, float dt) {
     }
     collect_sparks(before);
     enter_portals(before);
-    camera.tick(state, m_world, dt);
+    camera.tick(state, scene(), dt);
 }
 
 void Simulation::enter_portals(const Capsule &before) {
@@ -112,7 +127,7 @@ void Simulation::enter_portals(const Capsule &before) {
 void Simulation::collect_sparks(const Capsule &before) {
     const auto after = player.capsule();
     for (std::size_t i = 0; i < m_collected.size(); ++i) {
-        if (m_collected[i] || !swept_touch(m_world, before, after, m_level.collectibles[i]))
+        if (m_collected[i] || !swept_touch(scene(), before, after, m_level.collectibles[i]))
             continue;
         m_collected[i] = true;
         ++m_collected_count;

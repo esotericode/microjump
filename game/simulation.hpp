@@ -19,6 +19,17 @@ class Simulation {
     void tick(const TickInput &input, float dt);
     void respawn();
 
+    // The world with its movers where this tick left them.
+    [[nodiscard]] CollisionScene scene() const {
+        return {m_world, {m_poses, m_previous_poses}};
+    }
+    // Mover i between the last two ticks, for drawing.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters): an index and a 0..1 blend.
+    [[nodiscard]] BodyPose mover_pose(std::size_t index, float alpha) const;
+    [[nodiscard]] double seconds() const {
+        return m_seconds;
+    }
+
     Player player;
     FollowCamera camera;
     [[nodiscard]] std::size_t active_checkpoint() const {
@@ -63,6 +74,9 @@ class Simulation {
 
     const Level &m_level;
     const CollisionWorld &m_world;
+    double m_seconds = 0; // Simulation time, which alone decides where movers are.
+    std::vector<BodyPose> m_poses;
+    std::vector<BodyPose> m_previous_poses;
     std::size_t m_checkpoint = 0;
     std::uint64_t m_ticks = 0;
     std::uint32_t m_respawns = 0;

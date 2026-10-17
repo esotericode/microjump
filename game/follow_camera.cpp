@@ -31,7 +31,7 @@ void FollowCamera::set_orientation(Orientation orientation) {
     m_pitch = std::clamp(orientation.pitch, tuning.min_pitch, tuning.max_pitch);
 }
 
-float FollowCamera::free_distance(Vec3 focus, const CollisionWorld &world) const {
+float FollowCamera::free_distance(Vec3 focus, const CollisionScene &world) const {
     const float desired = std::max(tuning.distance, tuning.min_distance);
     const Vec3 back = -view_forward(m_yaw, m_pitch) * desired;
     const Capsule probe{focus - Vec3{0, tuning.probe_radius, 0}, tuning.probe_radius,
@@ -41,7 +41,7 @@ float FollowCamera::free_distance(Vec3 focus, const CollisionWorld &world) const
     return hit ? desired * hit->fraction : desired;
 }
 
-void FollowCamera::tick(const PlayerState &player, const CollisionWorld &world, float dt) {
+void FollowCamera::tick(const PlayerState &player, const CollisionScene &world, float dt) {
     m_previous_focus = m_focus;
     m_previous_distance = m_distance;
     const Vec3 target = player.position + Vec3{0, tuning.focus_height, 0};
@@ -62,7 +62,7 @@ void FollowCamera::tick(const PlayerState &player, const CollisionWorld &world, 
                      : m_distance + (free - m_distance) * smoothing(tuning.recover_half_life, dt);
 }
 
-CameraPose FollowCamera::pose(float alpha, const CollisionWorld &world) const {
+CameraPose FollowCamera::pose(float alpha, const CollisionScene &world) const {
     const Vec3 focus = lerp(m_previous_focus, m_focus, alpha);
     const float smoothed = m_previous_distance + (m_distance - m_previous_distance) * alpha;
     const float distance = std::min(smoothed, free_distance(focus, world));

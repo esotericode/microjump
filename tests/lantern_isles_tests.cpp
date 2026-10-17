@@ -1,4 +1,4 @@
-#include "test_framework.hpp"
+#include "route_driver.hpp"
 
 #include <level_io.hpp>
 #include <simulation.hpp>
@@ -11,152 +11,7 @@
 
 using mj::Vec3;
 
-namespace {
-constexpr float k_dt = 1.0F / 120;
-// Set to true to print every tick of the traced routes, when a new route won't pass.
-constexpr bool k_route_log = false;
-void trace(const char *tag, const mj::game::Simulation &simulation) {
-    if (!k_route_log)
-        return;
-    const auto &s = simulation.player.current();
-    std::printf("%s t%llu %.2f %.2f %.2f v %.2f %.2f %.2f %s %s r%u\n", tag,
-                static_cast<unsigned long long>(simulation.ticks()), double(s.position.x),
-                double(s.position.y), double(s.position.z), double(s.velocity.x),
-                double(s.velocity.y), double(s.velocity.z), s.grounded ? "G" : "A",
-                mj::game::to_string(s.state), simulation.respawns());
-}
-
-mj::game::Level load(std::string_view name) {
-    auto level = mj::game::load_level(std::filesystem::path(MJ_TEST_LEVELS) / name);
-    REQUIRE(level);
-    return std::move(*level);
-}
-
-std::size_t spark_index(const mj::game::Level &level, std::string_view name) {
-    for (std::size_t i = 0; i < level.collectibles.size(); ++i) {
-        if (level.collectibles[i].name == name)
-            return i;
-    }
-    FAIL("Missing authored spark: " << name);
-    return level.collectibles.size();
-}
-
-// A camera-relative stick (camera yaw 0) pointing at `target`.
-mj::TickInput toward(const mj::game::Simulation &simulation, Vec3 target, float strength = 1,
-                     std::uint32_t buttons = mj::input_button::jump_held) {
-    const Vec3 offset = mj::horizontal(target - simulation.player.current().position);
-    const float distance = mj::length(offset);
-    if (distance < 1e-3F)
-        return {0, 0, 0, -0.32F, buttons};
-    const float scale = strength * std::min(1.0F, distance / 0.6F) / distance;
-    return {offset.x * scale, -offset.z * scale, 0, -0.32F, buttons};
-}
-
-// In the air, steer for the velocity that touches down on `top` just as the jump falls to its
-// height, as a player lines up a landing instead of pushing at it.
-mj::TickInput aim(const mj::game::Simulation &simulation, Vec3 top, std::uint32_t buttons) {
-    const auto &state = simulation.player.current();
-    const auto &tuning = simulation.player.tuning;
-    const float gravity = tuning.gravity() * tuning.fall_gravity_scale;
-    const float drop = state.position.y - top.y;
-    const float reach = state.velocity.y * state.velocity.y + 2 * gravity * drop;
-    if (reach <= 0)
-        return toward(simulation, top, 1, buttons); // Still below it: just press on.
-    const float time = std::max((state.velocity.y + std::sqrt(reach)) / gravity, 0.05F);
-    const Vec3 wanted = mj::horizontal(top - state.position) * (1 / time);
-    // Steering accelerates along the stick (and nothing slows you without it), so push by
-    // the change still needed, reaching it within about a tenth of a second.
-    const Vec3 change = wanted - mj::horizontal(state.velocity);
-    const float needed = mj::length(change);
-    if (needed < 1e-3F)
-        return {0, 0, 0, -0.32F, buttons};
-    const Vec3 stick =
-        change * (std::min(1.0F, needed / (tuning.air_acceleration * 0.1F)) / needed);
-    return {stick.x, -stick.z, 0, -0.32F, buttons};
-}
-
-// One hop of a route: the landing's top center and how close to its middle counts as landed.
-struct Landing {
-    Vec3 top;
-    float radius = 1.2F;
-    // Small tops (columns) want a gentle hop: settle below this speed before leaping.
-    float max_speed = 100;
-};
-
-// Seconds from a held jump's takeoff until it falls back to `rise` above the takeoff.
-float flight_time(const mj::game::PlayerTuning &tuning, float rise) {
-    const float gravity = tuning.gravity();
-    const float launch = tuning.jump_velocity();
-    const float apex = launch * launch / (2 * gravity);
-    const float fall = std::max(apex - rise, 0.0F);
-    return launch / gravity + std::sqrt(2 * fall / (gravity * tuning.fall_gravity_scale));
-}
-
-// Plays each hop the way a player judges one: turn toward the landing, take off once the
-// current speed would carry the jump there (or at the edge of the ground underfoot), then
-// line up the touchdown in the air. Fails on any fall: every hop on a shipped route must be
-// an ordinary jump.
-void hop(mj::game::Simulation &simulation, const mj::CollisionWorld &world,
-         std::initializer_list<Landing> landings) {
-    int index = 0;
-    for (const auto &landing : landings) {
-        CAPTURE(index);
-        bool arrived = false;
-        for (int tick = 0; tick < 900 && !arrived; ++tick) {
-            const auto &state = simulation.player.current();
-            const Vec3 offset = mj::horizontal(landing.top - state.position);
-            const float distance = mj::length(offset);
-            // Ground all the way there (within a step) means walk; any gap means hop.
-            bool connected = std::abs(state.position.y - landing.top.y) < 0.35F;
-            for (float along = 0.4F; connected && along < distance; along += 0.4F) {
-                const Vec3 probe = state.position + offset * (along / distance);
-                const auto floor = world.raycast({probe + Vec3{0, 0.5F, 0}, {0, -1, 0}, 1.0F});
-                connected = floor && std::abs(floor->point.y - state.position.y) < 0.35F;
-            }
-            const Vec3 ahead = state.position + offset * (0.5F / std::max(distance, 0.5F));
-            const auto ground = world.raycast({ahead + Vec3{0, 0.5F, 0}, {0, -1, 0}, 1.0F});
-            const bool edge = !ground || ground->point.y < state.position.y - 0.6F;
-            const Vec3 moving = mj::horizontal(state.velocity);
-            const float speed = mj::length(moving);
-            const bool facing = speed < 1.0F || mj::dot(moving, offset) > 0.95F * speed * distance;
-            const float carry =
-                speed * flight_time(simulation.player.tuning, landing.top.y - state.position.y);
-            std::uint32_t buttons = mj::input_button::jump_held;
-            mj::TickInput input;
-            if (!state.grounded) {
-                input = aim(simulation, landing.top, buttons);
-            } else if (connected) {
-                input = toward(simulation, landing.top, 0.6F, buttons); // Walk there.
-            } else if (speed > landing.max_speed) {
-                input = {0, 0, 0, -0.32F, buttons}; // Settle before a careful hop.
-            } else {
-                if ((facing && carry >= distance - 0.4F) || edge)
-                    buttons |= mj::input_button::jump_pressed;
-                // Ease off while still turning, so the turn finishes before the edge.
-                input = toward(simulation, landing.top, facing ? 1.0F : 0.4F, buttons);
-            }
-            simulation.tick(input, k_dt);
-            const auto &after = simulation.player.current();
-            arrived = after.grounded && std::abs(after.position.y - landing.top.y) < 0.3F &&
-                      mj::length(mj::horizontal(landing.top - after.position)) < landing.radius;
-            REQUIRE(simulation.respawns() == 0);
-        }
-        REQUIRE(arrived);
-        ++index;
-    }
-}
-
-// Walks to `target` without jumping, then stands still long enough to settle.
-void walk(mj::game::Simulation &simulation, Vec3 target, float strength = 0.6F) {
-    for (int tick = 0; tick < 600; ++tick) {
-        if (mj::length(mj::horizontal(target - simulation.player.current().position)) < 0.3F)
-            break;
-        simulation.tick(toward(simulation, target, strength), k_dt);
-    }
-    for (int tick = 0; tick < 30; ++tick)
-        simulation.tick({}, k_dt);
-}
-} // namespace
+using namespace route;
 
 TEST_CASE("the Lantern Isles load as a floating, drawn-and-solid place") {
     const auto level = load("lantern-isles.json");
@@ -180,7 +35,8 @@ TEST_CASE("the Lantern Isles load as a floating, drawn-and-solid place") {
 }
 
 TEST_CASE("every gate leads to a shipped level and checkpoint, and back again") {
-    for (const std::string_view name : {"playground.json", "lantern-isles.json"}) {
+    for (const std::string_view name :
+         {"playground.json", "lantern-isles.json", "clockwork-garden.json"}) {
         CAPTURE(name);
         const auto level = load(name);
         REQUIRE_FALSE(level.portals.empty());
@@ -246,61 +102,56 @@ TEST_CASE("Lantern Isles routes can be crossed with ordinary jumps") {
         mj::game::Simulation simulation(level, geometry.collision);
         walk(simulation, {3, 0, -3});
         CHECK(simulation.collectible_collected(spark_index(level, "Welcome lantern")) == false);
-        hop(simulation, geometry.collision,
-            {{{4, 1.2F, -4}, 0.6F}, // The welcome lantern's plinth.
-             {{1, 0.5F, -14}},
-             {{-1.5F, 1.0F, -19.2F}},
-             {{1, 1.6F, -24.4F}},
-             {{-1, 2.2F, -29.4F}},
-             {{0, 3, -35.5F}, 1.0F}});
+        hop(simulation, {{{4, 1.2F, -4}, 0.6F}, // The welcome lantern's plinth.
+                         {{1, 0.5F, -14}},
+                         {{-1.5F, 1.0F, -19.2F}},
+                         {{1, 1.6F, -24.4F}},
+                         {{-1, 2.2F, -29.4F}},
+                         {{0, 3, -35.5F}, 1.0F}});
         CHECK(simulation.collectible_collected(spark_index(level, "Welcome lantern")));
         CHECK(simulation.collectible_collected(spark_index(level, "Stepping glow")));
         CHECK(simulation.active_checkpoint() == 1);
         // Bush, four canopies, each about 1.4 m higher than the last.
-        hop(simulation, geometry.collision,
-            {{{-5, 4.4F, -38.5F}, 0.8F},
-             {{-9.5F, 5.8F, -41.5F}},
-             {{-11, 7.2F, -46.5F}},
-             {{-8, 8.6F, -51}},
-             {{-3, 10, -52.5F}}});
+        hop(simulation, {{{-5, 4.4F, -38.5F}, 0.8F},
+                         {{-9.5F, 5.8F, -41.5F}},
+                         {{-11, 7.2F, -46.5F}},
+                         {{-8, 8.6F, -51}},
+                         {{-3, 10, -52.5F}}});
         walk(simulation, {-3, 10, -52.5F}, 0.3F);
         CHECK(simulation.collectible_collected(spark_index(level, "Blossom crown")));
     }
     SUBCASE("slabs west to the Crystal Spire") {
         mj::game::Simulation simulation(level, geometry.collision);
-        hop(simulation, geometry.collision,
-            {{{-9, 0, -3}, 1.0F}, // Around the gate's dais.
-             {{-16.5F, 0.4F, -2.5F}},
-             {{-23, 0.7F, -4.5F}},
-             {{-36, 1.0F, -6}, 1.0F}});
+        hop(simulation, {{{-9, 0, -3}, 1.0F}, // Around the gate's dais.
+                         {{-16.5F, 0.4F, -2.5F}},
+                         {{-23, 0.7F, -4.5F}},
+                         {{-36, 1.0F, -6}, 1.0F}});
         CHECK(simulation.active_checkpoint() == 2);
     }
     SUBCASE("slabs east to the Old Ruins, then column by column to the arch") {
         mj::game::Simulation simulation(level, geometry.collision);
-        hop(simulation, geometry.collision,
+        hop(simulation,
             {{{8, 0, -1}, 1.0F}, {{16.5F, 0.5F, -1}}, {{23, 1.0F, -1.5F}}, {{32, 1.5F, -2}, 1.0F}});
         CHECK(simulation.active_checkpoint() == 4);
-        hop(simulation, geometry.collision,
-            {{{35, 2.7F, -6.5F}, 0.6F, 6},
-             {{37.2F, 3.9F, -8.6F}, 0.6F, 4},
-             {{40.1F, 5.1F, -9.3F}, 0.6F, 4},
-             {{42.8F, 6.3F, -8.0F}, 0.6F, 4},
-             {{44.2F, 8.0F, -5.8F}, 0.7F, 4}}); // The lintel's near end.
+        hop(simulation, {{{35, 2.7F, -6.5F}, 0.6F, 6},
+                         {{37.2F, 3.9F, -8.6F}, 0.6F, 4},
+                         {{40.1F, 5.1F, -9.3F}, 0.6F, 4},
+                         {{42.8F, 6.3F, -8.0F}, 0.6F, 4},
+                         {{44.2F, 8.0F, -5.8F}, 0.7F, 4}}); // The lintel's near end.
         walk(simulation, {45, 8, -2.9F}, 0.3F);
         CHECK(simulation.collectible_collected(spark_index(level, "Column climb")));
         CHECK(simulation.collectible_collected(spark_index(level, "Ruin crown")));
     }
     SUBCASE("cloud steps from Lantern Isle back up to the pier, past the nook") {
         mj::game::Simulation simulation(level, geometry.collision, 5);
-        hop(simulation, geometry.collision,
-            {{{-11, -3.2F, 49}},
-             {{-14, -2.4F, 43.5F}},
-             {{-20, -2.0F, 40.5F}, 1.0F},
-             {{-14.5F, -1.6F, 38}},
-             {{-13, -0.8F, 32.5F}},
-             {{-11, 0, 27.3F}},
-             {{-6.5F, 0, 23}},
-             {{0, 0, 22}, 1.5F}});
+        hop(simulation, {{{-11, -3.2F, 49}},
+                         {{-14, -2.4F, 43.5F}},
+                         {{-20, -2.0F, 40.5F}, 1.0F},
+                         {{-14.5F, -1.6F, 38}},
+                         {{-13, -0.8F, 32.5F}},
+                         {{-11, 0, 27.3F}},
+                         {{-6.5F, 0, 23}},
+                         {{0, 0, 22}, 1.5F}});
         CHECK(simulation.collectible_collected(spark_index(level, "Cloud nook")));
         CHECK(simulation.respawns() == 0);
     }
@@ -464,7 +315,7 @@ TEST_CASE("the gap to Echo Plateau takes a jump and a dive; a miss falls forward
     // Across Gate Isle and the two stones, then leap for the plateau.
     const auto cross = [&](bool dive) {
         mj::game::Simulation simulation(level, geometry.collision);
-        hop(simulation, geometry.collision, {{along(16.5F, 0.6F)}, {along(23, 1.2F)}});
+        hop(simulation, {{along(16.5F, 0.6F)}, {along(23, 1.2F)}});
         const Vec3 landing = along(36, 0.0F);
         bool jumped = false, dove = false;
         for (int tick = 0; tick < 300; ++tick) {
@@ -657,7 +508,6 @@ TEST_CASE("Echo Plateau leads on to the Old Ruins") {
     const auto level = load("lantern-isles.json");
     const auto geometry = mj::game::build_geometry(level);
     mj::game::Simulation simulation(level, geometry.collision, 6);
-    hop(simulation, geometry.collision,
-        {{{32, 0, -24}, 1.0F}, {{34.4F, 0.8F, -17.5F}}, {{36, 1.5F, -8.5F}, 1.5F}});
+    hop(simulation, {{{32, 0, -24}, 1.0F}, {{34.4F, 0.8F, -17.5F}}, {{36, 1.5F, -8.5F}, 1.5F}});
     CHECK(simulation.respawns() == 0);
 }

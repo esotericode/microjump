@@ -47,9 +47,9 @@ class FollowCamera {
     void snap(const PlayerState &player, float yaw);
     void look(const LookInput &input);
     void set_orientation(Orientation orientation);
-    void tick(const PlayerState &player, const CollisionWorld &world, float dt);
+    void tick(const PlayerState &player, const CollisionScene &world, float dt);
     // Render pose; the obstruction is re-checked for the current orientation every frame.
-    [[nodiscard]] CameraPose pose(float alpha, const CollisionWorld &world) const;
+    [[nodiscard]] CameraPose pose(float alpha, const CollisionScene &world) const;
     [[nodiscard]] float yaw() const {
         return m_yaw;
     }
@@ -64,7 +64,7 @@ class FollowCamera {
     }
 
   private:
-    [[nodiscard]] float free_distance(Vec3 focus, const CollisionWorld &world) const;
+    [[nodiscard]] float free_distance(Vec3 focus, const CollisionScene &world) const;
 
     float m_yaw = 0;
     float m_pitch = -0.32F;

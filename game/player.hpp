@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <optional>
 
 namespace mj::game {
 
@@ -127,6 +128,7 @@ struct PlayerState {
     HopTiming last_hop = HopTiming::none;
     std::uint8_t jump_chain = 0; // The last takeoff: 1 jump, 2 double, 3 triple, 0 anything else.
     bool dive_used = false;      // One dive per airtime.
+    std::optional<std::uint32_t> ground_body; // The moving platform stood on, if any.
 };
 
 struct PlayerPose {
@@ -139,7 +141,8 @@ class Player {
     PlayerTuning tuning;
 
     void place(Vec3 position, float facing);
-    void tick(const TickInput &input, const CollisionWorld &world, float dt);
+    // A platform stood on carries the player through its last step before the move.
+    void tick(const TickInput &input, const CollisionScene &world, float dt);
     [[nodiscard]] const PlayerState &current() const {
         return m_current;
     }

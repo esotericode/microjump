@@ -194,13 +194,40 @@ With `MJ_SMOKE_TESTS=ON`:
 - `replay_isles_leap` replays `tests/replays/isles-long-leap.mjr`, from spawn down the
   pier and over the gap, through the whole game.
 
+## Moving platforms and the Clockwork Garden
+
+`mover_tests.cpp` covers the engine and the rules of riding:
+- a scene finds bodies at their poses and turns;
+- eased paths, pauses, loops, upright and flat orbits, spins and phases;
+- strict mover data, including the 20 m/s limit;
+- a slab carries its rider through a whole cycle;
+- a lift raises and lowers its rider without losing the ground;
+- a turntable carries its rider round and turns them;
+- a hop in place lands in place, with no phantom speed;
+- jumping off keeps the platform's velocity;
+- a mover pushes a standing player without passing through;
+- the same input gives the same result.
+
+`clockwork_garden_tests.cpp` uses the shared route driver in `tests/route_driver.hpp`,
+which can also wait for a platform, board it, ride it and hop off. It checks:
+- every checkpoint stands still, off any mover;
+- the lawn catches every fall;
+- every spark is reached by its route: the gear stair; the ferry; the gallery lift; the
+  dial lift and the minute hand; the gallery's spring; the pistons; the wheel, its
+  sky walk and ferry; the carousel's plinths and rim; and the fountain;
+- a triple jump the length of the dial reaches the weathervane, and no double jump
+  does;
+- dropping off the gallery's north edge lands behind the clock.
+
+`render_garden` and `garden_pixels` capture the garden mid-motion under validation.
+
 ## Z-fighting
 
 `surface_tests.cpp` builds every shipped level shape by shape and looks for visible
 z-fighting. That means front faces of two differently coloured shapes in the same plane,
 facing the same way and overlapping, where nothing solid covers the overlap. A small
 fixture checks that the detector finds a real overlap and ignores buried and identical
-faces.
+faces. Each mover's shapes are also checked against each other, since they move together.
 
 ## Particle rendering
 

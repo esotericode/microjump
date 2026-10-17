@@ -1,8 +1,11 @@
 #include "level.hpp"
 
 #include <array>
+#include <cmath>
 #include <limits>
+#include <numbers>
 #include <optional>
+#include <span>
 #include <utility>
 
 namespace mj::game {
@@ -28,46 +31,113 @@ Vec3 linear_color(unsigned int srgb) {
     return {channel(srgb >> 16U), channel(srgb >> 8U), channel(srgb)};
 }
 
-LevelGeometry build_geometry(const Level &level) {
-    LevelGeometry geometry;
+namespace {
+// Draws shapes into a mesh and returns the collision triangles of the solid ones.
+std::vector<Triangle> add_shapes(SceneMesh &mesh, std::span<const Shape> shapes) {
+    const std::size_t first = mesh.vertices.size() / 3;
     std::vector<bool> wall_flags;
     std::vector<bool> solid_flags;
     std::vector<float> bounces;
-    for (const auto &shape : level.shapes) {
-        geometry.mesh.surface = shape.surface;
+    for (const auto &shape : shapes) {
+        mesh.surface = shape.surface;
         switch (shape.kind) {
         case ShapeKind::box:
-            geometry.mesh.add_box({shape.center, shape.size, shape.color, shape.yaw});
+            mesh.add_box({shape.center, shape.size, shape.color, shape.yaw});
             break;
         case ShapeKind::ramp:
-            geometry.mesh.add_ramp({shape.center, shape.size, shape.color, shape.yaw});
+            mesh.add_ramp({shape.center, shape.size, shape.color, shape.yaw});
             break;
         case ShapeKind::cylinder:
-            geometry.mesh.add_cylinder(shape.center, shape.size.x * 0.5F, shape.size.y,
-                                       shape.color);
+            mesh.add_cylinder(shape.center, shape.size.x * 0.5F, shape.size.y, shape.color);
             break;
         case ShapeKind::ellipsoid:
-            geometry.mesh.add_ellipsoid({shape.center, shape.size, shape.color, shape.yaw});
+            mesh.add_ellipsoid({shape.center, shape.size, shape.color, shape.yaw});
             break;
         case ShapeKind::cone:
-            geometry.mesh.add_cone(
+            mesh.add_cone(
                 {shape.center, shape.size, shape.color, shape.yaw, shape.taper, shape.tip_down});
             break;
         }
-        wall_flags.resize(geometry.mesh.vertices.size() / 3, shape.wall_jump);
-        solid_flags.resize(geometry.mesh.vertices.size() / 3, shape.solid);
-        bounces.resize(geometry.mesh.vertices.size() / 3, shape.bounce);
+        const std::size_t count = mesh.vertices.size() / 3 - first;
+        wall_flags.resize(count, shape.wall_jump);
+        solid_flags.resize(count, shape.solid);
+        bounces.resize(count, shape.bounce);
     }
     std::vector<Triangle> triangles;
-    const auto drawn = geometry.mesh.triangles();
-    for (std::size_t i = 0; i < drawn.size(); ++i) {
+    const auto drawn = mesh.triangles();
+    for (std::size_t i = 0; i < wall_flags.size(); ++i) {
         if (!solid_flags[i])
             continue;
-        triangles.push_back(drawn[i]);
+        triangles.push_back(drawn[first + i]);
         triangles.back().wall_jump = wall_flags[i];
         triangles.back().bounce = bounces[i];
     }
+    return triangles;
+}
+
+// Eases in and out of each path point, so riders are never jolted at a turnaround.
+float ease(double fraction) {
+    return static_cast<float>((1 - std::cos(fraction * std::numbers::pi)) * 0.5);
+}
+
+Vec3 path_offset(const Motion &motion, double time) {
+    const auto &points = motion.path;
+    if (points.size() < 2)
+        return points.empty() ? Vec3{} : points.front();
+    // Legs visit the points in order, then either return directly or retrace the path.
+    std::vector<std::pair<Vec3, Vec3>> legs;
+    for (std::size_t i = 0; i + 1 < points.size(); ++i)
+        legs.emplace_back(points[i], points[i + 1]);
+    if (motion.loop) {
+        legs.emplace_back(points.back(), points.front());
+    } else {
+        for (std::size_t i = points.size() - 1; i > 0; --i)
+            legs.emplace_back(points[i], points[i - 1]);
+    }
+    double total = 0;
+    for (const auto &[from, to] : legs)
+        total += length(to - from);
+    const double moving = motion.period - motion.pause * static_cast<double>(legs.size());
+    double clock = std::fmod(time, static_cast<double>(motion.period));
+    for (const auto &[from, to] : legs) {
+        if (clock < motion.pause)
+            return from;
+        clock -= motion.pause;
+        const double duration = total > 0 ? moving * length(to - from) / total : 0;
+        if (clock < duration)
+            return lerp(from, to, ease(clock / duration));
+        clock -= duration;
+    }
+    return points.front(); // Rounding at the very end of a cycle, which ends where it began.
+}
+} // namespace
+
+BodyPose mover_pose(const Mover &mover, double seconds) {
+    const auto &motion = mover.motion;
+    const double time = seconds + motion.phase * static_cast<double>(motion.period);
+    Vec3 offset = path_offset(motion, time);
+    if (motion.orbit_radius > 0 && motion.period > 0) {
+        const double turn = std::fmod(time, static_cast<double>(motion.period)) / motion.period;
+        const auto angle = static_cast<float>(turn * 2 * std::numbers::pi);
+        const float r = motion.orbit_radius;
+        // Flat orbits start ahead (-Z) and turn toward +X; upright ones start at the bottom.
+        offset += motion.orbit_vertical ? yaw_right(motion.orbit_yaw) * (r * std::sin(angle)) +
+                                              Vec3{0, -r * std::cos(angle), 0}
+                                        : Vec3{r * std::sin(angle), 0, -r * std::cos(angle)};
+    }
+    const double spun = std::remainder(mover.yaw + motion.spin * time, 2 * std::numbers::pi);
+    return {mover.pivot + offset, static_cast<float>(spun)};
+}
+
+LevelGeometry build_geometry(const Level &level) {
+    LevelGeometry geometry;
+    const auto triangles = add_shapes(geometry.mesh, level.shapes);
     geometry.collision = CollisionWorld(triangles);
+    for (const auto &mover : level.movers) {
+        auto &mesh = geometry.mover_meshes.emplace_back();
+        const auto body = add_shapes(mesh, mover.shapes);
+        geometry.collision.add_body(body, mover_pose(mover, 0));
+    }
     return geometry;
 }
 

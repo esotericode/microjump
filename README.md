@@ -17,6 +17,10 @@ AI agents build it together: [AGENTS.md](AGENTS.md) guides them, and
   old ruins, a long pier with a gap only a long jump clears, Echo Plateau's Three Steps
   for the triple jump, bounce mushrooms, and four secrets. Sixteen more sparks are
   hidden there.
+- **The Clockwork Garden:** a second gate leads to a walled garden of brass machines at
+  dusk: turning gears to climb, pistons rising out of step, a ferris wheel up to a sky
+  walk, a carousel, and a clock tower whose roof is a great dial with a sweeping minute
+  hand. Sixteen sparks, two of them secrets.
 - **An expedition to keep:** named sparks, safe checkpoints and the last visited world
   survive restarts, with a confirmed fresh start in F2.
 - **A little character:** a procedurally animated creature with squash and stretch, a
@@ -86,12 +90,13 @@ notices. A Vulkan 1.3 GPU driver is all a player needs.
 While F2 is open, a controller drives the menu and the keyboard still plays.
 Tuning values reset when the game restarts.
 
-Walk into a glowing gate to travel between the playground and the Lantern Isles.
+Walk into a glowing gate to travel between the playground, the Lantern Isles and the
+Clockwork Garden. Moving platforms carry you; jumping off keeps their speed.
 Walk or jump into golden sparks to collect them. The **SPARKS** counter shows your
 progress and each find's name; finding them all completes a place's hunt. Your finds,
 safe checkpoint and last visited world save automatically between sessions. Reopening
 the game returns you to that world's checkpoint. **F2 → Expedition → Start new
-expedition** offers a confirmation before clearing both hunts and returning to the
+expedition** offers a confirmation before clearing every hunt and returning to the
 starting level. R still respawns without clearing finds.
 
 F1 toggles diagnostics while keeping spark progress visible; `--hide-overlay` hides

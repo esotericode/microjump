@@ -65,6 +65,32 @@ struct Collectible {
     float radius = 0.65F;
 };
 
+// How a mover travels, as a pure function of simulation time so ticks stay reproducible.
+// Its path, orbit and spin add together.
+struct Motion {
+    std::vector<Vec3> path; // Offsets from the pivot, visited in order; empty stays put.
+    bool loop = false;      // After the last point, go straight back to the first (else retrace).
+    float pause = 0;        // Seconds held at each path point.
+    float orbit_radius = 0; // Circles the pivot once per period...
+    bool orbit_vertical = false; // ...upright like a ferris wheel, or flat like a carousel.
+    float orbit_yaw = 0;         // Which way an upright orbit's plane faces.
+    float spin = 0;              // Turn rate about the vertical axis (radians per second).
+    float period = 0;            // Seconds per path cycle and per orbit.
+    float phase = 0;             // Fraction of a period to start ahead, to stagger movers.
+};
+
+// Solid shapes that move together: a sliding slab, a lift, a turning gear.
+struct Mover {
+    std::string name;
+    Vec3 pivot;                // The body's origin; its shapes are placed relative to it.
+    float yaw = 0;             // Starting turn about the pivot.
+    std::vector<Shape> shapes; // In body space.
+    Motion motion;
+};
+
+// Where a mover is after `seconds` of simulation time.
+[[nodiscard]] BodyPose mover_pose(const Mover &mover, double seconds);
+
 // Placement data loaded from a versioned JSON level file.
 struct Level {
     std::string name;  // Identity: recordings store it, so renaming orphans them.
@@ -76,12 +102,14 @@ struct Level {
     std::vector<LevelZone> zones; // Optional named regions for diagnostics and playtest directions.
     std::vector<Collectible> collectibles; // Optional sparks, identified by their array index.
     std::vector<Portal> portals;
+    std::vector<Mover> movers; // Optional; body i of the collision world is movers[i].
     Atmosphere atmosphere;
 };
 
 struct LevelGeometry {
     SceneMesh mesh;
     CollisionWorld collision; // Built from exactly the rendered triangles of solid shapes.
+    std::vector<SceneMesh> mover_meshes; // In body space, one per mover.
 };
 
 [[nodiscard]] Vec3 linear_color(unsigned int srgb);
