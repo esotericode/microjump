@@ -280,6 +280,23 @@ the Places page over the paused playground with `--show-menu places`, under vali
 Because the menu pauses the simulation, captures of it use `--capture-frame`, not
 `--capture-tick`.
 
+`settings_tests.cpp` covers bounded versioned preferences, finite numeric ranges,
+round trips, Unicode paths, failed writes preserving the original file, and personal
+profile isolation. Frame-pacing tests feed two seconds at each supported cap to the
+fixed clock and verify the same 240 ticks.
+
+The real SDL/Vulkan `gamepad_window` regression changes window size, switches VSync
+off/on, and holds dive both across menu closing and during gameplay. It verifies an
+actual dive without any ImGui navigation overlay and captures `dive-held.png`.
+`travel_gates` also travels to the garden and back through the menu's world-replacement
+path, catching same-frame dangling references under ASan.
+
+`pause_menu_window` draws the real menu at 640×360 and 1280×720, crosses from sidebar
+to content with keyboard and virtual-controller navigation, changes/applies a frame cap,
+adjusts sound/camera options and checks confirmed quit. It captures Display and Controls
+at both sizes. Runtime packages include the pinned ImGui archive's Roboto font and its
+Apache license; no system font is required.
+
 ## Saved expeditions
 
 `progress_tests.cpp` covers strict bounded JSON, duplicate/unknown fields, invalid

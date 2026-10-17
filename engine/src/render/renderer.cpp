@@ -331,6 +331,9 @@ struct Renderer::Impl {
     VkExtent2D extent{};
     PixelSize requested_size{};
     VkFormat swap_format = VK_FORMAT_UNDEFINED;
+    VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    bool requested_vsync = true;
+    bool vsync_off_available = false;
     bool imgui_context = false;
     bool imgui_platform = false;
     bool imgui_renderer = false;
@@ -696,7 +699,8 @@ void Renderer::Impl::release_retired() {
 std::expected<void, Error> Renderer::Impl::wait_for_display(const DisplayPacing &pacing) {
     display_wait_ms = 0;
     display_timeout = false;
-    if (!vk.present_wait || !pacing.enabled || swapchain == VK_NULL_HANDLE || recreate)
+    if (!vk.present_wait || !pacing.enabled || present_mode != VK_PRESENT_MODE_FIFO_KHR ||
+        swapchain == VK_NULL_HANDLE || recreate)
         return {};
     const auto target = display_wait_target(present_id, pacing);
     if (!target)
@@ -772,6 +776,24 @@ std::expected<void, Error> Renderer::Impl::create_swapchain(PixelSize size) {
         count = std::min(count, capabilities.maxImageCount);
     if (count < 2)
         return std::unexpected(Error{"Surface cannot provide two presentation images"});
+    std::uint32_t mode_count = 0;
+    MJ_VK_TRY(
+        vkGetPhysicalDeviceSurfacePresentModesKHR(vk.physical, vk.surface, &mode_count, nullptr));
+    std::vector<VkPresentModeKHR> modes(mode_count);
+    MJ_VK_TRY(vkGetPhysicalDeviceSurfacePresentModesKHR(vk.physical, vk.surface, &mode_count,
+                                                        modes.data()));
+    const auto supports_mode = [&](VkPresentModeKHR mode) {
+        return std::ranges::find(modes, mode) != modes.end();
+    };
+    vsync_off_available =
+        supports_mode(VK_PRESENT_MODE_IMMEDIATE_KHR) || supports_mode(VK_PRESENT_MODE_MAILBOX_KHR);
+    present_mode = VK_PRESENT_MODE_FIFO_KHR; // Vulkan guarantees FIFO on every surface.
+    if (!requested_vsync) {
+        if (supports_mode(VK_PRESENT_MODE_IMMEDIATE_KHR))
+            present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+        else if (supports_mode(VK_PRESENT_MODE_MAILBOX_KHR))
+            present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+    }
     VkCompositeAlphaFlagBitsKHR alpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     for (const auto candidate :
          {VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
@@ -794,7 +816,7 @@ std::expected<void, Error> Renderer::Impl::create_swapchain(PixelSize size) {
     info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.preTransform = capabilities.currentTransform;
     info.compositeAlpha = alpha;
-    info.presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    info.presentMode = present_mode;
     info.clipped = VK_TRUE;
     MJ_VK_TRY(vkCreateSwapchainKHR(vk.device, &info, nullptr, &swapchain));
     MJ_VK_TRY(vkGetSwapchainImagesKHR(vk.device, swapchain, &count, nullptr));
@@ -802,7 +824,10 @@ std::expected<void, Error> Renderer::Impl::create_swapchain(PixelSize size) {
     MJ_VK_TRY(vkGetSwapchainImagesKHR(vk.device, swapchain, &count, swap_images.data()));
     log("Swapchain: " + std::to_string(extent.width) + "x" + std::to_string(extent.height) + ", " +
         std::to_string(count) + " images (min " + std::to_string(capabilities.minImageCount) +
-        "), FIFO");
+        "), " +
+        (present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR
+             ? "IMMEDIATE"
+             : (present_mode == VK_PRESENT_MODE_MAILBOX_KHR ? "MAILBOX" : "FIFO")));
     presented.resize(count, VK_NULL_HANDLE);
     VkSemaphoreCreateInfo semaphore_info{};
     semaphore_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -852,16 +877,42 @@ std::expected<void, Error> Renderer::Impl::initialize_overlay() {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         imgui_context = true;
-        // Gamepad-only navigation: keyboard players keep WASD/Space for movement while
-        // adjusting the tuning window with the mouse.
-        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+        // Each frame opts into navigation only while an interactive menu owns the input.
         ImGui::GetIO().IniFilename = nullptr;
         ImGui::GetIO().LogFilename = nullptr;
+        const auto font = Window::executable_directory() / "assets/fonts/Roboto-Medium.ttf";
+        std::error_code font_error;
+        if (std::filesystem::is_regular_file(font, font_error) && !font_error) {
+            // ImGui loads immediately; keep the path's UTF-8 storage alive for this call.
+            const auto utf8 = font.u8string();
+            ImGui::GetIO().Fonts->AddFontFromFileTTF(reinterpret_cast<const char *>(utf8.c_str()),
+                                                     17);
+        }
         ImGui::StyleColorsDark();
         auto &style = ImGui::GetStyle();
         style.WindowRounding = 6;
         style.WindowPadding = ImVec2(14, 12);
+        style.ChildRounding = 10;
+        style.FrameRounding = 6;
+        style.GrabRounding = 6;
+        style.ScrollbarRounding = 8;
+        style.SelectableTextAlign = ImVec2(0, 0.5F);
+        style.Colors[ImGuiCol_Text] = ImVec4(0.92F, 0.95F, 0.97F, 1);
         style.Colors[ImGuiCol_WindowBg] = ImVec4(0.008F, 0.018F, 0.025F, 0.94F);
+        style.Colors[ImGuiCol_ChildBg] = ImVec4(0.03F, 0.06F, 0.09F, 0.88F);
+        style.Colors[ImGuiCol_Border] = ImVec4(0.18F, 0.3F, 0.35F, 0.65F);
+        style.Colors[ImGuiCol_FrameBg] = ImVec4(0.08F, 0.15F, 0.19F, 1);
+        style.Colors[ImGuiCol_FrameBgHovered] = ImVec4(0.14F, 0.28F, 0.32F, 1);
+        style.Colors[ImGuiCol_FrameBgActive] = ImVec4(0.18F, 0.35F, 0.38F, 1);
+        style.Colors[ImGuiCol_Button] = ImVec4(0.1F, 0.25F, 0.28F, 1);
+        style.Colors[ImGuiCol_ButtonHovered] = ImVec4(0.17F, 0.4F, 0.43F, 1);
+        style.Colors[ImGuiCol_ButtonActive] = ImVec4(0.22F, 0.47F, 0.46F, 1);
+        style.Colors[ImGuiCol_Header] = ImVec4(0.12F, 0.3F, 0.32F, 1);
+        style.Colors[ImGuiCol_HeaderHovered] = ImVec4(0.17F, 0.4F, 0.43F, 1);
+        style.Colors[ImGuiCol_HeaderActive] = ImVec4(0.22F, 0.47F, 0.46F, 1);
+        style.Colors[ImGuiCol_CheckMark] = ImVec4(1, 0.8F, 0.38F, 1);
+        style.Colors[ImGuiCol_SliderGrab] = ImVec4(0.45F, 0.78F, 0.77F, 1);
+        style.Colors[ImGuiCol_SliderGrabActive] = ImVec4(1, 0.8F, 0.38F, 1);
     }
     if (!imgui_platform) {
         if (!ImGui_ImplSDL3_InitForVulkan(window->native_handle()))
@@ -905,8 +956,15 @@ void Renderer::Impl::overlay(const FrameView &view) {
     ImGui::TextColored(ImVec4(0.3F, 0.85F, 0.77F, 1), "MICROJUMP");
     ImGui::Spacing();
     ImGui::Text("%.1f FPS   |   %.2f ms", 1.0 / smoothed_seconds, smoothed_seconds * 1000);
-    ImGui::Text("%u x %u   VSync: On (FIFO)", extent.width, extent.height);
-    ImGui::TextUnformatted("FPS cap: Uncapped   |   Tick: 120 Hz");
+    const char *mode =
+        present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR
+            ? "Off (immediate)"
+            : (present_mode == VK_PRESENT_MODE_MAILBOX_KHR ? "Off (mailbox)" : "On (FIFO)");
+    ImGui::Text("%u x %u   VSync: %s", extent.width, extent.height, mode);
+    if (view.frame_limit == 0)
+        ImGui::TextUnformatted("FPS cap: Unlimited   |   Tick: 120 Hz");
+    else
+        ImGui::Text("FPS cap: %u   |   Tick: 120 Hz", view.frame_limit);
     const int taps = shadow_preset(shadow_quality).kernel_radius * 2 + 1;
     ImGui::Text("Shadows: %s %u  PCF %dx%d   |   Lights: %zu",
                 std::string(to_string(shadow_quality)).c_str(), shadow_resolution, taps, taps,
@@ -1058,7 +1116,17 @@ std::expected<bool, Error> Renderer::Impl::draw(const FrameView &view) {
     timing.suboptimal = acquire == VK_SUBOPTIMAL_KHR;
     recreate = timing.suboptimal;
     auto &io = ImGui::GetIO();
-    if ((SDL_GetWindowFlags(window->native_handle()) & SDL_WINDOW_INPUT_FOCUS) != 0)
+    const bool gamepad_navigation =
+        view.gamepad_navigation &&
+        (SDL_GetWindowFlags(window->native_handle()) & SDL_WINDOW_INPUT_FOCUS) != 0;
+    if (!gamepad_navigation && (io.ConfigFlags & ImGuiConfigFlags_NavEnableGamepad) != 0) {
+        // The SDL backend stops updating gamepad keys when navigation is disabled. Release
+        // held keys and queued edges so a menu's window-switch gesture cannot leak into play.
+        io.ClearEventsQueue();
+        io.ClearInputKeys();
+        io.ClearInputMouse();
+    }
+    if (gamepad_navigation)
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
     else
         io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
@@ -1455,6 +1523,21 @@ std::expected<void, Error> Renderer::wait_for_display(const DisplayPacing &pacin
 }
 bool Renderer::display_pacing_supported() const {
     return m_impl->vk.present_wait;
+}
+void Renderer::set_vsync(bool enabled) {
+    if (enabled == m_impl->requested_vsync)
+        return;
+    m_impl->requested_vsync = enabled;
+    m_impl->recreate = true;
+}
+bool Renderer::vsync_requested() const {
+    return m_impl->requested_vsync;
+}
+bool Renderer::vsync_enabled() const {
+    return m_impl->present_mode == VK_PRESENT_MODE_FIFO_KHR;
+}
+bool Renderer::vsync_off_supported() const {
+    return m_impl->vsync_off_available;
 }
 void Renderer::request(RenderAction action) {
     switch (action) {

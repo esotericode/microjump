@@ -54,6 +54,9 @@ struct FrameView {
     bool overlay = true;
     // Arrow keys, Enter and Space drive the UI too (a pause menu, where nothing moves).
     bool keyboard_navigation = false;
+    // Interactive menus opt in; gameplay owns the controller's face buttons.
+    bool gamepad_navigation = false;
+    std::uint32_t frame_limit = 0; // Diagnostics only: 0 means unlimited.
     // Extra lines inside the diagnostics overlay, then free-standing debug windows (ImGui).
     const std::function<void()> *overlay_lines = nullptr;
     const std::function<void()> *debug_windows = nullptr;
@@ -106,6 +109,12 @@ class Renderer {
     // device lacks VK_KHR_present_wait or pacing is disabled.
     [[nodiscard]] std::expected<void, Error> wait_for_display(const DisplayPacing &pacing);
     [[nodiscard]] bool display_pacing_supported() const;
+    // Requests a swapchain rebuild on the next drawable frame. Off prefers IMMEDIATE,
+    // then MAILBOX, and falls back to FIFO when the surface supports neither.
+    void set_vsync(bool enabled);
+    [[nodiscard]] bool vsync_requested() const;
+    [[nodiscard]] bool vsync_enabled() const; // Actual mode after the last rebuild (FIFO).
+    [[nodiscard]] bool vsync_off_supported() const;
 
   private:
     struct Impl;

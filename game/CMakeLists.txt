@@ -1,5 +1,5 @@
 # Headless gameplay: simulation tests link this without a window or GPU.
-add_library(microjump_gameplay STATIC character.cpp follow_camera.cpp frame_pacing.cpp level.cpp level_io.cpp lighting.cpp player.cpp progress.cpp simulation.cpp sound.cpp spark_visuals.cpp portal_visuals.cpp)
+add_library(microjump_gameplay STATIC character.cpp follow_camera.cpp frame_pacing.cpp level.cpp level_io.cpp lighting.cpp player.cpp progress.cpp settings.cpp simulation.cpp sound.cpp spark_visuals.cpp portal_visuals.cpp)
 target_include_directories(microjump_gameplay PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(microjump_gameplay PUBLIC mj::engine)
 target_link_libraries(microjump_gameplay PRIVATE nlohmann_json::nlohmann_json)
@@ -24,6 +24,11 @@ add_custom_target(microjump_levels ALL
         "${PROJECT_SOURCE_DIR}/assets/levels" "${CMAKE_CURRENT_BINARY_DIR}/assets/levels"
     DEPENDS ${mj_level_files} VERBATIM)
 add_dependencies(microjump microjump_levels)
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/assets/fonts")
+configure_file("${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf"
+    "${CMAKE_CURRENT_BINARY_DIR}/assets/fonts/Roboto-Medium.ttf" COPYONLY)
+install(FILES "${imgui_SOURCE_DIR}/misc/fonts/Roboto-Medium.ttf"
+    DESTINATION assets/fonts COMPONENT Runtime)
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/assets/levels" DESTINATION assets COMPONENT Runtime)
 install(FILES ${mj_shader_outputs} DESTINATION shaders COMPONENT Runtime)
 if(WIN32)

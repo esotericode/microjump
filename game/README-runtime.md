@@ -20,6 +20,12 @@ Vulkan 1.3; nothing else to install.
 | F1 | North button | Diagnostics overlay |
 | Escape | Start | Pause: resume, travel to places you've found, options, controls, quit |
 | F2 | — | Tuning: movement, camera, lighting, gamepad |
+
+Pause → **Options → Display** changes windowed resolution, borderless fullscreen,
+VSync and the frame limit (30, 60, 120 FPS or Unlimited). Choose **Apply display settings**.
+Fullscreen follows the desktop resolution. Sound and camera options apply immediately.
+Preferences save automatically between normal play sessions; F2 developer tuning resets.
+F1 diagnostics start hidden, leaving the place name and spark counter visible.
 | F3 | — | Free-flight camera |
 
 On Windows, pressing Shift five times can open the Sticky Keys prompt. You can turn

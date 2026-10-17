@@ -167,7 +167,7 @@ TEST_CASE("capture CLI rejects incomplete, impossible and overflowing requests")
     CHECK(result->capture_frame == 4);
     CHECK(result->capture_out == "frame.png");
     CHECK(parse({"--smoke-test"})->frames == 12);
-    CHECK(parse({"--travel-test"})->frames == 16);
+    CHECK(parse({"--travel-test"})->frames == 28);
     CHECK_FALSE(parse({"--travel-test", "--replay", "input.mjr"})); // Gates rest in replays.
 }
 

@@ -1,6 +1,6 @@
 add_executable(microjump_tests foundation_tests.cpp scene_tests.cpp collision_tests.cpp
     movement_tests.cpp move_verbs_tests.cpp momentum_tests.cpp frame_pacing_tests.cpp replay_tests.cpp lighting_tests.cpp level_tests.cpp gamepad_tests.cpp
-    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp lantern_isles_tests.cpp surface_tests.cpp jump_chain_tests.cpp progress_tests.cpp progress_options_tests.cpp mover_tests.cpp clockwork_garden_tests.cpp audio_tests.cpp sound_mover_tests.cpp menu_tests.cpp)
+    collectible_tests.cpp collectible_content_tests.cpp character_tests.cpp particle_tests.cpp lantern_isles_tests.cpp surface_tests.cpp jump_chain_tests.cpp progress_tests.cpp progress_options_tests.cpp mover_tests.cpp clockwork_garden_tests.cpp audio_tests.cpp sound_mover_tests.cpp menu_tests.cpp settings_tests.cpp)
 target_link_libraries(microjump_tests PRIVATE microjump_gameplay doctest::doctest)
 target_compile_definitions(microjump_tests PRIVATE
     MJ_TEST_REPLAYS="${CMAKE_CURRENT_SOURCE_DIR}/replays"
@@ -49,6 +49,13 @@ if(MJ_SMOKE_TESTS)
     add_dependencies(microjump_gamepad_smoke microjump_shaders)
     add_test(NAME gamepad_window COMMAND microjump_gamepad_smoke)
     set_tests_properties(gamepad_window PROPERTIES TIMEOUT 90 LABELS "display;vulkan;gamepad")
+    add_executable(microjump_pause_menu_smoke pause_menu_window_tests.cpp "${PROJECT_SOURCE_DIR}/game/pause_menu.cpp")
+    target_link_libraries(microjump_pause_menu_smoke PRIVATE microjump_gameplay mj_imgui doctest::doctest)
+    mj_project_options(microjump_pause_menu_smoke)
+    set_target_properties(microjump_pause_menu_smoke PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/game")
+    add_dependencies(microjump_pause_menu_smoke microjump_shaders)
+    add_test(NAME pause_menu_window COMMAND microjump_pause_menu_smoke)
+    set_tests_properties(pause_menu_window PROPERTIES TIMEOUT 180 LABELS "display;vulkan;menu")
     add_test(NAME progress_runtime COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>"
         "-DROOT=${CMAKE_CURRENT_BINARY_DIR}/progress-runtime"
@@ -117,7 +124,7 @@ if(MJ_SMOKE_TESTS)
     # Through the playground's gate to the isles and back: mesh swaps under validation.
     add_test(NAME travel_gates COMMAND ${CMAKE_COMMAND}
         "-DGAME=$<TARGET_FILE:microjump>" "-DEXTRA=--travel-test"
-        "-DEXPECTED=Traveled through 'To the Lantern Isles' to lantern-isles.*Traveled through 'Back to the playground' to microjump-playground"
+        "-DEXPECTED=Traveled through 'To the Lantern Isles' to lantern-isles.*Traveled through 'Back to the playground' to microjump-playground.*Traveled by the menu to clockwork-garden.*Traveled by the menu to microjump-playground"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/check_replay.cmake")
     # Jump, double, triple; dive, belly slide, rollout; a dive out of a jump, through the game.
     add_test(NAME replay_sm64_moves COMMAND ${CMAKE_COMMAND}
@@ -159,7 +166,7 @@ if(MJ_SMOKE_TESTS)
         render_spark_pickup replay_spark_invitation render_isles isles_pixels render_menu render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES TIMEOUT 90 LABELS "display;vulkan")
     set_tests_properties(capture_pixels PROPERTIES DEPENDS "render_capture;render_camera;render_resize;render_replay")
     if(MJ_SANITIZERS AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
-        set_tests_properties(progress_runtime gamepad_window vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
+        set_tests_properties(progress_runtime gamepad_window pause_menu_window vulkan_startup render_capture render_camera render_resize render_replay replay_completes replay_empty capture_exact_tick
             capture_pixels render_day render_night render_pavilion lighting_pixels render_playground playground_pixels replay_m4_moves
             render_spark_pickup replay_spark_invitation particle_render render_isles isles_pixels render_menu render_garden garden_pixels travel_gates replay_isles_leap replay_sm64_moves replay_with_sound PROPERTIES ENVIRONMENT
             "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/lsan.supp;UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1")

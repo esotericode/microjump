@@ -88,7 +88,11 @@ shadow falls sideways. It defaults to 35% strength and can be toggled in F2.
 
 ## Presentation and frame pacing
 
-The swapchain uses FIFO, which is VSync on. The engine also enables
+The swapchain defaults to FIFO, which is VSync on. Options → Display can disable VSync:
+the renderer prefers IMMEDIATE, then MAILBOX, and falls back to FIFO when neither is
+available. Diagnostics report the actual mode. Changing the preference rebuilds the
+swapchain between frames and resets presentation IDs. Display pacing is skipped in
+non-FIFO modes. The engine also enables
 `VK_KHR_present_id` and `VK_KHR_present_wait` when the driver has them, and the
 startup log says which path is in use. Every present then carries an ID. Before a frame
 polls input or reads the clock, `Renderer::wait_for_display` waits until the frame
@@ -196,7 +200,7 @@ the character, and sets the level's time of day.
 
 ## The pause menu
 
-![The pause menu's Places page over the paused playground](captures/pause-menu.png)
+![The pause menu's Display options over the paused playground](captures/pause-menu.png)
 
 `game/pause_menu.*` draws the menu with ImGui; `main.cpp` acts on its choices between
 frames. Escape or Start opens it in interactive runs (`is_interactive`: live play or a
@@ -214,9 +218,25 @@ the same arrival path as a gate (`arrive` in `main.cpp`), so saves see it exactl
 see a gate. A gate passes its authored arrival checkpoint; the menu passes none, which
 means the place's saved checkpoint.
 
-**Options** (look speeds, invert, volume) apply to each new simulation's camera, since
-the camera belongs to the simulation and travel replaces it. They last until the game
-closes, like F2's values.
+**Options** has Display, Sound and Camera tabs. Display changes are staged until Apply:
+windowed resolution choices fit the desktop's usable bounds, while borderless fullscreen
+uses the desktop resolution and remembers the windowed size. VSync and frame-cap changes
+preserve a manually resized/maximized window. The cap sleeps before input sampling,
+counting rendering time toward a 30/60/120 FPS budget; Unlimited adds no delay. The
+simulation continues at 120 Hz regardless of cap. Camera options reapply after travel.
+
+`game/settings.*` saves display, camera and audio preferences as version 1 `settings.json`
+beside `progress.json` in SDL's preference directory. The files are independent; starting
+a new expedition keeps preferences. Writes are debounced and atomic, with a final flush
+on clean exit. Invalid existing settings are preserved and defaults are used for the
+session. Captures, replays, recordings, scripted checks, custom levels/profiles and
+`--no-save` neither read nor write personal settings. Advanced F2 tuning remains temporary.
+
+The menu has bounded, scrollable panels for small windows and shared navigation across
+its sidebar/content. Gameplay HUD cards and diagnostics stay out of the pause menu.
+Keyboard navigation is enabled only in pause, and gamepad navigation only in pause or
+F2. In gameplay it is disabled and stale navigation input is cleared, so holding dive
+cannot invoke ImGui's window-switching overlay.
 
 ## Expedition progress
 
@@ -239,6 +259,6 @@ writes until an explicit reset. See [progress](progress.md) for the schema and l
 - One shadow map with 60–90 m coverage, so distant objects are unshadowed. There is no
   ambient occlusion, and local lights don't cast shadows.
 - The renderer only uses a queue family that supports both graphics and presentation.
-- There are no in-game display settings yet (resolution, FPS cap, VSync toggle), and
-  F2 values aren't saved.
+- Fullscreen follows the desktop resolution; exclusive fullscreen modes and a separate
+  render scale are not implemented. F2 developer tuning values aren't saved.
 - The Linux zip uses the host's C/C++ runtime. It isn't a portable distribution bundle.

@@ -1040,3 +1040,90 @@ Things to know if you touch the main loop or input:
 
 Options last until the game closes, like F2's values. Saving them with the expedition
 profile seems natural, but that's your file format, so I'd love your view first.
+
+### 2026-10-17 · ChatGPT (controller/UI review) · the square behind the dive
+
+The reported square has a concrete source: ImGui maps the controller's west face
+button to its hold-to-switch-windows overlay, while the game maps that same button
+to dive. Gamepad navigation was enabled throughout play. The renderer now enables
+it only for an interactive menu, with input cleared when returning to play so a
+held menu shortcut cannot stay latched after its updates stop.
+
+The real virtual-controller/window test now holds west across closing a menu and
+again through gameplay, checking that the UI has no navigation overlay while an
+actual dive still starts exactly once. It also saves a `dive-held.png` capture for
+visual review, exercises live VSync off/on including FIFO-only fallback, and resizes
+the window then restores it. The coordinator will build and run these checks with
+the full display-settings work before publishing.
+
+### 2026-10-17 · ChatGPT (Codex coordinator) · a quieter HUD and display options
+
+The owner reported a square while holding dive and asked for a clearer UI, resolution
+choices, VSync and 30/60/120/unlimited frame caps. We're reviewing the lift and pause-menu
+PRs together, then building on the menu. An independent review already caught menu travel
+replacing the world after references had been bound; those bindings must follow travel.
+
+One teammate is adding safe window/presentation controls, another is checking input
+ownership behind the dive square, and I'm rebuilding the menu into readable, responsive
+pages with clear display controls. Settings will live in their own versioned file so
+camera, audio and display preferences survive restarts without touching expedition saves.
+Captures, recordings and scripted checks keep their isolated defaults. We'll exercise
+changes under Vulkan validation and keep the Windows build in the review loop.
+
+### 2026-10-17 · ChatGPT (Codex engine agent) · display controls and controller ownership
+
+The display controls now have engine support: sensible window sizes from the current
+desktop, borderless fullscreen, and VSync changes applied through the existing safe
+swapchain rebuild. VSync off prefers immediate presentation, then mailbox, and reports
+a FIFO fallback honestly if the display offers neither. Display waits run only in FIFO;
+rebuilding clears the old presentation IDs. Diagnostics show the actual mode and cap.
+
+The dive-button square came from ImGui's controller window-switching shortcut. Menus
+now explicitly request controller navigation; gameplay keeps its face buttons. Closing
+a menu clears stale UI inputs so holding that button cannot leave a window-switching
+gesture running behind the game. A teammate is adding live controller, resize and
+VSync regression checks; the coordinator owns builds, the options menu and saved settings.
+
+### 2026-10-17 · ChatGPT (controller/UI review) · getting into and out of options
+
+The real menu test caught two navigation bugs. Applying display settings disabled the
+currently focused Apply button and trapped forward Tab; focus now moves to the next
+enabled control. Full-width sidebar rows also extended their navigation rectangles
+beyond their unpadded child, causing controller Right to select the same row again.
+Keeping those horizontal rectangles within the child lets Right enter the settings.
+
+The focused Vulkan test passed at 640 × 360 and 1280 × 720 after both repairs, covering
+pending/apply behavior, keyboard and real virtual-controller input, mute, camera reset,
+confirmed quit and captures. A final additional assertion now checks controller Right
+from the scrolled Quit row at the small size. The coordinator owns that final run and
+the full project checks; this note does not claim those have completed.
+
+### 2026-10-17 · ChatGPT (Codex coordinator) · preferences and a UI that stays out of jumps
+
+The dive square was ImGui's controller West hold opening its window-switcher while
+playing. Navigation now belongs only to open pause/tuning panels, and closing one
+clears stale navigation input. The held-dive regression performs a real dive, checks
+there is no UI navigation, and compares the replay as before.
+
+The menu now has a sidebar, scrollable content, readable Roboto type, place progress,
+and separate Display/Sound/Camera tabs. Display offers windowed resolutions, borderless
+fullscreen, VSync, and 30/60/120/unlimited caps. Apply commits a draft; changing only the
+cap or VSync leaves the player's window size/maximized state alone. Presentation sleeps
+before sampling input and never changes the simulation clock. Camera, audio and display
+preferences use their own bounded, versioned, atomically replaced settings.json, leaving
+expedition progress independent. Bad preference files are preserved. Personal settings
+are isolated from recordings, captures, scripts and custom profiles.
+
+The source reviews caught and repaired menu travel's dangling world references, disabled
+Apply retaining keyboard focus, and full-width sidebar rows trapping controller Right.
+We also restored the advertised middle-click recenter, start diagnostics hidden, keep HUD
+cards out of pause, and quiet routine save-success toasts. Focused controller/display,
+menu, preference and frame-cap checks pass. The final full runtime/analysis/CI checks
+will finish before the UI branch merges. No physical-controller or Windows playtest is
+claimed; Windows builds and tests run in CI.
+
+Claude's [lift fix #24](https://github.com/esotericode/microjump/pull/24) and
+[repaired pause menu #25](https://github.com/esotericode/microjump/pull/25) are now merged,
+with all five Linux/Windows CI jobs green on each reviewed head. The menu merge is
+`94e4356`. The separate display/UI PR carries the held-dive and navigation regressions,
+preference persistence, and final runtime checks.

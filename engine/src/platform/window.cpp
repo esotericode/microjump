@@ -2,6 +2,8 @@
 
 #include <SDL3/SDL.h>
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace mj {
@@ -17,6 +19,8 @@ std::expected<std::unique_ptr<Window>, Error> Window::create() {
     if (window->m_window == nullptr) {
         return std::unexpected(Error{"SDL_CreateWindow: " + std::string(SDL_GetError())});
     }
+    if (!SDL_SetWindowMinimumSize(window->m_window, 640, 360))
+        return std::unexpected(Error{"Window minimum size: " + std::string(SDL_GetError())});
     window->m_gamepad.open_available();
     return window;
 }
@@ -59,6 +63,9 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
         if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT &&
             m_mouse_captured)
             input.dive_pressed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_MIDDLE &&
+            m_mouse_captured)
+            input.recenter_pressed = true;
         m_gamepad.process_event(event);
     }
     const auto flags = SDL_GetWindowFlags(m_window);
@@ -134,7 +141,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     input.dive_pressed = input.dive_pressed || pad.dive_pressed;
     input.walk_held = input.walk_held || pad.walk_held;
     input.reset_pressed = input.reset_pressed || pad.reset_pressed;
-    input.recenter_pressed = pad.recenter_pressed;
+    input.recenter_pressed = input.recenter_pressed || pad.recenter_pressed;
     return input;
 }
 
@@ -148,11 +155,81 @@ PixelSize Window::pixel_size() const {
             static_cast<std::uint32_t>(std::max(height, 0))};
 }
 
+PixelSize Window::size() const {
+    int width = 0, height = 0;
+    if (!SDL_GetWindowSize(m_window, &width, &height))
+        return {};
+    return {static_cast<std::uint32_t>(std::max(width, 0)),
+            static_cast<std::uint32_t>(std::max(height, 0))};
+}
+
+std::vector<PixelSize> Window::available_resolutions() const {
+    constexpr std::array common{
+        PixelSize{640, 360},   PixelSize{800, 450},   PixelSize{960, 540},   PixelSize{1024, 576},
+        PixelSize{1024, 768},  PixelSize{1280, 720},  PixelSize{1280, 800},  PixelSize{1366, 768},
+        PixelSize{1440, 900},  PixelSize{1600, 900},  PixelSize{1920, 1080}, PixelSize{1920, 1200},
+        PixelSize{2560, 1440}, PixelSize{2560, 1600}, PixelSize{3440, 1440}, PixelSize{3840, 2160}};
+    std::vector<PixelSize> choices;
+    const auto current = size();
+    bool current_fits = true;
+    SDL_Rect bounds{};
+    if (SDL_GetDisplayUsableBounds(SDL_GetDisplayForWindow(m_window), &bounds) && bounds.w > 0 &&
+        bounds.h > 0) {
+        int top = 0, left = 0, bottom = 0, right = 0;
+        // Account for decorations so the largest window still leaves its title bar reachable.
+        if (!fullscreen())
+            (void)SDL_GetWindowBordersSize(m_window, &top, &left, &bottom, &right);
+        const auto width = static_cast<std::uint32_t>(std::max(1, bounds.w - left - right));
+        const auto height = static_cast<std::uint32_t>(std::max(1, bounds.h - top - bottom));
+        current_fits = current.width <= width && current.height <= height;
+        for (const auto choice : common) {
+            if (choice.width <= width && choice.height <= height)
+                choices.push_back(choice);
+        }
+        if (width >= 640 && height >= 360 && width <= 7680 && height <= 4320)
+            choices.push_back({width, height});
+    }
+    if (current_fits && current.width >= 640 && current.height >= 360 && current.width <= 7680 &&
+        current.height <= 4320)
+        choices.push_back(current);
+    const auto less = [](PixelSize a, PixelSize b) {
+        return a.width < b.width || (a.width == b.width && a.height < b.height);
+    };
+    const auto equal = [](PixelSize a, PixelSize b) {
+        return a.width == b.width && a.height == b.height;
+    };
+    std::ranges::sort(choices, less);
+    choices.erase(std::unique(choices.begin(), choices.end(), equal), choices.end());
+    return choices;
+}
+
 std::expected<void, Error> Window::resize(int width, int height) {
+    if (width <= 0 || height <= 0)
+        return std::unexpected(Error{"Window dimensions must be positive"});
+    if (fullscreen())
+        return std::unexpected(Error{"Leave fullscreen before resizing the window"});
+    if ((SDL_GetWindowFlags(m_window) & (SDL_WINDOW_MAXIMIZED | SDL_WINDOW_MINIMIZED)) != 0 &&
+        (!SDL_RestoreWindow(m_window) || !SDL_SyncWindow(m_window))) {
+        return std::unexpected(Error{"Restore window: " + std::string(SDL_GetError())});
+    }
     if (!SDL_SetWindowSize(m_window, width, height) || !SDL_SyncWindow(m_window)) {
         return std::unexpected(Error{"Window resize: " + std::string(SDL_GetError())});
     }
     return {};
+}
+
+std::expected<void, Error> Window::set_fullscreen(bool enabled) {
+    if (enabled == fullscreen())
+        return {};
+    if ((enabled && !SDL_SetWindowFullscreenMode(m_window, nullptr)) ||
+        !SDL_SetWindowFullscreen(m_window, enabled) || !SDL_SyncWindow(m_window)) {
+        return std::unexpected(Error{"Change fullscreen: " + std::string(SDL_GetError())});
+    }
+    return {};
+}
+
+bool Window::fullscreen() const {
+    return (SDL_GetWindowFlags(m_window) & SDL_WINDOW_FULLSCREEN) != 0;
 }
 
 float Window::refresh_rate() const {

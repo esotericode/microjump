@@ -46,17 +46,50 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
             SDL_Delay(17);
         }
         REQUIRE(ready);
+        // Exercise the display controls through a live swapchain, including drivers
+        // that support only FIFO and must report the VSync-off fallback honestly.
+        const auto initial_size = (*window)->size();
+        const auto resolutions = (*window)->available_resolutions();
+        REQUIRE_FALSE(resolutions.empty());
+        for (const auto resolution : resolutions) {
+            CHECK(resolution.width > 0);
+            CHECK(resolution.height > 0);
+        }
+        REQUIRE((*window)->resize(960, 540));
+        CHECK((*window)->size().width == 960);
+        CHECK((*window)->size().height == 540);
+        for (const bool vsync : {false, true}) {
+            (*renderer)->set_vsync(vsync);
+            CHECK((*renderer)->vsync_requested() == vsync);
+            bool presented = false;
+            for (int attempt = 0; attempt < 3; ++attempt) {
+                const auto input = (*window)->poll_events(
+                    [&](const SDL_Event &event) { (*renderer)->process_event(event); }, {});
+                REQUIRE(input.focused);
+                mj::FrameView display;
+                display.overlay = false;
+                const auto drawn = (*renderer)->draw(display);
+                REQUIRE(drawn);
+                presented = presented || *drawn;
+            }
+            REQUIRE(presented);
+            CHECK((*renderer)->vsync_enabled() == (vsync || !(*renderer)->vsync_off_supported()));
+        }
+        REQUIRE((*window)->resize(static_cast<int>(initial_size.width),
+                                  static_cast<int>(initial_size.height)));
         mj::game::LightingControls lighting;
         mj::game::SessionStatus status;
         status.level = level.name;
         status.input_mode = "SDL virtual gamepad test";
-        bool open = false, jumped = false, long_jumped = false, centered = false, menu_nav = false;
+        bool open = false, jumped = false, long_jumped = false, centered = false, menu_nav = false,
+             dived = false;
+        int dive_presses = 0;
         float menu_x = 0, menu_z = 0;
         const float initial_hours = lighting.cycle.hours;
         std::uint32_t pending = 0;
         mj::FixedStep fixed;
         std::vector<mj::TickInput> recorded;
-        for (int frame = 0; frame < 160; ++frame) {
+        for (int frame = 0; frame < 190; ++frame) {
             auto button = [&](SDL_GamepadButton which, bool down) { pad.button(which, down); };
             if (frame == 4) {
                 pad.axis(SDL_GAMEPAD_AXIS_LEFTY, -32768);
@@ -97,6 +130,12 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
                 button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, true);
             if (frame == 130)
                 button(SDL_GAMEPAD_BUTTON_DPAD_RIGHT, false);
+            // WEST is ImGui's window-switching shortcut as well as the dive button.
+            // Hold it across closing the menu, then hold it again during play.
+            if (frame == 141 || frame == 150)
+                button(SDL_GAMEPAD_BUTTON_WEST, true);
+            if (frame == 146 || frame == 185)
+                button(SDL_GAMEPAD_BUTTON_WEST, false);
             if (frame == 148)
                 button(SDL_GAMEPAD_BUTTON_SOUTH, true);
             if (frame == 155)
@@ -108,6 +147,7 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
                 {.gamepad_gameplay = !open});
             REQUIRE(input.gamepad_connected);
             REQUIRE(input.focused);
+            dive_presses += input.dive_pressed ? 1 : 0;
             if (input.toggle_menu) // Start opens a menu; here, the tuning panel's controls.
                 open = !open;
             mj::TickInput live;
@@ -131,6 +171,8 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
                     pending |= mj::input_button::jump_pressed;
                 if (input.reset_pressed)
                     pending |= mj::input_button::reset_pressed;
+                if (input.dive_pressed)
+                    pending |= mj::input_button::dive_pressed;
             }
             fixed.advance(1.0 / 60, [&](float dt) {
                 auto tick = live;
@@ -143,6 +185,7 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
                 long_jumped = long_jumped ||
                               simulation.player.current().state == mj::game::MoveState::long_jump;
                 jumped = jumped || simulation.player.current().state == mj::game::MoveState::jump;
+                dived = dived || simulation.player.current().state == mj::game::MoveState::dive;
             });
             if (frame == 90) {
                 menu_x = simulation.player.current().position.x;
@@ -173,8 +216,9 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
                 mj::game::tuning_window(simulation,
                                         {lighting, (*window)->gamepad_tuning, diagnostics}, open);
             };
-            const auto capture =
-                mj::Window::executable_directory() / "../tests/captures/gamepad.png";
+            const auto capture = mj::Window::executable_directory() /
+                                 (frame == 140 ? "../tests/captures/gamepad.png"
+                                               : "../tests/captures/dive-held.png");
             mj::FrameView view;
             view.camera = simulation.camera.pose(1, geometry.collision);
             view.instances = instances;
@@ -184,7 +228,8 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
             view.blob = {pose.position, 0.35F};
             view.overlay_lines = &overlay;
             view.debug_windows = &ui;
-            if (frame == 140)
+            view.gamepad_navigation = open;
+            if (frame == 140 || frame == 180)
                 view.capture = &capture;
             auto drawn = (*renderer)->draw(view);
             INFO((drawn ? "drawn" : drawn.error().message));
@@ -192,12 +237,18 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
             REQUIRE(*drawn);
             if (open)
                 menu_nav = menu_nav || ImGui::GetIO().NavActive;
+            else {
+                CHECK_FALSE(ImGui::GetIO().NavActive);
+                CHECK_FALSE(ImGui::GetIO().NavVisible);
+            }
             // Give SDL/ImGui a real input interval; correctness is checked, not frame throughput.
             SDL_Delay(17);
         }
         CHECK(centered);
         CHECK(long_jumped);
         CHECK(jumped);
+        CHECK(dived);
+        CHECK(dive_presses == 1);
         CHECK(simulation.respawns() == 1);
         CHECK(menu_nav);
         CHECK(lighting.cycle.hours > initial_hours);

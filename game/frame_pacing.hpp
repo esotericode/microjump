@@ -17,6 +17,8 @@ struct RefreshSnap {
     double tolerance = 0.002;
 };
 [[nodiscard]] double snap_to_refresh(double elapsed, const RefreshSnap &snap);
+// Wall-clock presentation limit. A cap never changes the 120 Hz simulation clock.
+[[nodiscard]] double frame_interval(int frames_per_second);
 
 // One rendered frame, for the pacing graph and the optional CSV log. Times in milliseconds.
 struct FrameSample {
