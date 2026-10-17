@@ -52,6 +52,8 @@ struct FrameView {
     ShadowSettings shadows;
     double elapsed = 0; // Real seconds since the previous frame, for the FPS readout.
     bool overlay = true;
+    // Arrow keys, Enter and Space drive the UI too (a pause menu, where nothing moves).
+    bool keyboard_navigation = false;
     // Extra lines inside the diagnostics overlay, then free-standing debug windows (ImGui).
     const std::function<void()> *overlay_lines = nullptr;
     const std::function<void()> *debug_windows = nullptr;

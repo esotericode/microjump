@@ -36,7 +36,8 @@ struct InputState {
     CameraInput camera;        // Free-flight debug camera.
     bool quit = false;
     bool toggle_overlay = false;
-    bool toggle_tuning = false;
+    bool toggle_tuning = false; // F2.
+    bool toggle_menu = false;   // Escape, or the controller's Start: pause.
     bool toggle_free_camera = false;
     bool reset_pressed = false;
     bool focused = false;

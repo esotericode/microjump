@@ -103,7 +103,7 @@ TEST_CASE("SDL gamepad latches a West-button tap as one dive press") {
     CHECK_FALSE(rig.sample().dive_pressed);
 }
 
-TEST_CASE("SDL gamepad supports walk, recenter, respawn, tuning and overlay") {
+TEST_CASE("SDL gamepad supports walk, recenter, respawn, the pause menu and overlay") {
     Rig rig;
     rig.pad.button(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, true);
     rig.pad.button(SDL_GAMEPAD_BUTTON_RIGHT_STICK, true);
@@ -114,13 +114,13 @@ TEST_CASE("SDL gamepad supports walk, recenter, respawn, tuning and overlay") {
     CHECK(pressed.walk_held);
     CHECK(pressed.recenter_pressed);
     CHECK(pressed.reset_pressed);
-    CHECK(pressed.toggle_tuning);
+    CHECK(pressed.toggle_menu);
     CHECK(pressed.toggle_overlay);
     const auto held = rig.sample();
     CHECK(held.walk_held);
     CHECK_FALSE(held.recenter_pressed);
     CHECK_FALSE(held.reset_pressed);
-    CHECK_FALSE(held.toggle_tuning);
+    CHECK_FALSE(held.toggle_menu);
     CHECK_FALSE(held.toggle_overlay);
 }
 
@@ -134,12 +134,12 @@ TEST_CASE("SDL gamepad drops background input and disconnect never leaves stuck 
     CHECK(state.move.y == 0.0F);
     CHECK_FALSE(state.jump_pressed);
     CHECK_FALSE(state.jump_held);
-    CHECK_FALSE(state.toggle_tuning);
+    CHECK_FALSE(state.toggle_menu);
     rig.pad.button(SDL_GAMEPAD_BUTTON_SOUTH, false);
     rig.pad.button(SDL_GAMEPAD_BUTTON_START, false);
     state = rig.sample();
     CHECK_FALSE(state.jump_pressed);
-    CHECK_FALSE(state.toggle_tuning);
+    CHECK_FALSE(state.toggle_menu);
     rig.pad.detach();
     state = rig.sample();
     CHECK_FALSE(state.connected);

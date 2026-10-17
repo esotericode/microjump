@@ -83,11 +83,15 @@ notices. A Vulkan 1.3 GPU driver is all a player needs.
 | — | Right-stick click | Recenter the camera |
 | R / Home | Back | Respawn at the last checkpoint |
 | F1 | North button | Diagnostics overlay |
-| F2 | Start | Tuning window (movement, camera, lighting, gamepad, diagnostics) |
+| Escape | Start | Pause menu: resume, places, options, controls, quit |
+| F2 | — (pause menu → Options) | Tuning window (movement, camera, lighting, gamepad, diagnostics) |
 | F3 | — | Free-flight camera |
-| Escape | — | Quit |
 
-While F2 is open, a controller drives the menu and the keyboard still plays.
+Escape or Start pauses the game. The pause menu works with the mouse, the arrow keys and
+Enter, or a controller. **Places** lists every place you've found, with your sparks there,
+and takes you back to your last checkpoint in any of them. **Options** has the sound
+volume, mouse and stick look speeds and an inverted camera. Leaving the window pauses
+too. While F2 is open, a controller drives that panel and the keyboard still plays.
 Tuning values reset when the game restarts.
 
 Walk into a glowing gate to travel between the playground, the Lantern Isles and the

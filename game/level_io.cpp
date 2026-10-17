@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <deque>
 #include <fstream>
 #include <initializer_list>
 #include <numbers>
@@ -508,6 +509,26 @@ std::expected<Level, Error> parse_level(std::string_view text) {
     if (!read.error.empty())
         return std::unexpected(Error{read.error});
     return level;
+}
+
+std::vector<Place> discover_places(const std::filesystem::path &start) {
+    std::vector<Place> places;
+    std::set<std::filesystem::path> seen{start};
+    std::deque<std::filesystem::path> queue{start};
+    while (!queue.empty()) {
+        const auto path = queue.front();
+        queue.pop_front();
+        const auto level = load_level(path);
+        if (!level)
+            continue;
+        places.push_back({path, level->name, level->title, level->collectibles.size()});
+        for (const auto &portal : level->portals) {
+            const auto next = path.parent_path() / portal.level;
+            if (seen.insert(next).second)
+                queue.push_back(next);
+        }
+    }
+    return places;
 }
 
 std::expected<Level, Error> load_level(const std::filesystem::path &path) {

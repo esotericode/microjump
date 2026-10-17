@@ -1,5 +1,7 @@
 #include <mj/core/launch_options.hpp>
 
+#include <algorithm>
+#include <array>
 #include <charconv>
 
 namespace mj {
@@ -41,6 +43,21 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             options.progress_test = value == "collect"   ? ProgressTest::collect
                                     : value == "inspect" ? ProgressTest::inspect
                                                          : ProgressTest::reset;
+        } else if (argument == "--show-menu") {
+            ++index;
+            const auto value = index < arguments.size() ? arguments[index] : std::string_view{};
+            constexpr std::array<std::pair<std::string_view, MenuPage>, 5> pages{
+                {{"main", MenuPage::main},
+                 {"places", MenuPage::places},
+                 {"options", MenuPage::options},
+                 {"controls", MenuPage::controls},
+                 {"quit", MenuPage::quit}}};
+            const auto page = std::find_if(pages.begin(), pages.end(),
+                                           [&](const auto &entry) { return entry.first == value; });
+            if (page == pages.end() || options.show_menu)
+                return std::unexpected(
+                    Error{"--show-menu needs one of main, places, options, controls, quit"});
+            options.show_menu = page->second;
         } else if (argument == "--time-of-day") {
             ++index;
             float hours = -1;
@@ -144,11 +161,14 @@ parse_launch_options(std::span<const std::string_view> arguments) {
     return options;
 }
 
+bool is_interactive(const LaunchOptions &options) {
+    return !options.help && !options.smoke_test && !options.resize_test && !options.camera_test &&
+           !options.travel_test && !options.pacing_test && !options.frames &&
+           !options.capture_frame && !options.capture_tick && !options.progress_test;
+}
+
 bool uses_audio(const LaunchOptions &options) {
-    return !options.no_audio && !options.help && !options.smoke_test && !options.resize_test &&
-           !options.camera_test && !options.travel_test && !options.pacing_test &&
-           !options.frames && !options.capture_frame && !options.capture_tick &&
-           !options.progress_test;
+    return !options.no_audio && is_interactive(options);
 }
 
 bool uses_saved_progress(const LaunchOptions &options) {

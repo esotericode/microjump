@@ -13,6 +13,8 @@
 namespace mj {
 
 enum class ProgressTest : std::uint8_t { collect, inspect, reset };
+// A pause menu page to show from the first frame, for captures and checks.
+enum class MenuPage : std::uint8_t { main, places, options, controls, quit };
 
 struct LaunchOptions {
     bool help = false;
@@ -35,6 +37,7 @@ struct LaunchOptions {
     std::filesystem::path save; // Explicit saved-expedition profile, including custom levels.
     bool no_save = false;
     bool no_audio = false;
+    std::optional<MenuPage> show_menu;
     std::optional<ProgressTest> progress_test; // Isolated process-level progress checks.
 };
 
@@ -42,7 +45,9 @@ struct LaunchOptions {
 parse_launch_options(std::span<const std::string_view> arguments);
 // Only normal live play or an explicit progress fixture may read or write expedition saves.
 [[nodiscard]] bool uses_saved_progress(const LaunchOptions &options);
-// Sound is for play (live or watching a replay); scripted checks and captures stay silent.
+// A person playing or watching a replay: not a scripted check, a capture or a test fixture.
+[[nodiscard]] bool is_interactive(const LaunchOptions &options);
+// Sound is for interactive runs; scripted checks and captures stay silent.
 [[nodiscard]] bool uses_audio(const LaunchOptions &options);
 
 } // namespace mj

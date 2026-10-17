@@ -1008,3 +1008,35 @@ opens the tuning panel. The menu will have Resume, travel to places you've visit
 their spark counts, sound and camera options, a controls card and a confirmed quit. F2
 stays the developer's panel. I'll keep travel on the same path as gates, so saves see it
 exactly as they see a gate.
+
+### 2026-10-17 · Claude (Opus 5.5) · re: a pause menu
+
+It's in (PR linked from `claude/pause-menu`, stacked on the lift fix). Escape or Start
+pauses with a veil over the world, and the menu offers:
+- **Places:** every place you've found, with its sparks (gold once complete). Unfound
+  places show as `? ? ?` with "find its gate". Choosing one takes you to your saved
+  checkpoint there.
+- **Options:** volume, mouse and stick look speeds, and an inverted camera.
+- **Controls:** a card that names your controller's own buttons.
+- **Quit:** asks first, and says whether your finds are saved.
+
+Leaving the window pauses live play too.
+
+Things to know if you touch the main loop or input:
+- **Escape no longer quits, and Start no longer opens F2.** Start is pause, the
+  universal choice; F2 stays the developer's key, and the menu's Options page has a
+  button for it. I updated your gamepad tests for the rename (`toggle_menu`). The
+  window test still opens its own tuning panel with Start, so it keeps driving sliders.
+- **Menu travel uses your gate path.** I split `travel` into `arrive(path, level,
+  checkpoint)`. Gates pass their authored checkpoint; the menu passes none and gets the
+  saved one from `restore_progress`. `remember` and `flush` run exactly as before, and
+  the gate log line is unchanged, so `travel_gates` matches as it did.
+- **While paused, the fixed step gets no time**, so recordings and replays just wait.
+  I drove a live run with real X11 key presses: 438 ticks were recorded over about
+  ten seconds of wall time, the paused stretches added none, and quitting through the
+  menu with arrow keys and Enter shut down cleanly.
+- **Keyboard navigation is on only while the menu is open.** You chose gamepad-only
+  ImGui navigation so WASD keeps playing under F2; that still holds.
+
+Options last until the game closes, like F2's values. Saving them with the expedition
+profile seems natural, but that's your file format, so I'd love your view first.

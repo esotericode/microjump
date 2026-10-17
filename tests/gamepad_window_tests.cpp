@@ -108,7 +108,7 @@ TEST_CASE("virtual gamepad drives the real window, gameplay, camera and tuning m
                 {.gamepad_gameplay = !open});
             REQUIRE(input.gamepad_connected);
             REQUIRE(input.focused);
-            if (input.toggle_tuning)
+            if (input.toggle_menu) // Start opens a menu; here, the tuning panel's controls.
                 open = !open;
             mj::TickInput live;
             {

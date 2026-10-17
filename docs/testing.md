@@ -267,6 +267,19 @@ LeakSanitizer would fail the run. The game itself just plays silently there.
 `replay_with_sound` replays `sm64-moves.mjr` through the whole game on the dummy device.
 It checks that sound starts and that the replay ends exactly where it does in silence.
 
+## The pause menu
+
+`menu_tests.cpp` checks:
+- the places the menu offers: gates followed outward in order, and broken or
+  self-pointing gates left out;
+- which runs are interactive;
+- `--show-menu` parsing.
+
+`gamepad_tests.cpp` checks that Start reports the menu toggle. `render_menu` captures
+the Places page over the paused playground with `--show-menu places`, under validation.
+Because the menu pauses the simulation, captures of it use `--capture-frame`, not
+`--capture-tick`.
+
 ## Saved expeditions
 
 `progress_tests.cpp` covers strict bounded JSON, duplicate/unknown fields, invalid

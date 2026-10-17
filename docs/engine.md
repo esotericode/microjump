@@ -194,6 +194,30 @@ simulation together in one object, and replaces it between frames. A travel load
 JSON and builds the geometry, hands the new world mesh to `Renderer::set_meshes`, snaps
 the character, and sets the level's time of day.
 
+## The pause menu
+
+![The pause menu's Places page over the paused playground](captures/pause-menu.png)
+
+`game/pause_menu.*` draws the menu with ImGui; `main.cpp` acts on its choices between
+frames. Escape or Start opens it in interactive runs (`is_interactive`: live play or a
+replay, never a capture or scripted check), and so does losing window focus in live play.
+While it is open:
+- The fixed step receives no time, so no tick runs. Recordings and replays simply wait.
+- The mouse is released, the controller drives ImGui, and the arrow keys and Enter do too.
+  `FrameView::keyboard_navigation` turns keyboard navigation on only for the menu, so WASD
+  keeps playing under the F2 panel.
+- Sound plays on at a third of its volume.
+
+**Places** comes from `discover_places`, which follows gates breadth-first from the
+starting level. A place counts as visited once the expedition remembers it. Travel uses
+the same arrival path as a gate (`arrive` in `main.cpp`), so saves see it exactly as they
+see a gate. A gate passes its authored arrival checkpoint; the menu passes none, which
+means the place's saved checkpoint.
+
+**Options** (look speeds, invert, volume) apply to each new simulation's camera, since
+the camera belongs to the simulation and travel replaces it. They last until the game
+closes, like F2's values.
+
 ## Expedition progress
 
 `game/progress.*` stores authored level names, spark names and checkpoint positions.

@@ -42,12 +42,12 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
     while (SDL_PollEvent(&event)) {
         handler(event);
         input.quit = input.quit || event.type == SDL_EVENT_QUIT ||
-                     event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED ||
-                     (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE);
+                     event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED;
         if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
             const auto key = event.key.key;
             input.toggle_overlay = input.toggle_overlay || key == SDLK_F1;
             input.toggle_tuning = input.toggle_tuning || key == SDLK_F2;
+            input.toggle_menu = input.toggle_menu || key == SDLK_ESCAPE;
             input.toggle_free_camera = input.toggle_free_camera || key == SDLK_F3;
             input.reset_pressed = input.reset_pressed || key == SDLK_R || key == SDLK_HOME;
             input.jump_pressed = input.jump_pressed || key == SDLK_SPACE;
@@ -117,7 +117,7 @@ InputState Window::poll_events(const std::function<void(const SDL_Event &)> &han
         input.move_x = right / keyboard_length;
         input.move_y = forward / keyboard_length;
     }
-    input.toggle_tuning = input.toggle_tuning || pad.toggle_tuning;
+    input.toggle_menu = input.toggle_menu || pad.toggle_menu;
     input.toggle_overlay = input.toggle_overlay || pad.toggle_overlay;
     if (!options.gamepad_gameplay)
         return input;
