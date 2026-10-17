@@ -74,7 +74,8 @@ The simulation steps every mover before the player each tick. Then:
 - **Riding.** Standing on a mover carries you through its step, sweeping so a wall can
   scrape you off, and a turning mover turns your facing with it.
 - **Leaving.** Jumping, walking or bouncing off adds the platform's velocity at your
-  feet, so you keep moving with it.
+  feet, so you keep moving with it, except a sinking platform's downward speed. A rising
+  lift throws a jump higher; a sinking one never makes it weaker, or drags it down.
 - **Landing.** Landing on a mover counts only your velocity relative to it, so a hop in
   place on a moving platform lands in place. On a mover you keep only your forward
   speed and never turn round: dropping onto a turntable lands you standing on it.

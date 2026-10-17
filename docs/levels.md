@@ -158,8 +158,8 @@ A mover needs a path, an orbit or a spin. Its fastest surface may move at most 2
 pushing the player stays well under the player's radius per tick.
 
 **Riding.** Standing on a mover carries you, and a turning one turns you with it. Leaving
-it keeps its velocity, and landing on one counts only your speed relative to it, so a hop
-in place lands in place. A mover that runs into you pushes you. Movers don't collide with
+it keeps its velocity (but not a sinking lift's downward speed), and landing on one counts
+only your speed relative to it, so a hop in place lands in place. A mover that runs into you pushes you. Movers don't collide with
 the world or each other: lay them out so they never cut through scenery or pin a player
 against a wall.
 
