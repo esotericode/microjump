@@ -23,6 +23,10 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             options.pacing_test = true;
         } else if (argument == "--travel-test") {
             options.travel_test = true;
+        } else if (argument == "--no-audio") {
+            if (options.no_audio)
+                return std::unexpected(Error{"Duplicate --no-audio option"});
+            options.no_audio = true;
         } else if (argument == "--no-save") {
             if (options.no_save)
                 return std::unexpected(Error{"Duplicate --no-save option"});
@@ -138,6 +142,13 @@ parse_launch_options(std::span<const std::string_view> arguments) {
             options.frames = 12;
     }
     return options;
+}
+
+bool uses_audio(const LaunchOptions &options) {
+    return !options.no_audio && !options.help && !options.smoke_test && !options.resize_test &&
+           !options.camera_test && !options.travel_test && !options.pacing_test &&
+           !options.frames && !options.capture_frame && !options.capture_tick &&
+           !options.progress_test;
 }
 
 bool uses_saved_progress(const LaunchOptions &options) {

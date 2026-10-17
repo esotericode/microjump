@@ -34,6 +34,7 @@ struct LaunchOptions {
     std::optional<ShadowQuality> shadow_quality;
     std::filesystem::path save; // Explicit saved-expedition profile, including custom levels.
     bool no_save = false;
+    bool no_audio = false;
     std::optional<ProgressTest> progress_test; // Isolated process-level progress checks.
 };
 
@@ -41,5 +42,7 @@ struct LaunchOptions {
 parse_launch_options(std::span<const std::string_view> arguments);
 // Only normal live play or an explicit progress fixture may read or write expedition saves.
 [[nodiscard]] bool uses_saved_progress(const LaunchOptions &options);
+// Sound is for play (live or watching a replay); scripted checks and captures stay silent.
+[[nodiscard]] bool uses_audio(const LaunchOptions &options);
 
 } // namespace mj

@@ -239,6 +239,34 @@ Shutdown validation errors fail the fixture too. CPU tests cover camera-depth so
 invalid values, the submission budget, and the character emitter's interpolated birth
 and death intervals. See [particles](particles.md) for renderer and timing details.
 
+## Audio
+
+`audio_tests.cpp` covers:
+- **The synthesizer:** pitch, silent ends, deterministic noise, and loop seams.
+- **The mixer:** silence, centre and side panning, distance cut-off, pitch, voice
+  stealing, click-free loops fading in and out, the limiter, and the master volume.
+  Tiny two- and three-sample loops check repeated wrapping at pitch 8; initial and
+  updated rates cover clamping and nonfinite inputs.
+- **The sound bank:** every cue is finite, audible, under full scale and silent at its
+  ends. Each one is also written as a WAV to `build/<preset>/tests/sounds/` so a person
+  can listen.
+- **The director:** it hears steps, jumps, double and triple jumps, landings, rising spark
+  chimes, the finished hunt and checkpoints, and stays quiet after a reset. Gears
+  tick at their own positions, lifts clunk at each stop and start, and music boxes loop.
+- **Launch options:** only play makes sound; scripted checks and captures stay silent.
+- **The output:** SDL's dummy device runs the mixer on the audio thread.
+
+`sound_mover_tests.cpp` jumps from a lift descending faster than the standing launch
+speed. It checks exactly one jump cue despite negative world vertical velocity, and
+compares every simulation tick with an otherwise identical silent run.
+
+CTest runs every test with `SDL_AUDIO_DRIVER=dummy`, so no test touches a real sound
+device. On a machine without one, such as CI, probing ALSA leaks inside libasound and
+LeakSanitizer would fail the run. The game itself just plays silently there.
+
+`replay_with_sound` replays `sm64-moves.mjr` through the whole game on the dummy device.
+It checks that sound starts and that the replay ends exactly where it does in silence.
+
 ## Saved expeditions
 
 `progress_tests.cpp` covers strict bounded JSON, duplicate/unknown fields, invalid

@@ -1,5 +1,5 @@
 # Headless gameplay: simulation tests link this without a window or GPU.
-add_library(microjump_gameplay STATIC character.cpp follow_camera.cpp frame_pacing.cpp level.cpp level_io.cpp lighting.cpp player.cpp progress.cpp simulation.cpp spark_visuals.cpp portal_visuals.cpp)
+add_library(microjump_gameplay STATIC character.cpp follow_camera.cpp frame_pacing.cpp level.cpp level_io.cpp lighting.cpp player.cpp progress.cpp simulation.cpp sound.cpp spark_visuals.cpp portal_visuals.cpp)
 target_include_directories(microjump_gameplay PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(microjump_gameplay PUBLIC mj::engine)
 target_link_libraries(microjump_gameplay PRIVATE nlohmann_json::nlohmann_json)

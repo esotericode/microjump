@@ -91,7 +91,9 @@ While F2 is open, a controller drives the menu and the keyboard still plays.
 Tuning values reset when the game restarts.
 
 Walk into a glowing gate to travel between the playground, the Lantern Isles and the
-Clockwork Garden. Moving platforms carry you; jumping off keeps their speed.
+Clockwork Garden. Moving platforms carry you; jumping off keeps their speed. Every move,
+find and machine has its own synthesized sound: footsteps, jumps that rise in pitch
+through a triple, sparks that chime up a scale, ticking gears and a carousel's music box.
 Walk or jump into golden sparks to collect them. The **SPARKS** counter shows your
 progress and each find's name; finding them all completes a place's hunt. Your finds,
 safe checkpoint and last visited world save automatically between sessions. Reopening
@@ -110,6 +112,7 @@ start fresh and leave your expedition untouched.
 | --- | --- |
 | `--level PATH` | Load a JSON level (default: `assets/levels/playground.json` beside the executable). |
 | `--save PATH` / `--no-save` | Use a separate expedition profile (required to save custom levels), or play without disk progress. |
+| `--no-audio` | Play without sound. F2 → *Audio* has the volume and a mute. |
 | `--record PATH` / `--replay PATH` | Save every tick's input when the game exits, or play a recording back and exit. |
 | `--time-of-day H` | Start at H hours (0–24). |
 | `--shadow-quality low\|medium\|high` | Sun shadow preset. |

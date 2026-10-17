@@ -137,6 +137,32 @@ one CSV row per frame. See [testing](testing.md).
   - The mover and camera take a scene. A body is treated as still during one move;
     the simulation steps the bodies first, then carries riders, then moves the player.
 
+## Audio
+
+`mj/audio/` makes all of the game's sound itself; SDL only carries the finished samples to
+the device.
+
+- **Synthesizer** (`synth.hpp`). A sound is a list of tones, each an oscillator (sine,
+  triangle, square, saw or seeded noise) with an exponential pitch sweep, optional
+  vibrato, an attack-hold-release envelope that ends in exact silence, and a two-pole
+  low-pass that can sweep. `make_loop` crossfades a sound's tail into its head for a
+  seamless loop. Everything is baked into 48 kHz mono samples at startup (the game's
+  22 sounds take well under a second), so there are no sound files.
+- **Mixer** (`mixer.hpp`). 48 voices with fractional-rate playback for pitch,
+  constant-power panning from the listener's right-hand direction, distance falloff to
+  each sound's reach, and loops that ease to a new level over a tenth of a second. A full
+  pool steals the oldest one-shot. The sum goes through a soft knee that leaves quiet
+  signals alone and bends peaks under full scale. The game thread queues commands
+  under a short lock; the audio thread swaps them out and mixes without allocating.
+- **Output** (`audio_output.hpp`). An SDL audio stream on the default device, pulling
+  512-frame chunks from the mixer on SDL's audio thread. Opening can fail (no device,
+  no sound server): the game logs it and plays silently.
+
+The game's side is `game/sound.*`: the recipes for every cue, and a `SoundDirector` that
+reads `PlayerState` before and after each fixed tick, the simulation's finds and
+checkpoints, and its movers. It only listens, so sound never touches gameplay and a
+silent run is bit-identical. The camera is the listener.
+
 ## Platform and input
 
 `mj/platform/` wraps SDL3: the window, high-DPI pixel sizes, refresh rate, focus, and

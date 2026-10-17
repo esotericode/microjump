@@ -1,4 +1,7 @@
 add_library(microjump_engine STATIC
+    src/audio/audio_output.cpp
+    src/audio/mixer.cpp
+    src/audio/synth.cpp
     src/collision/character_mover.cpp
     src/collision/collision_world.cpp
     src/collision/geometry.cpp

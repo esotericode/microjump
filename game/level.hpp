@@ -79,6 +79,10 @@ struct Motion {
     float phase = 0;             // Fraction of a period to start ahead, to stagger movers.
 };
 
+// What a mover sounds like: gears tick as they turn, lifts and pistons clunk at each stop,
+// and a music box plays. The default follows the motion (see docs/levels.md).
+enum class MoverSound : std::uint8_t { none, tick, clunk, music };
+
 // Solid shapes that move together: a sliding slab, a lift, a turning gear.
 struct Mover {
     std::string name;
@@ -86,6 +90,7 @@ struct Mover {
     float yaw = 0;             // Starting turn about the pivot.
     std::vector<Shape> shapes; // In body space.
     Motion motion;
+    MoverSound sound = MoverSound::none;
 };
 
 // Where a mover is after `seconds` of simulation time.

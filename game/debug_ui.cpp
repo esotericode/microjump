@@ -312,6 +312,16 @@ void tuning_window(Simulation &simulation, const TuningPanels &panels, bool &ope
             ImGui::TextUnformatted(d.log_path.c_str());
         }
     }
+    if (panels.audio != nullptr && ImGui::CollapsingHeader("Audio")) {
+        auto &audio = *panels.audio;
+        if (!audio.available) {
+            ImGui::TextWrapped("No sound for this run: no audio device, or --no-audio.");
+        } else {
+            ImGui::Text("Output: %s", audio.driver.c_str());
+            ImGui::SliderFloat("Volume", &audio.volume, 0, 1, "%.2f");
+            ImGui::Checkbox("Mute", &audio.muted);
+        }
+    }
     if (panels.progress != nullptr && ImGui::CollapsingHeader("Expedition")) {
         auto &progress = *panels.progress;
         if (!progress.message.empty())

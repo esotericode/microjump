@@ -5,8 +5,10 @@
 #include "portal_visuals.hpp"
 #include "progress.hpp"
 #include "simulation.hpp"
+#include "sound.hpp"
 #include "spark_visuals.hpp"
 
+#include <mj/audio/audio_output.hpp>
 #include <mj/core/fixed_step.hpp>
 #include <mj/core/input_record.hpp>
 #include <mj/core/launch_options.hpp>
@@ -322,6 +324,25 @@ int run(const LaunchOptions &options) {
         std::vector<DrawInstance> instances;
         CharacterAnimator character;
         character.snap(world->simulation.player.current());
+        // Sound is presentation, like the character: a silent run plays exactly the same.
+        std::unique_ptr<audio::Mixer> mixer;
+        std::unique_ptr<audio::AudioOutput> speaker; // Feeds the mixer; closes first.
+        AudioControls audio_controls;
+        if (uses_audio(options)) {
+            mixer = std::make_unique<audio::Mixer>(make_sound_bank());
+            if (auto opened = audio::AudioOutput::open(*mixer)) {
+                speaker = std::move(*opened);
+                audio_controls.available = true;
+                audio_controls.driver = speaker->driver();
+                log("Audio: " + speaker->driver());
+            } else {
+                log(opened.error().message + "; playing silently");
+                mixer.reset();
+            }
+        }
+        SoundDirector sound;
+        sound.reset(world->simulation);
+        std::vector<CueEvent> cues;
         std::vector<CharacterPart> character_parts;
         std::vector<ParticleInstance> particles;
         std::optional<std::size_t> pending_travel; // A gate entered during the last frame.
@@ -339,6 +360,7 @@ int run(const LaunchOptions &options) {
             fixed = {};
             pending_buttons = 0;
             character.snap(world->simulation.player.current());
+            sound.reset(world->simulation);
             if (!options.time_of_day)
                 lighting.cycle.hours = world->level.atmosphere.time_of_day;
             return {};
@@ -367,6 +389,7 @@ int run(const LaunchOptions &options) {
             if (expedition.remember(*world))
                 expedition.flush();
             arrived = std::chrono::steady_clock::now();
+            cues.push_back({Cue::gate});
             log("Traveled through '" + portal.name + "' to " + world->level.name);
             return {};
         };
@@ -559,7 +582,9 @@ int run(const LaunchOptions &options) {
                     recording.push_back(tick);
                 const auto found = simulation.collected_count();
                 const auto checkpoint = simulation.active_checkpoint();
+                const auto before = simulation.player.current();
                 simulation.tick(tick, dt);
+                sound.tick(before, simulation, dt, cues); // Listens only, like the character.
                 progress_changed = progress_changed || found != simulation.collected_count() ||
                                    checkpoint != simulation.active_checkpoint();
                 if (options.progress_test)
@@ -711,10 +736,10 @@ int run(const LaunchOptions &options) {
                         now - expedition.noted < std::chrono::seconds(3))
                         progress_hud(expedition.controls);
                 }
-                tuning_window(
-                    simulation,
-                    {lighting, (*window)->gamepad_tuning, diagnostics, &expedition.controls},
-                    tuning_open);
+                tuning_window(simulation,
+                              {lighting, (*window)->gamepad_tuning, diagnostics,
+                               &expedition.controls, &audio_controls},
+                              tuning_open);
             };
             if (options.pacing_test) {
                 status.input_mode +=
@@ -738,6 +763,20 @@ int run(const LaunchOptions &options) {
             FrameView view;
             view.camera = use_free_camera ? free_camera.interpolated(alpha)
                                           : simulation.camera.pose(alpha, simulation.scene());
+            if (mixer) { // Heard from the camera; far-off machines aren't worth a voice.
+                const Vec3 ear = view.camera.position;
+                mixer->set_listener({ear, yaw_right(view.camera.yaw)});
+                mixer->set_volume(audio_controls.muted ? 0.0F : audio_controls.volume);
+                for (const auto &cue : cues) {
+                    if (!cue.position || length(*cue.position - ear) < cue.reach)
+                        mixer->play({static_cast<std::uint32_t>(cue.cue), cue.gain, cue.pitch,
+                                     cue.position, cue.reach});
+                }
+                for (const auto &loop : sound.loops())
+                    mixer->set_loop({static_cast<std::uint32_t>(loop.cue), loop.gain, loop.pitch,
+                                     loop.position, loop.reach});
+            }
+            cues.clear();
             view.instances = instances;
             view.particles = particles;
             view.blob = {pose.position,
@@ -891,6 +930,7 @@ int main(int argc, char *argv[]) {
             "  --level PATH  Load a version-1 JSON level; default is the packaged playground.\n"
             "  --save PATH  Use a separate expedition profile (also enables custom-level saves).\n"
             "  --no-save  Keep this expedition in memory only.\n"
+            "  --no-audio  Play without sound.\n"
             "  --time-of-day H  Start at H hours (0-24; 12 noon). Default 14.5.\n"
             "  --shadow-quality low|medium|high  Sun shadow preset. Default medium.\n"
             "  --hide-overlay  Hide diagnostics and the spark HUD (clean captures).\n"

@@ -386,7 +386,7 @@ for i in range(6):  # Horses on poles, drawn only.
     parts.append(make("ellipsoid", (hx + math.sin(a + math.pi / 2) * 0.7, 2.2,
                                     hz - math.cos(a + math.pi / 2) * 0.7), (0.4, 0.6, 0.6), HORSE,
                       solid=False, material={"roughness": 0.5, "metallic": 0}))
-mover("Carousel", CAROUSEL, parts, spin=0.25)
+mover("Carousel", CAROUSEL, parts, spin=0.25, sound="music")  # A music box plays as it turns.
 top_height, top_angle = PLINTHS[-1]
 spark("Round and round", CAROUSEL[0] + 8.6, CAROUSEL[1] + 1.1, CAROUSEL[2])
 # The tallest plinth's spark turns with it; a spark cannot ride, so it waits where the

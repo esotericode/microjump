@@ -218,7 +218,7 @@ constexpr double k_max_mover_speed = 20;
 std::optional<Mover> read_mover(Reader &read, const Json &item, const std::string &path) {
     if (!read.object(item, path,
                      {"name", "pivot", "yaw", "shapes", "path", "loop", "pause", "orbit", "spin",
-                      "period", "phase"}))
+                      "period", "phase", "sound"}))
         return std::nullopt;
     Mover mover;
     mover.name = read.name(read.member(item, "name", path), path + ".name");
@@ -263,6 +263,23 @@ std::optional<Mover> read_mover(Reader &read, const Json &item, const std::strin
     if (!read.error.empty())
         return mover;
     const bool travels = !motion.path.empty() || motion.orbit_radius > 0;
+    // Turning in place ticks like a gear; a path clunks at its stops; an orbit is quiet.
+    mover.sound = !motion.path.empty() ? MoverSound::clunk
+                  : travels            ? MoverSound::none
+                                       : MoverSound::tick;
+    if (item.contains("sound")) {
+        const auto &sound = item["sound"];
+        if (sound == "none")
+            mover.sound = MoverSound::none;
+        else if (sound == "tick")
+            mover.sound = MoverSound::tick;
+        else if (sound == "clunk")
+            mover.sound = MoverSound::clunk;
+        else if (sound == "music")
+            mover.sound = MoverSound::music;
+        else
+            read.fail(path + ".sound", "expected none, tick, clunk or music");
+    }
     if (!travels && motion.spin == 0)
         read.fail(path, "a mover needs a path, an orbit or a spin");
     if (travels && !item.contains("period"))

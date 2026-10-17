@@ -19,6 +19,9 @@ class Simulation {
     void tick(const TickInput &input, float dt);
     void respawn();
 
+    [[nodiscard]] const Level &level() const {
+        return m_level;
+    }
     // The world with its movers where this tick left them.
     [[nodiscard]] CollisionScene scene() const {
         return {m_world, {m_poses, m_previous_poses}};

@@ -151,6 +151,7 @@ in any mix. It never tilts.
 | `spin` | Optional turn rate about the vertical axis, in radians per second (−10 to 10). |
 | `period` | Seconds per path cycle and per orbit, 0.5–600. Required with a path or orbit; not allowed without one. |
 | `phase` | Fraction of a period to start ahead (0–1), to stagger movers that share a motion. |
+| `sound` | `tick` (a gear: a click every twelfth of a turn), `clunk` (at each stop and start), `music` (a music box, heard nearby) or `none`. Default: a mover that only spins ticks, one with a path clunks, and an orbit is quiet. |
 
 A mover needs a path, an orbit or a spin. Its fastest surface may move at most 20 m/s
 (the parser checks eased path speed, orbit speed and the spinning rim), so a mover
